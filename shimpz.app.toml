@@ -1,0 +1,13 @@
+name = "shimpz"
+title = "Shimpz"
+version = "0.1.0"
+summary = "The Shimpz app marketplace — browse and install apps into your Shimpz."
+
+# The store is the platform's own front door, published at shimpz.com. It's free, server-rendered, and
+# reaches no external host (the catalog is in-process for the MVP) — so no [needs], no [billing], no
+# egress. It evolves layer-by-layer (accounts, DB-backed catalog, publish pipeline) without changing this.
+
+[[run]]
+name = "shimpz"
+port = 3200
+command = ["uv", "run", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "3200"]

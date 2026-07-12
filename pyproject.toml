@@ -1,0 +1,18 @@
+[project]
+name = "shimpz"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "fastapi",
+    "uvicorn[standard]",
+    "structlog",
+    "shimpzbus",
+]
+
+[dependency-groups]
+dev = ["ruff"]
+
+# shimpzbus is VENDORED into vendor/shimpzbus at deploy time (the app mounts only itself, read-only, so a
+# brain-container path can't resolve) — the store publishes an 'Install' request to the bus with it.
+[tool.uv.sources]
+shimpzbus = { path = "vendor/shimpzbus" }
