@@ -6,6 +6,7 @@ The inbound header is ATTACKER-CONTROLLED, so it is never trusted raw: it flows 
 control byte would crash the ASGI send / enable header injection) and into contextvars + every log line (an
 oversized value would bloat them). _clean() decodes safely (latin-1 never raises on bad bytes), keeps only a
 conservative token charset, and caps the length — an empty/oversized/hostile id is replaced with a fresh one."""
+
 import re
 from uuid import uuid4
 
@@ -15,8 +16,10 @@ _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
 
 
 def _clean(raw: bytes) -> str:
-    tid = _UNSAFE.sub("", raw.decode("latin-1"))[:200]   # strip non-token chars (drops CTLs/unicode), cap 200
-    return tid or uuid4().hex                             # empty after cleaning → mint a safe one
+    tid = _UNSAFE.sub("", raw.decode("latin-1"))[
+        :200
+    ]  # strip non-token chars (drops CTLs/unicode), cap 200
+    return tid or uuid4().hex  # empty after cleaning → mint a safe one
 
 
 class TraceIdMiddleware:
@@ -36,7 +39,9 @@ class TraceIdMiddleware:
         async def send_with_id(message):
             if message["type"] == "http.response.start":
                 message["headers"] = list(message.get("headers") or [])
-                message["headers"].append((b"x-request-id", trace_id.encode("ascii")))   # token-only → safe
+                message["headers"].append(
+                    (b"x-request-id", trace_id.encode("ascii"))
+                )  # token-only → safe
             await send(message)
 
         await self.app(scope, receive, send_with_id)

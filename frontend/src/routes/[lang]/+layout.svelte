@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { page } from "$app/stores";
   import type { Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
@@ -7,6 +8,12 @@
   let { data, children } = $props();
   const lang = $derived(data.lang as Locale);
   const path = $derived($page.url.pathname);
+
+  // The Captain's Capsules, reachable from EVERY page: the pill shows the selected one when known.
+  let capName = $state("");
+  onMount(() => {
+    capName = localStorage.getItem("shimpz_current_capsule_name") ?? "";
+  });
 </script>
 
 <header class="sticky top-0 z-10 border-b hair backdrop-blur" style="background:color-mix(in oklab, var(--color-bg) 82%, transparent)">
@@ -19,9 +26,15 @@
     <nav class="ml-auto flex items-center gap-1 text-sm">
       <a href={u.apps(lang)} class="rounded-lg px-3 py-1.5 transition hover:text-[var(--color-fg)]" class:text-[var(--color-fg)]={path.includes("/apps")} class:dim={!path.includes("/apps")}>{tr("nav_apps", lang)}</a>
       <a href={u.drivers(lang)} class="rounded-lg px-3 py-1.5 transition hover:text-[var(--color-fg)]" class:text-[var(--color-fg)]={path.includes("/drivers")} class:dim={!path.includes("/drivers")}>{tr("nav_drivers", lang)}</a>
-      <div class="ml-2 flex items-center rounded-lg border hair p-0.5 text-xs">
-        <a href={swapLocale(path, "en")} class="rounded-md px-2 py-1 transition" class:chip={false} style={lang === "en" ? "background:var(--color-primary);color:#04121a;font-weight:600" : "color:var(--color-muted)"}>EN</a>
-        <a href={swapLocale(path, "pt")} class="rounded-md px-2 py-1 transition" style={lang === "pt" ? "background:var(--color-primary);color:#04121a;font-weight:600" : "color:var(--color-muted)"}>PT</a>
+      <a href={u.chat(lang)} class="rounded-lg px-3 py-1.5 transition hover:text-[var(--color-fg)]" class:text-[var(--color-fg)]={path.includes("/chat")} class:dim={!path.includes("/chat")}>{tr("nav_chat", lang)}</a>
+      <a href={u.install(lang)} class="rounded-lg px-3 py-1.5 transition hover:text-[var(--color-fg)]" class:text-[var(--color-fg)]={path.includes("/install")} class:dim={!path.includes("/install")}>{tr("nav_install", lang)}</a>
+      <a href={u.capsule(lang)} class="hud-pill ml-1 flex items-center gap-2 px-3 py-1.5 transition" class:text-[var(--color-fg)]={path.includes("/capsule")} class:dim={!path.includes("/capsule")}>
+        <span style="color:var(--color-primary)">⬡</span>
+        <span class="max-w-32 truncate">{capName || tr("my_capsules", lang)}</span>
+      </a>
+      <div class="hud-pill ml-2 flex items-center p-0.5 text-xs">
+        <a href={swapLocale(path, "en")} class="px-2 py-1 font-mono uppercase transition" style={lang === "en" ? "background:var(--color-primary);color:#04121a;font-weight:700" : "color:var(--color-muted)"}>EN</a>
+        <a href={swapLocale(path, "pt")} class="px-2 py-1 font-mono uppercase transition" style={lang === "pt" ? "background:var(--color-primary);color:#04121a;font-weight:700" : "color:var(--color-muted)"}>PT</a>
       </div>
     </nav>
   </div>

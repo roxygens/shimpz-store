@@ -8,6 +8,7 @@ connected at /ws. Deploy it SEPARATELY from the API, on its own port:
 
 and publish it with the fullstack form `shimpz-publish <fqdn> <web> public <api> <ws-port>` — the
 frontend connects to the RELATIVE /ws (src/lib/ws.ts), same code in dev (vite proxy) and live (Caddy)."""
+
 import asyncio
 import contextlib
 from contextlib import asynccontextmanager
@@ -27,7 +28,9 @@ clients: set[WebSocket] = set()
 
 async def _fanout(event: dict) -> None:
     dead = []
-    for ws in list(clients):  # snapshot: connects/disconnects mutate the set between awaits
+    for ws in list(
+        clients
+    ):  # snapshot: connects/disconnects mutate the set between awaits
         try:
             await ws.send_json(event)
         except (WebSocketDisconnect, RuntimeError, ConnectionError, OSError):
@@ -82,7 +85,9 @@ async def ws_endpoint(ws: WebSocket) -> None:
     log.info("ws_connected", clients=len(clients))
     try:
         while True:
-            await ws.receive_text()  # inbound frames are keepalives; server→client is the data path
+            await (
+                ws.receive_text()
+            )  # inbound frames are keepalives; server→client is the data path
     except WebSocketDisconnect:
         log.info("ws_disconnected", clients=len(clients) - 1)
     finally:

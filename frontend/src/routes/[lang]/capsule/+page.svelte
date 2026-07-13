@@ -14,18 +14,41 @@
   let username = $state("");
   let password = $state("");
   let capName = $state("");
+  let brain = $state("claude-code");
   let capsules = $state<any[]>([]);
   let selected = $state("");
+  let apps = $state<any[]>([]);
   let error = $state("");
   let busy = $state(false);
 
   const SEL_KEY = "shimpz_current_capsule";
 
+  async function refreshApps() {
+    if (!selected) {
+      apps = [];
+      return;
+    }
+    const r = await fetch(`/api/capsules/${selected}/apps`);
+    apps = r.ok ? ((await r.json()).apps ?? []) : [];
+  }
+
   async function refresh() {
     const r = await fetch("/api/capsules");
     if (r.ok) {
       capsules = (await r.json()).capsules ?? [];
-      if (!selected && capsules[0]) selected = capsules[0].id;
+      if (!selected && capsules[0]) select(capsules[0].id); // persist too — the app page reads it
+    }
+    await refreshApps();
+  }
+
+  async function uninstallApp(appId: string) {
+    if (!selected || busy) return;
+    busy = true;
+    try {
+      await fetch(`/api/capsules/${selected}/apps/${appId}`, { method: "DELETE" });
+      await refreshApps();
+    } finally {
+      busy = false;
     }
   }
 
@@ -59,7 +82,8 @@
         await refresh();
         phase = "ready";
       } else {
-        error = (await r.json().catch(() => ({}))).detail ?? (await r.json().catch(() => ({}))).error ?? "failed";
+        const body = await r.json().catch(() => ({}));
+        error = body.detail ?? body.error ?? "failed";
       }
     } catch (e) {
       error = String(e);
@@ -83,7 +107,7 @@
       const r = await fetch("/api/capsules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: capName.trim() }),
+        body: JSON.stringify({ name: capName.trim(), brain }),
       });
       if (r.ok) {
         capName = "";
@@ -113,8 +137,15 @@
 
   function select(id: string) {
     selected = id;
-    if (id) localStorage.setItem(SEL_KEY, id);
-    else localStorage.removeItem(SEL_KEY);
+    if (id) {
+      localStorage.setItem(SEL_KEY, id);
+      const name = capsules.find((c) => c.id === id)?.name ?? id;
+      localStorage.setItem(SEL_KEY + "_name", name); // the app page shows WHERE Install will land
+    } else {
+      localStorage.removeItem(SEL_KEY);
+      localStorage.removeItem(SEL_KEY + "_name");
+    }
+    refreshApps();
   }
 
   onMount(boot);
@@ -137,8 +168,8 @@
         <button class:btn-primary={mode === "login"} class:btn-ghost={mode !== "login"} onclick={() => (mode = "login")}>{tr("log_in", lang)}</button>
         <button class:btn-primary={mode === "signup"} class:btn-ghost={mode !== "signup"} onclick={() => (mode = "signup")}>{tr("sign_up", lang)}</button>
       </div>
-      <input class="w-full rounded-lg border hair bg-[var(--color-elevated)] px-4 py-3 outline-none focus:border-[var(--color-primary)]" placeholder={tr("username", lang)} bind:value={username} />
-      <input class="w-full rounded-lg border hair bg-[var(--color-elevated)] px-4 py-3 outline-none focus:border-[var(--color-primary)]" type="password" placeholder={tr("password", lang)} bind:value={password} onkeydown={(e) => e.key === "Enter" && submitAuth()} />
+      <input class="field" placeholder={tr("username", lang)} bind:value={username} />
+      <input class="field" type="password" placeholder={tr("password", lang)} bind:value={password} onkeydown={(e) => e.key === "Enter" && submitAuth()} />
       <button class="btn-primary w-full justify-center" disabled={busy} onclick={submitAuth}>{mode === "signup" ? tr("sign_up", lang) : tr("log_in", lang)}</button>
       {#if error}<p class="text-sm" style="color:var(--color-magenta)">{error}</p>{/if}
     </div>
@@ -148,12 +179,18 @@
       <button class="transition hover:text-[var(--color-fg)]" onclick={logout}>{tr("log_out", lang)} →</button>
     </div>
 
-    <div class="panel mt-6 max-w-xl">
+    <div class="panel mt-6 max-w-xl space-y-3">
       <span class="kicker">{tr("capsule_name_label", lang)}</span>
-      <div class="mt-3 flex gap-2">
-        <input class="flex-1 rounded-lg border hair bg-[var(--color-elevated)] px-4 py-3 outline-none focus:border-[var(--color-primary)]" placeholder={tr("capsule_name_ph", lang)} bind:value={capName} onkeydown={(e) => e.key === "Enter" && createCapsule()} />
+      <div class="flex gap-2">
+        <input class="field flex-1" placeholder={tr("capsule_name_ph", lang)} bind:value={capName} onkeydown={(e) => e.key === "Enter" && createCapsule()} />
         <button class="btn-primary" disabled={busy || !capName.trim()} onclick={createCapsule}>{tr("capsule_submit", lang)}</button>
       </div>
+      <label class="flex items-center gap-3 text-sm dim">
+        <span class="kicker !text-[10px]">{tr("brain_label", lang)}</span>
+        <select class="field field-sm w-auto" bind:value={brain}>
+          <option value="claude-code">Claude Code</option>
+        </select>
+      </label>
     </div>
     {#if error}<p class="mt-3 text-sm" style="color:var(--color-magenta)">{error}</p>{/if}
 
@@ -164,15 +201,32 @@
             <span class="app-icon grid place-items-center" style="--g1:#00f0ff;--g2:#ff2a6d;width:34px;height:34px;font-size:16px">◆</span>
             <span class="min-w-0 flex-1">
               <span class="block font-semibold">{c.name || c.id}</span>
-              <span class="mono block truncate text-xs dim">{c.id} · {c.status}</span>
+              <span class="mono block truncate text-xs dim">{c.id} · {c.status} · {tr("brain_label", lang)}: {c.brain ?? "claude-code"}</span>
             </span>
             {#if selected === c.id}<span class="badge">{tr("current", lang)}</span>{/if}
           </button>
+          <a class="btn-ghost !px-3 !py-1 text-xs" href={u.chat(lang)} onclick={() => select(c.id)}>{tr("nav_chat", lang)}</a>
           <button class="btn-ghost !px-3 !py-1 text-xs" onclick={() => destroyCapsule(c.id)}>{tr("destroy", lang)}</button>
         </div>
       {/each}
       {#if capsules.length === 0}<p class="dim">{tr("no_capsules", lang)}</p>{/if}
     </div>
+
+    {#if selected}
+      <div class="panel mt-8 max-w-xl">
+        <span class="kicker">{tr("installed_apps", lang)}</span>
+        <div class="mt-3 space-y-2">
+          {#each apps as a (a.app)}
+            <div class="flex items-center gap-3 text-sm">
+              <span class="mono min-w-0 flex-1 truncate">{a.app}</span>
+              <span class="badge">{a.status}</span>
+              <button class="btn-ghost !px-3 !py-1 text-xs" disabled={busy} onclick={() => uninstallApp(a.app)}>{tr("uninstall", lang)}</button>
+            </div>
+          {/each}
+          {#if apps.length === 0}<p class="text-sm dim">{tr("no_apps", lang)}</p>{/if}
+        </div>
+      </div>
+    {/if}
   {/if}
 </section>
 

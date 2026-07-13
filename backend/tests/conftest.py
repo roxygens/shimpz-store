@@ -2,6 +2,7 @@
 leave the database untouched (no leaked rows, no ordering coupling). Survives the code under test calling
 session.commit(): join_transaction_mode="create_savepoint" turns each commit into a SAVEPOINT release and
 the outer rollback undoes everything."""
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session

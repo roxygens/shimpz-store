@@ -11,6 +11,8 @@ export const u = {
   drivers: (l: Locale) => `/${l}/drivers`,
   driver: (l: Locale, d: Driver) => `/${l}/drivers/${d.id}`,
   capsule: (l: Locale) => `/${l}/capsule`,
+  chat: (l: Locale) => `/${l}/chat`,
+  install: (l: Locale) => `/${l}/install`,
 };
 
 // Same page in another locale — swaps the leading /<lang>/ segment (for hreflang + the language switch).

@@ -133,31 +133,10 @@ export interface App {
   dependsOn: string[]; // app ids it needs installed
   publisher: string;
   price: I18n;
-  available: boolean;
+  available: boolean; // true = a REAL deployable artifact exists in the capsule-driver marketplace registry
 }
 
 export const APPS: App[] = [
-  {
-    id: "meta-ads-operator", name: "Meta Ads Operator", category: "Marketing", icon: "📈",
-    tagline: { en: "Run your Meta ad campaigns end to end.", pt: "Toca suas campanhas de anúncio no Meta de ponta a ponta." },
-    spec: {
-      en: "Tell it your goal and budget. It drafts and launches campaigns, builds the landing pages, watches performance, fires Conversions-API events, and reports back — asking your approval before anything goes out.",
-      pt: "Diga o objetivo e o orçamento. Ele cria e lança campanhas, monta as landing pages, acompanha a performance, dispara eventos de Conversions-API e te dá o retorno — pedindo aprovação antes de qualquer coisa sair.",
-    },
-    permissions: ["browser", "openai", "cloudflare", "bus"],
-    dependsOn: ["landing-page-builder", "notification-center"],
-    publisher: "Shimpz", price: { en: "Paid · via ShimpzPay", pt: "Pago · via ShimpzPay" }, available: true,
-  },
-  {
-    id: "landing-page-builder", name: "Landing Page Builder", category: "Content", icon: "🎨",
-    tagline: { en: "Generate and publish high-converting pages.", pt: "Gera e publica páginas de alta conversão." },
-    spec: {
-      en: "Describe the offer and get a fast, beautiful landing page published on your own domain. Other apps install it as a reusable capability.",
-      pt: "Descreva a oferta e receba uma landing page rápida e bonita publicada no seu domínio. Outros apps a instalam como capacidade reutilizável.",
-    },
-    permissions: ["openai", "cloudflare"], dependsOn: [], publisher: "Shimpz",
-    price: { en: "Free", pt: "Grátis" }, available: true,
-  },
   {
     id: "notification-center", name: "Notification Center", category: "Automation", icon: "🔔",
     tagline: { en: "Approvals, alerts and reports on Telegram.", pt: "Aprovações, alertas e relatórios no Telegram." },
@@ -167,26 +146,6 @@ export const APPS: App[] = [
     },
     permissions: ["bus"], dependsOn: [], publisher: "Shimpz",
     price: { en: "Free", pt: "Grátis" }, available: true,
-  },
-  {
-    id: "content-studio", name: "Content Studio", category: "Content", icon: "✍️",
-    tagline: { en: "Draft, illustrate and store your content.", pt: "Escreve, ilustra e guarda seu conteúdo." },
-    spec: {
-      en: "Turn a brief into finished posts and images, saved with shareable links. Great as the content engine behind campaigns.",
-      pt: "Transforma um brief em posts e imagens prontos, salvos com links compartilháveis. Ótimo como motor de conteúdo por trás das campanhas.",
-    },
-    permissions: ["openai", "storage"], dependsOn: [], publisher: "Shimpz",
-    price: { en: "Free", pt: "Grátis" }, available: true,
-  },
-  {
-    id: "commerce-sync", name: "Commerce Sync", category: "Commerce", icon: "🛒",
-    tagline: { en: "Keep orders, stock and payouts in sync.", pt: "Mantém pedidos, estoque e repasses em sincronia." },
-    spec: {
-      en: "Connects your store's orders and inventory, reconciles payments through ShimpzPay, and notifies you on anything that needs a human.",
-      pt: "Conecta pedidos e estoque da sua loja, concilia pagamentos via ShimpzPay e te avisa em tudo que precisa de um humano.",
-    },
-    permissions: ["postgres", "bus", "pay"], dependsOn: ["notification-center"], publisher: "Shimpz",
-    price: { en: "Paid · via ShimpzPay", pt: "Pago · via ShimpzPay" }, available: false,
   },
 ];
 

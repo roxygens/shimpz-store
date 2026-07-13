@@ -15,10 +15,12 @@ RUN corepack enable \
 # ── stage 2: serve ──────────────────────────────────────────────────────────────────────────────
 FROM python:3.12-slim AS serve
 WORKDIR /app
-RUN pip install --no-cache-dir "fastapi" "uvicorn[standard]" "structlog"
+RUN pip install --no-cache-dir "fastapi" "uvicorn[standard]" "structlog" "python-multipart"
 COPY backend/vendor/shimpzbus /tmp/shimpzbus
 RUN pip install --no-cache-dir /tmp/shimpzbus && rm -rf /tmp/shimpzbus
-COPY backend/app/__init__.py backend/app/logconf.py backend/app/main.py ./app/
+COPY backend/app/__init__.py backend/app/logconf.py backend/app/main.py backend/app/reviews.py ./app/
+# The install.sh served at install.shimpz.com (mirror of sdk/install/install.sh — the SDK is the source of truth)
+COPY backend/install.sh ./install.sh
 COPY --from=web /w/build ./build
 ENV SHIMPZ_STORE_BUILD=/app/build
 EXPOSE 3200
