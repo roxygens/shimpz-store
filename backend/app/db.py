@@ -7,8 +7,8 @@ from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, sessionmaker
 from app.config import settings
 
 # SQLAlchemy 2.0 + psycopg3 engine (never a raw driver connection in handlers); schema via alembic.
-# shimpz-db emits a bare `postgresql://` DSN, which SQLAlchemy maps to psycopg2 — but this project ships
-# psycopg3. Pin the psycopg3 driver so create_engine imports cleanly.
+# The platform injects a bare `postgresql://` DSN, which SQLAlchemy maps to psycopg2 — but this project
+# ships psycopg3. Pin the psycopg3 driver so create_engine imports cleanly.
 _url = settings.database_url
 if _url.startswith("postgresql://"):
     _url = "postgresql+psycopg://" + _url[len("postgresql://") :]

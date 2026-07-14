@@ -3,7 +3,8 @@
 Apps run in their own containers with the registry mounted READ-ONLY (shimpzbus discover/call read it
 there); the WRITE happens here, in the trusted plane, right after the deploy health gate passes.
 Keep the register() calls below as the single truthful contract of what each role of this project
-exposes — a registration is a PROMISE others build on (shimpzbus.call resolves it blindly)."""
+exposes — a registration is a PROMISE others build on (shimpzbus.call resolves it blindly).
+"""
 
 import sys
 

@@ -3,7 +3,8 @@
 Call setup("<service>") ONCE at boot (main.py); everywhere else use structlog.get_logger(). Never
 print(), never the stdlib logging module directly — the shimpz-stdcheck gate BLOCKs both. Per-request
 trace_id is bound in app/middleware.py and rides every line automatically (contextvars). LOG_FORMAT=console
-gives human output in dev (default json); LOG_LEVEL sets the level (default INFO)."""
+gives human output in dev (default json); LOG_LEVEL sets the level (default INFO).
+"""
 
 import logging
 import os
@@ -18,7 +19,7 @@ def setup(service: str) -> None:
     level = getattr(logging, _lvl, None)
     if not isinstance(level, int):
         raise ValueError(
-            "invalid LOG_LEVEL=%r (use DEBUG/INFO/WARNING/ERROR/CRITICAL)" % _lvl
+            f"invalid LOG_LEVEL={_lvl!r} (use DEBUG/INFO/WARNING/ERROR/CRITICAL)"
         )
     shared = [
         structlog.contextvars.merge_contextvars,  # inject per-request binds (trace_id, ...)
