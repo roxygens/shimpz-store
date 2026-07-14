@@ -4,5 +4,8 @@ import { vitePreprocess } from "@sveltejs/vite-plugin-svelte";
 // Static public product and driver documentation; authenticated Capsule operations stay under /api.
 export default {
   preprocess: vitePreprocess(),
-  kit: { adapter: adapter({ strict: false }) },
+  kit: {
+    adapter: adapter({ strict: false }),
+    version: { name: process.env.SOURCE_DATE_EPOCH || "0" },
+  },
 };
