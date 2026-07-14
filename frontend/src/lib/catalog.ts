@@ -1,19 +1,15 @@
-// The Shimpz marketplace catalog — the single source of truth the storefront prerenders from.
-// Two first-class kinds, kept cleanly separate:
-//   • Driver  — a platform CAPABILITY an app can be granted (the audited credential-broker sidecars:
-//               Cloudflare, Postgres, the bus, OpenAI, ShimpzPay …). Apps request these as PERMISSIONS.
-//   • App     — an installable product. It declares the drivers it needs (permissions) and the other
-//               apps it depends on. Its `spec` is written to be read by a human, not parsed.
-// MVP seed (in-code); the DB-backed, publisher-owned catalog is a later layer behind the same surface.
+// The Shimpz capability catalog is the source of truth for public driver documentation. The App
+// shape at the end of this file is a separate, neutral deployment-policy inventory contract. It is
+// not consumed by rendered frontend code and does not describe or publish products.
 
 export const LOCALES = ["en", "pt"] as const;
 export type Locale = (typeof LOCALES)[number];
 export type I18n = Record<Locale, string>;
 export const t = (v: I18n, l: Locale): string => v[l] ?? v.en;
 
-// ── Drivers (platform capabilities / permissions) ───────────────────────────────────────────────
+// ── Drivers (audited platform capability inventory) ─────────────────────────────────────────────
 export type DriverCategory =
-  | "Hosting" | "Data" | "Integration" | "AI" | "Payments" | "Network" | "Dev" | "Automation";
+  | "Hosting" | "Data" | "Integration" | "AI" | "Network" | "Dev" | "Automation";
 
 export interface Driver {
   id: string;
@@ -23,20 +19,30 @@ export interface Driver {
   brand?: string; // official BRAND COLOR (recognition) for third-party drivers — not a reproduced logo
   summary: I18n; // one line, human-readable
   blurb: I18n; // a paragraph
-  grants: I18n[]; // exactly what holding this permission lets an app do
+  features: I18n[]; // the COMPLETE list of shipping operations for this platform component
+  boundaries: I18n[]; // who can call it and the limits of that access; never an implied App grant
+  creator?: string; // Creator handle — defaults to the platform owner (see DEFAULT_CREATOR)
 }
 
 export const DRIVERS: Driver[] = [
   {
     id: "cloudflare", name: "Cloudflare", category: "Hosting", icon: "☁️", brand: "#F38020",
-    summary: { en: "Publish an app to your own domain.", pt: "Publica um app no seu próprio domínio." },
+    summary: { en: "Publish an operator-managed app to its own domain.", pt: "Publica um app gerenciado pelo operador no próprio domínio." },
     blurb: {
-      en: "Gives an app a public front door: DNS, a Cloudflare Tunnel and Zero-Trust access — all scoped to its own <slug>.grid.shimpz.com and nothing else.",
-      pt: "Dá a um app uma porta pública: DNS, um Cloudflare Tunnel e acesso Zero-Trust — tudo restrito ao seu próprio <slug>.grid.shimpz.com e nada além.",
+      en: "The platform Brain's deployment tooling creates DNS, a Cloudflare Tunnel route and Zero-Trust access for an operator-managed app, scoped to its own <slug>.grid.shimpz.com.",
+      pt: "As ferramentas de deploy do Cérebro da plataforma criam DNS, rota no Cloudflare Tunnel e acesso Zero-Trust para um app gerenciado pelo operador, restritos ao próprio <slug>.grid.shimpz.com.",
     },
-    grants: [
-      { en: "Create a proxied DNS record for its own subdomain", pt: "Criar um registro DNS proxied do próprio subdomínio" },
-      { en: "Add a tunnel ingress rule (never rewrite others)", pt: "Adicionar uma regra de ingress no túnel (nunca reescrever outras)" },
+    features: [
+      { en: "Publish an app to its own subdomain (<slug>.grid.shimpz.com)", pt: "Publica um app no próprio subdomínio (<slug>.grid.shimpz.com)" },
+      { en: "Create and update proxied DNS records", pt: "Cria e atualiza registros DNS proxied" },
+      { en: "Add a Cloudflare Tunnel ingress route to the app", pt: "Adiciona uma rota de ingress no Cloudflare Tunnel para o app" },
+      { en: "Gate the domain behind Zero-Trust Access (allow-list + one-time PIN)", pt: "Protege o domínio com Zero-Trust Access (allow-list + PIN de uso único)" },
+      { en: "Automatic TLS at the edge — no certificates to manage", pt: "TLS automático na borda — sem certificados pra gerenciar" },
+      { en: "Clean teardown — the route and DNS are removed on uninstall", pt: "Desmonte limpo — a rota e o DNS são removidos ao desinstalar" },
+    ],
+    boundaries: [
+      { en: "Called by the platform Brain's deployment tooling; Apps never receive Cloudflare credentials", pt: "Chamado pelas ferramentas de deploy do Cérebro da plataforma; Apps nunca recebem credenciais Cloudflare" },
+      { en: "May create its own proxied DNS record and append its own tunnel route", pt: "Pode criar o próprio registro DNS proxied e acrescentar a própria rota no túnel" },
     ],
   },
   {
@@ -46,7 +52,18 @@ export const DRIVERS: Driver[] = [
       en: "Each app gets its OWN least-privilege Postgres database (proj_<name>) — it can never see another app's data, and never the platform's.",
       pt: "Cada app ganha seu PRÓPRIO banco Postgres de menor privilégio (proj_<name>) — nunca enxerga os dados de outro app, nem os da plataforma.",
     },
-    grants: [{ en: "Read/write only its own database", pt: "Ler/escrever apenas no próprio banco" }],
+    features: [
+      { en: "A dedicated database (proj_<name>), provisioned on install", pt: "Um banco dedicado (proj_<name>), provisionado na instalação" },
+      { en: "A least-privilege role scoped to that database only", pt: "Um papel de menor privilégio restrito só àquele banco" },
+      { en: "Full read/write, schema and migrations within its own database", pt: "Leitura/escrita completa, schema e migrações no próprio banco" },
+      { en: "Connection string injected as env — the app never holds admin credentials", pt: "String de conexão injetada como env — o app nunca segura credenciais de admin" },
+      { en: "Fully isolated — never sees another app's data, nor the platform's", pt: "Totalmente isolado — nunca vê os dados de outro app, nem os da plataforma" },
+      { en: "Dropped cleanly on uninstall", pt: "Removido de forma limpa ao desinstalar" },
+    ],
+    boundaries: [
+      { en: "An App receives only its database-specific connection string", pt: "Um App recebe apenas a string de conexão específica do seu banco" },
+      { en: "No platform or Postgres administrator credential enters the App", pt: "Nenhuma credencial da plataforma ou de administrador Postgres entra no App" },
+    ],
   },
   {
     id: "bus", name: "Event Bus", category: "Integration", icon: "🐼", brand: "#E4462B",
@@ -55,125 +72,118 @@ export const DRIVERS: Driver[] = [
       en: "Publish and consume events across apps with at-least-once delivery, a dead-letter queue and retries — the backbone for anything that reacts to something else.",
       pt: "Publica e consome eventos entre apps com entrega at-least-once, dead-letter queue e retries — a espinha dorsal de tudo que reage a algo.",
     },
-    grants: [
-      { en: "Publish to its own <name>.* topics", pt: "Publicar nos próprios tópicos <name>.*" },
-      { en: "Consume topics it is explicitly granted", pt: "Consumir tópicos que recebeu grant explícito" },
+    features: [
+      { en: "Publish events to its own <name>.* topics", pt: "Publica eventos nos próprios tópicos <name>.*" },
+      { en: "Consume topics it has been explicitly granted", pt: "Consome tópicos que recebeu grant explícito" },
+      { en: "At-least-once delivery", pt: "Entrega at-least-once" },
+      { en: "Automatic retries with backoff", pt: "Retries automáticos com backoff" },
+      { en: "Dead-letter queue for messages that keep failing", pt: "Dead-letter queue para mensagens que seguem falhando" },
+      { en: "Durable queues that survive restarts", pt: "Filas duráveis que sobrevivem a reinícios" },
+    ],
+    boundaries: [
+      { en: "An App may publish only to its own <name>.* topics", pt: "Um App pode publicar apenas nos próprios tópicos <name>.*" },
+      { en: "Cross-App consumption requires an explicit manifest grant", pt: "O consumo entre Apps exige um grant explícito no manifesto" },
     ],
   },
   {
     id: "storage", name: "Object Storage", category: "Data", icon: "📦", brand: "#F6821F",
-    summary: { en: "Store files and share links.", pt: "Guarda arquivos e compartilha links." },
+    summary: { en: "Brain-side artifact storage and share links.", pt: "Armazenamento de artefatos e links para o Cérebro." },
     blurb: {
-      en: "Upload artifacts (PDFs, images, exports) to Cloudflare R2 and hand back signed links — durable, cheap, and off the app's own disk.",
-      pt: "Sobe artefatos (PDFs, imagens, exports) no Cloudflare R2 e devolve links assinados — durável, barato e fora do disco do app.",
+      en: "The platform Brain uses the audited R2 sidecar to upload, list and retrieve artifacts. This operator-managed capability is not exposed as an App permission.",
+      pt: "O Cérebro da plataforma usa o sidecar R2 auditado para enviar, listar e buscar artefatos. Essa capacidade gerenciada pelo operador não é exposta como permissão de App.",
     },
-    grants: [{ en: "Put/get objects under its own prefix", pt: "Put/get de objetos sob o próprio prefixo" }],
+    features: [
+      { en: "Upload one Brain-selected file (PDF, image or export)", pt: "Envia um arquivo selecionado pelo Cérebro (PDF, imagem ou export)" },
+      { en: "List a prefix and download one bounded object", pt: "Lista um prefixo e baixa um objeto com tamanho limitado" },
+      { en: "Generate signed, time-limited share links", pt: "Gera links de compartilhamento assinados e com validade" },
+      { en: "Keep R2 credentials inside the audited sidecar", pt: "Mantém as credenciais R2 dentro do sidecar auditado" },
+    ],
+    boundaries: [
+      { en: "Platform Brain only; no App manifest grant or App route exists", pt: "Somente o Cérebro da plataforma; não existe grant de manifesto nem rota para Apps" },
+      { en: "The Brain-facing API has upload, list and get operations, but no delete operation", pt: "A API voltada ao Cérebro oferece upload, list e get, mas não oferece delete" },
+    ],
   },
   {
     id: "openai", name: "OpenAI", category: "AI", icon: "🧠", brand: "#10A37F",
-    summary: { en: "Language, images and voice.", pt: "Linguagem, imagens e voz." },
+    summary: { en: "Platform media generation and voice processing.", pt: "Geração de mídia e processamento de voz da plataforma." },
     blurb: {
-      en: "Generate copy, images and speech through the platform's audited OpenAI sidecar — the app never holds the key.",
-      pt: "Gera texto, imagens e fala pelo sidecar OpenAI auditado da plataforma — o app nunca segura a chave.",
+      en: "The platform Brain's image tool and Telegram voice gateway call the audited OpenAI sidecar. This media capability is not exposed as an App permission.",
+      pt: "A ferramenta de imagens do Cérebro da plataforma e o gateway de voz do Telegram chamam o sidecar OpenAI auditado. Essa capacidade de mídia não é exposta como permissão de App.",
     },
-    grants: [{ en: "Call the allow-listed models only", pt: "Chamar apenas os modelos allow-listed" }],
-  },
-  {
-    id: "pay", name: "ShimpzPay", category: "Payments", icon: "💳",
-    summary: { en: "Charge customers, handle billing.", pt: "Cobra clientes, cuida do billing." },
-    blurb: {
-      en: "Take payments through ShimpzPay — the one billing rail. Charges are audited and the take-rate is handled for you.",
-      pt: "Recebe pagamentos pelo ShimpzPay — o único trilho de billing. As cobranças são auditadas e o take-rate é resolvido pra você.",
-    },
-    grants: [{ en: "Create charge intents for its own customers", pt: "Criar intenções de cobrança dos próprios clientes" }],
+    features: [
+      { en: "Image generation (gpt-image)", pt: "Geração de imagens (gpt-image)" },
+      { en: "Speech-to-text transcription", pt: "Transcrição de fala para texto" },
+      { en: "Text-to-speech voice", pt: "Voz de texto para fala" },
+      { en: "The OpenAI sidecar holds the media API key", pt: "O sidecar OpenAI guarda a chave de API de mídia" },
+      { en: "Requests are audited", pt: "As requisições são auditadas" },
+    ],
+    boundaries: [
+      { en: "Platform Brain and Telegram gateway only; no App manifest grant or App route exists", pt: "Somente o Cérebro da plataforma e o gateway do Telegram; não existe grant de manifesto nem rota para Apps" },
+      { en: "Only allow-listed image, transcription and speech operations are accepted", pt: "Somente operações permitidas de imagem, transcrição e fala são aceitas" },
+    ],
   },
   {
     id: "proxy", name: "Residential Proxy", category: "Network", icon: "🛰️",
-    summary: { en: "Browse from a residential IP.", pt: "Navega de um IP residencial." },
+    summary: { en: "Optional residential egress for the platform Browser.", pt: "Egress residencial opcional para o Browser da plataforma." },
     blurb: {
-      en: "Route the browser through a residential ISP IP so automated sessions look human and stay logged in.",
-      pt: "Roteia o navegador por um IP residencial de ISP pra sessões automatizadas parecerem humanas e continuarem logadas.",
+      en: "When the operator configures IPRoyal credentials, the Browser container routes Chrome through that residential upstream. This is a Browser setting, not an App egress permission.",
+      pt: "Quando o operador configura credenciais IPRoyal, o container do Browser roteia o Chrome por esse upstream residencial. Essa é uma configuração do Browser, não uma permissão de egress para Apps.",
     },
-    grants: [{ en: "Use the shared residential egress", pt: "Usar o egress residencial compartilhado" }],
-  },
-  {
-    id: "github", name: "GitHub", category: "Dev", icon: "🐙", brand: "#2B3137",
-    summary: { en: "Push and manage repositories.", pt: "Faz push e gerencia repositórios." },
-    blurb: {
-      en: "Read and push to GitHub repositories through a narrow, audited surface — no broad token in the app.",
-      pt: "Lê e faz push em repositórios do GitHub por uma superfície estreita e auditada — sem token amplo no app.",
-    },
-    grants: [{ en: "Push to the repos it is scoped to", pt: "Push nos repos aos quais tem escopo" }],
-  },
-  {
-    id: "browser", name: "Undetectable Browser", category: "Automation", icon: "🕶️",
-    summary: { en: "Drive a real Chrome, undetectably.", pt: "Dirige um Chrome real, indetectável." },
-    blurb: {
-      en: "Operate a real, headful Chrome via CDP with human input — logs into sites and stays logged in, isolated from the app's credentials.",
-      pt: "Opera um Chrome real e headful via CDP com input humano — loga em sites e continua logado, isolado das credenciais do app.",
-    },
-    grants: [{ en: "Drive the shared browser via its audited API", pt: "Dirigir o browser compartilhado pela API auditada" }],
+    features: [
+      { en: "Optionally route Chrome through a configured residential ISP upstream", pt: "Opcionalmente roteia o Chrome por um upstream residencial configurado" },
+      { en: "Use a local authenticated relay because Chrome does not accept upstream proxy credentials", pt: "Usa um relay local autenticado porque o Chrome não aceita credenciais do proxy upstream" },
+      { en: "Select one configured upstream when the Browser starts", pt: "Seleciona um upstream configurado quando o Browser inicia" },
+      { en: "Keep residential proxy credentials inside the Browser container", pt: "Mantém as credenciais do proxy residencial dentro do container do Browser" },
+    ],
+    boundaries: [
+      { en: "Browser container only; Apps never receive this egress path or its credentials", pt: "Somente o container do Browser; Apps nunca recebem esse caminho de egress nem suas credenciais" },
+      { en: "App egress uses the separate destination-allowlisted App proxy", pt: "O egress de Apps usa o proxy separado com destinos permitidos" },
+    ],
   },
 ];
 
 export const DRIVER_BY_ID = new Map(DRIVERS.map((d) => [d.id, d]));
 
-// ── Apps (installable products) ─────────────────────────────────────────────────────────────────
-export type AppCategory = "Marketing" | "Content" | "Commerce" | "Automation" | "AI";
-export const APP_CATEGORIES: AppCategory[] = ["Marketing", "Content", "Commerce", "Automation", "AI"];
-
-// The CPU architectures a Shimpz's image supports. A Capsule runs the agent native to its host
-// (Apple Silicon = arm64, most servers = amd64), so a Shimpz must declare which arch(es) it ships —
-// an amd64-only one (e.g. the Chrome-based browser) can't install on an arm64 Capsule.
+// ── Apps (internal operational inventory only) ──────────────────────────────────────────────────
+// This type deliberately contains only deployment-policy facts. It has no public presentation,
+// publisher, pricing, review, or route metadata, and no rendered component imports APPS. Adding a
+// trusted registry entry here therefore cannot silently publish a product surface or an install CTA.
 export type Arch = "amd64" | "arm64";
-export const ARCHS: Arch[] = ["amd64", "arm64"];
-export const ARCH_LABEL: Record<Arch, string> = { amd64: "x86-64", arm64: "ARM64 · Apple Silicon" };
 
 export interface App {
   id: string;
-  name: string;
-  category: AppCategory;
-  icon: string;
-  tagline: I18n; // one line
-  spec: I18n; // the human-readable description: what it does, plainly
   permissions: string[]; // driver ids it needs
   dependsOn: string[]; // app ids it needs installed
-  publisher: string;
-  price: I18n;
-  archs: Arch[]; // CPU architectures this Shimpz's image supports (declared on its store page)
-  available: boolean; // true = a REAL deployable artifact exists in the capsule-driver marketplace registry
+  archs: Arch[];
 }
 
-export const APPS: App[] = [
+// Runtime status and installed-App controls come from capsule-driver, not from this source list.
+export const APPS: App[] = [];
+
+// ── Creators ─────────────────────────────────────────────────────────────────────────
+// A Creator owns platform artifacts such as drivers. GitHub identity is explicit catalog metadata;
+// the handle is the profile slug. Platform-owned artifacts default to DEFAULT_CREATOR.
+export const DEFAULT_CREATOR = "julianoamg";
+export const creatorOf = (x: { creator?: string }): string => x.creator ?? DEFAULT_CREATOR;
+
+export interface Creator {
+  handle: string; // GitHub handle — also the profile slug
+  name: string;
+  github: string; // explicit github.com/<github> profile metadata; unrelated to account signup
+  bio: I18n;
+}
+
+export const CREATORS: Creator[] = [
   {
-    id: "notification-center", name: "Notification Center", category: "Automation", icon: "🔔",
-    tagline: { en: "Approvals, alerts and reports on Telegram.", pt: "Aprovações, alertas e relatórios no Telegram." },
-    spec: {
-      en: "The one place your apps ask for approval, report results and alert you — with buttons and voice, and it survives restarts.",
-      pt: "O lugar único onde seus apps pedem aprovação, reportam resultados e te alertam — com botões e voz, e sobrevive a restart.",
+    handle: "julianoamg",
+    name: "Juliano Amaral Gouveia",
+    github: "julianoamg",
+    bio: {
+      en: "Creator of Shimpz and its default audited platform drivers.",
+      pt: "Criador do Shimpz e de seus drivers de plataforma auditados padrão.",
     },
-    permissions: ["bus"], dependsOn: [], publisher: "Shimpz",
-    price: { en: "Free", pt: "Grátis" }, archs: ["amd64", "arm64"], available: true,
-  },
-  {
-    id: "undetectable-browser", name: "Undetectable Browser", category: "Automation", icon: "🕶️",
-    tagline: { en: "Drive a real Chrome, undetectably.", pt: "Dirige um Chrome real, indetectável." },
-    spec: {
-      en: "A real, headful Google Chrome your Capsule drives via CDP with human-like input — logs into sites and stays logged in, isolated from your credentials. Because it bundles Google Chrome (which ships for x86-64 only), this Shimpz is amd64-only.",
-      pt: "Um Google Chrome real e headful que sua Capsule dirige via CDP com input humano — loga em sites e continua logado, isolado das suas credenciais. Por embutir o Google Chrome (que só existe para x86-64), este Shimpz é amd64-only.",
-    },
-    permissions: ["browser"], dependsOn: [], publisher: "Shimpz",
-    price: { en: "Paid · via ShimpzPay", pt: "Pago · via ShimpzPay" }, archs: ["amd64"], available: false,
   },
 ];
 
-export const APP_BY_ID = new Map(APPS.map((a) => [a.id, a]));
-
-// ── slugs & relations (composite English URLs + internal link building) ─────────────────────────
-export const catSlug = (c: string): string => c.toLowerCase().replace(/\s+/g, "-");
-export const appsInCategory = (c: AppCategory): App[] => APPS.filter((a) => a.category === c);
-export const usedCategories = (): AppCategory[] => APP_CATEGORIES.filter((c) => appsInCategory(c).length > 0);
-export const appsUsingDriver = (id: string): App[] => APPS.filter((a) => a.permissions.includes(id));
-export const dependentsOf = (id: string): App[] => APPS.filter((a) => a.dependsOn.includes(id));
-export const relatedApps = (a: App): App[] =>
-  APPS.filter((x) => x.id !== a.id && x.category === a.category).slice(0, 3);
+export const CREATOR_BY_HANDLE = new Map(CREATORS.map((c) => [c.handle, c]));
+export const driversByCreator = (handle: string): Driver[] => DRIVERS.filter((d) => creatorOf(d) === handle);

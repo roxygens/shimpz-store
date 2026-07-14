@@ -1,4 +1,4 @@
-import { LOCALES, APPS, DRIVERS, usedCategories } from "$lib/catalog";
+import { LOCALES, DRIVERS } from "$lib/catalog";
 import { SITE, u } from "$lib/url";
 
 export const prerender = true;
@@ -6,9 +6,7 @@ export const prerender = true;
 export function GET() {
   const paths: string[] = [];
   for (const l of LOCALES) {
-    paths.push(u.home(l), u.apps(l), u.drivers(l));
-    for (const c of usedCategories()) paths.push(u.category(l, c));
-    for (const a of APPS) paths.push(u.app(l, a));
+    paths.push(u.home(l), u.drivers(l));
     for (const d of DRIVERS) paths.push(u.driver(l, d));
   }
   const body =

@@ -1,22 +1,19 @@
 <script lang="ts">
-  import { t, type Driver, type App, type Locale } from "$lib/catalog";
+  import { t, creatorOf, type Driver, type Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
   import { u } from "$lib/url";
   import Seo from "$lib/components/Seo.svelte";
-  import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
-  import AppCard from "$lib/components/AppCard.svelte";
   import Icon from "$lib/components/Icon.svelte";
+  import CreatorTag from "$lib/components/CreatorTag.svelte";
 
   let { data } = $props();
   const lang = $derived(data.lang as Locale);
   const driver = $derived(data.driver as Driver);
-  const apps = $derived(data.apps as App[]);
 </script>
 
 <Seo title={`${driver.name} · Shimpz drivers`} description={t(driver.summary, lang)} {lang} />
 
 <section class="wrap pt-10">
-  <Breadcrumbs items={[{ label: tr("home", lang), href: u.home(lang) }, { label: tr("nav_drivers", lang), href: u.drivers(lang) }, { label: driver.name }]} />
 
   <div class="flex items-center gap-5">
     <Icon glyph={driver.icon} id={driver.id} size={80} brand={driver.brand} />
@@ -26,6 +23,7 @@
         <span class="badge">{driver.category}</span>
       </div>
       <p class="mt-1.5 text-lg dim">{t(driver.summary, lang)}</p>
+      <div class="mt-3"><CreatorTag handle={creatorOf(driver)} {lang} /></div>
     </div>
   </div>
 
@@ -35,22 +33,25 @@
         <h2 class="kicker">{tr("what_it_does", lang)}</h2>
         <p class="mt-3 max-w-2xl text-lg leading-relaxed">{t(driver.blurb, lang)}</p>
       </div>
-      {#if apps.length}
-        <div>
-          <h2 class="kicker">{tr("used_by", lang)}</h2>
-          <div class="mt-4 grid gap-4 sm:grid-cols-2">
-            {#each apps as app (app.id)}<AppCard {app} {lang} />{/each}
-          </div>
-        </div>
-      {/if}
+      <div>
+        <h2 class="kicker">{tr("features_title", lang)} <span class="ml-1 opacity-60">{driver.features.length}</span></h2>
+        <ul class="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
+          {#each driver.features as f (f.en)}
+            <li class="flex gap-2.5 text-sm leading-relaxed">
+              <span class="mt-px shrink-0" style="color:var(--color-primary)">▸</span>
+              <span>{t(f, lang)}</span>
+            </li>
+          {/each}
+        </ul>
+      </div>
     </div>
 
-    <aside class="lg:sticky lg:top-24 lg:self-start">
+    <aside class="lg:sticky lg:top-32 lg:self-start">
       <div class="panel">
-        <h2 class="kicker">{tr("grants_title", lang)}</h2>
+        <h2 class="kicker">{tr("access_boundary", lang)}</h2>
         <ul class="mt-4 space-y-3 text-sm">
-          {#each driver.grants as g (g.en)}
-            <li class="flex gap-2"><span style="color:var(--color-primary)">✓</span><span>{t(g, lang)}</span></li>
+          {#each driver.boundaries as boundary (boundary.en)}
+            <li class="flex gap-2"><span style="color:var(--color-primary)">✓</span><span>{t(boundary, lang)}</span></li>
           {/each}
         </ul>
       </div>

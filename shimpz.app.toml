@@ -1,11 +1,10 @@
-# What this Shimpz app is and what it needs. The toolchain reads this: `shimpz-app deploy` resolves [needs]
-# and the admin marketplace surfaces it. Full spec: docs/build-a-shimpz-app.md.
+# What this Shimpz app is and what it needs. The toolchain reads this so `shimpz-app deploy` can
+# resolve [needs]. Full spec: docs/build-a-shimpz-app.md.
 name = "shimpz-store"
 title = "Shimpz Store"
 summary = ""
 
 [needs]
-# native = ["openai"]          # native integrations that must be ENABLED — see docs for the full list
 # apps   = ["other-app"]       # other Shimpz apps this one needs — installed automatically so you REUSE them
 # calls  = ["other-backend"]   # service APIs to reuse (sync) — wired as declared reach (--calls)
 # egress = ["api.example.com"] # external hosts you may reach — apps have NO internet by default
@@ -17,11 +16,6 @@ skill = "shimpz/SKILL.md"       # agent-facing skill this app ships (scaffolded)
 # consume = ["other-app.topic"]   # READ another app's bus topic (a narrow, audited ACL)
 # publish = "own"                  # may be published ONLY at shimpz-store.grid.shimpz.com
 # dns     = "own"                  # may manage DNS ONLY under shimpz-store.grid.shimpz.com
-
-# [billing]  — charge for this app (payment is locked to ShimpzPay; omit for a free app).
-# pay = "shimpzpay"               # the ONLY accepted rail
-# price = 9.90                     # per period, > 0
-# period = "monthly"               # monthly | yearly | once
 
 # [[run]]  — declare this to make `shimpz-app install shimpz-store` deploy the whole app (+ its deps) in one command.
 # name = "shimpz-store-backend"

@@ -15,7 +15,7 @@
   --color-border-strong: #2b2b2b;
   --color-fg: #f4f4f5;        /* neutral near-white (no blue cast) */
   --color-muted: #a1a1aa;     /* neutral zinc — AA on black */
-  --color-muted-2: #6a6a72;
+  --color-muted-2: #85858d;   /* field placeholders — ≥4.5:1 on the #000 well (WCAG AA) */
   /* neon — accent only, never ambient fill */
   --color-cyan: #00f0ff;
   --color-magenta: #ff2a6d;
@@ -23,6 +23,8 @@
   --color-green: #05ffa1;
   --color-primary: #00f0ff;
   --color-primary-2: #ff2a6d;
+  --color-violet: #7c3aed;    /* app-icon gradient seeds — kept as tokens, no off-palette literals */
+  --color-purple: #a855f7;
 
   --cut: 10px;                /* chamfer size */
   --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -67,6 +69,11 @@ a { color: inherit; text-decoration: none; }
     background: linear-gradient(100deg, var(--color-cyan), var(--color-magenta));
     -webkit-background-clip: text; background-clip: text; color: transparent;
     filter: drop-shadow(0 0 10px rgba(0, 240, 255, 0.18));
+  }
+  /* forced-colors (Windows High-Contrast) strips background images while color:transparent persists —
+     which would render the clipped text invisible. Restore solid system ink. */
+  @media (forced-colors: active) {
+    .gradient-text { background: none; filter: none; -webkit-text-fill-color: CanvasText; color: CanvasText; }
   }
   .kicker {
     @apply text-xs font-semibold uppercase;
@@ -123,6 +130,26 @@ a { color: inherit; text-decoration: none; }
   .btn-ghost:hover { box-shadow: inset 0 0 0 1px var(--color-cyan); filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.35)); }
   .btn-ghost:disabled { opacity: 0.45; cursor: default; }
 
+  /* nav button — the primary menu, moved out of the header into its own bar. Chamfered HUD chip that
+     wakes neon on hover and stays lit for the active section. */
+  .navbtn {
+    @apply relative inline-flex items-center gap-2 px-4 py-2 text-sm font-semibold uppercase transition;
+    font-family: var(--font-mono); letter-spacing: 0.05em; color: var(--color-muted);
+    background: linear-gradient(180deg, var(--color-card-2), var(--color-card));
+    box-shadow: inset 0 0 0 1px var(--color-border);
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  }
+  .navbtn:hover { color: var(--color-fg); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-cyan) 55%, transparent); filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.28)); }
+  .navbtn.is-active {
+    color: var(--color-fg);
+    background: linear-gradient(180deg, color-mix(in oklab, var(--color-cyan) 12%, var(--color-card-2)), var(--color-card));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-cyan) 60%, var(--color-border-strong));
+  }
+  .navbtn.is-active::before {
+    content: ""; position: absolute; left: 8px; right: 8px; bottom: 0; height: 2px;
+    background: var(--color-cyan); box-shadow: 0 0 8px rgba(0, 240, 255, 0.6);
+  }
+
   /* chips / badges — mono, neutral outline, neon on interaction */
   .chip {
     @apply inline-flex items-center gap-1.5 border px-3.5 py-1.5 text-xs font-semibold uppercase transition;
@@ -134,8 +161,6 @@ a { color: inherit; text-decoration: none; }
     @apply inline-flex items-center border px-2.5 py-0.5 text-xs font-medium uppercase;
     font-family: var(--font-mono); letter-spacing: 0.06em; border-color: var(--color-border-strong); color: var(--color-muted);
   }
-  .badge-price { color: var(--color-cyan); border-color: color-mix(in oklab, var(--color-cyan) 40%, var(--color-border-strong)); }
-
   /* form fields — CYBERPUNK: chamfered notch (matches buttons/cards), pure-black well, hairline that
      ignites neon on focus. .field = base input/select; .field-sm = compact; textareas add .field-area. */
   .field {
@@ -207,12 +232,26 @@ a { color: inherit; text-decoration: none; }
   .md th, .md td { border: 1px solid var(--color-border); padding: 0.3rem 0.6rem; text-align: left; }
   .md hr { border: 0; border-top: 1px solid var(--color-border); margin: 0.8rem 0; }
 
+  /* chat bubbles — chamfered to match the HUD language (.panel/.card/.field are all chamfered).
+     .bubble = captain (outgoing, notch bottom-right); .bubble-in = brain/ask (notch bottom-left). */
+  .bubble { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 7px), calc(100% - 7px) 100%, 0 100%); }
+  .bubble-in { clip-path: polygon(0 0, 100% 0, 100% 100%, 7px 100%, 0 calc(100% - 7px)); }
+
+  /* inline status banner (error / brain-ok) — chamfered like .panel; pair with an inset box-shadow
+     border (a real border clips at the notch and leaves a gap). Same two-corner cut as the HUD. */
+  .notice { clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+
   /* live streaming caret on the message currently being written */
   .caret::after {
     content: "▋"; color: var(--color-cyan); margin-left: 1px;
     animation: cursor-blink 1s steps(2, start) infinite;
   }
   @keyframes cursor-blink { 0%,100% { opacity: 1 } 50% { opacity: 0 } }
+  @media (prefers-reduced-motion: reduce) {
+    .caret::after { animation: none; opacity: 1 }
+    .card, .btn-primary, .btn-ghost, .navbtn, .field { transition: none }
+    .card:hover { transform: none }   /* no hover lift when the user asked for no motion */
+  }
 
   /* glitch wordmark (chromatic aberration) — subtle, disabled for reduced motion */
   .glitch { position: relative; display: inline-block; }

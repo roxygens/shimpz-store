@@ -4,15 +4,24 @@
   let { glyph, id, size = 44, brand }: { glyph: string; id: string; size?: number; brand?: string } =
     $props();
 
+  // gradient seeds drawn from the design-system palette tokens (no off-palette literals)
+  const C = {
+    cyan: "var(--color-cyan)",
+    magenta: "var(--color-magenta)",
+    green: "var(--color-green)",
+    yellow: "var(--color-yellow)",
+    violet: "var(--color-violet)",
+    purple: "var(--color-purple)",
+  };
   const NEON: [string, string][] = [
-    ["#00f0ff", "#7c3aed"],
-    ["#ff2a6d", "#7c3aed"],
-    ["#00f0ff", "#05ffa1"],
-    ["#ff2a6d", "#00f0ff"],
-    ["#fcee0a", "#ff2a6d"],
-    ["#05ffa1", "#00f0ff"],
-    ["#a855f7", "#ff2a6d"],
-    ["#00eaff", "#ff2a6d"],
+    [C.cyan, C.violet],
+    [C.magenta, C.violet],
+    [C.cyan, C.green],
+    [C.magenta, C.cyan],
+    [C.yellow, C.magenta],
+    [C.green, C.cyan],
+    [C.purple, C.magenta],
+    [C.cyan, C.magenta],
   ];
   const hash = (s: string) => [...s].reduce((a, c) => (a * 31 + c.charCodeAt(0)) >>> 0, 7);
   // third-party drivers → their official BRAND COLOUR (recognition); everything else → the neon family

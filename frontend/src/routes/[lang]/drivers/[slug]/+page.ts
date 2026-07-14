@@ -1,5 +1,5 @@
 import { error } from "@sveltejs/kit";
-import { LOCALES, DRIVERS, DRIVER_BY_ID, appsUsingDriver, type Locale } from "$lib/catalog";
+import { LOCALES, DRIVERS, DRIVER_BY_ID, type Locale } from "$lib/catalog";
 
 export const prerender = true;
 
@@ -12,5 +12,5 @@ export function entries() {
 export function load({ params }: { params: { lang: string; slug: string } }) {
   const d = DRIVER_BY_ID.get(params.slug);
   if (!d) error(404, "driver not found");
-  return { lang: params.lang as Locale, driver: d, apps: appsUsingDriver(d.id) };
+  return { lang: params.lang as Locale, driver: d };
 }

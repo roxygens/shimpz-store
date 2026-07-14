@@ -1,18 +1,18 @@
-// Composite English URLs + the helpers that make every page link to the related ones (link building).
-import { catSlug, type App, type Driver, type AppCategory, type Locale } from "$lib/catalog";
+// Public URLs for the implemented product and platform-capability surfaces.
+import type { Driver, Locale } from "$lib/catalog";
 
 export const SITE = "https://shimpz.com";
 
 export const u = {
   home: (l: Locale) => `/${l}`,
-  apps: (l: Locale) => `/${l}/apps`,
-  category: (l: Locale, c: AppCategory) => `/${l}/apps/${catSlug(c)}`,
-  app: (l: Locale, a: App) => `/${l}/apps/${catSlug(a.category)}/${a.id}`,
   drivers: (l: Locale) => `/${l}/drivers`,
   driver: (l: Locale, d: Driver) => `/${l}/drivers/${d.id}`,
   capsule: (l: Locale) => `/${l}/capsule`,
   chat: (l: Locale) => `/${l}/chat`,
-  install: (l: Locale) => `/${l}/install`,
+  login: (l: Locale) => `/${l}/login`,
+  account: (l: Locale) => `/${l}/account`,
+  creators: (l: Locale) => `/${l}/creators`,
+  creator: (l: Locale, handle: string) => `/${l}/creators/${handle}`,
 };
 
 // Same page in another locale — swaps the leading /<lang>/ segment (for hreflang + the language switch).
