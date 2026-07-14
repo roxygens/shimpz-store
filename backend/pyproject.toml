@@ -5,6 +5,7 @@ requires-python = ">=3.11"
 dependencies = [
     "aiokafka>=0.14",
     "fastapi",
+    "python-multipart==0.0.32",
     "uvicorn[standard]",
     "sqlalchemy>=2",
     "psycopg[binary]",
