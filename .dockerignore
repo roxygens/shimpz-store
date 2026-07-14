@@ -1,0 +1,9 @@
+.git
+.ruff_cache
+backend/.ruff_cache
+backend/**/__pycache__
+backend/**/*.pyc
+frontend/.pnpm-store
+frontend/.svelte-kit
+frontend/build
+frontend/node_modules

@@ -1,10 +1,8 @@
-"""Shimpz reviews — stars + comments from Captains who actually run the Shimpz.
+"""Legacy review-database codec retained only for backup/restore compatibility.
 
-SQLite on the store's own volume (the accounts service's proven pattern: stdlib, WAL, one file).
-One review per (app, account), upsert = editing your review. The HONESTY GATE lives in the route,
-not here: main.py only calls upsert() after confirming with the capsule-driver that the account has
-this Shimpz installed in a Capsule it owns — the marketplace never shows a rating from someone who
-never ran the thing.
+The shipping Store image does not copy or import this module and exposes no review route. Backup
+drills still use the codec to prove that archives made before the public surface was retired remain
+readable. Do not wire it into the application without a separately reviewed product decision.
 """
 
 from __future__ import annotations
@@ -66,8 +64,7 @@ def validate_comment(comment: object) -> str:
 def upsert(
     app_id: str, account_id: str, username: str, stars: object, comment: object = ""
 ) -> dict:
-    """Create or replace this account's review of this Shimpz. Inputs are validated here — the route
-    only supplies identity (account_id/username come from the verified token, never the body)."""
+    """Create or replace a legacy review record using caller-supplied verified identity."""
     aid = validate_app_id(app_id)
     s = validate_stars(stars)
     text = validate_comment(comment)
@@ -82,7 +79,7 @@ def upsert(
 
 
 def for_app(app_id: str) -> dict:
-    """Public aggregate + the latest reviews: {average, count, reviews:[{username, stars, comment, ts}]}."""
+    """Read a legacy aggregate and its latest review records for archive validation."""
     aid = validate_app_id(app_id)
     with _conn() as c:
         agg = c.execute(
