@@ -32,9 +32,7 @@ def main(app_name: str, port: str) -> None:
             publishes=[TOPIC],
         )
     else:
-        raise SystemExit(
-            f"register.py: unknown app name {app_name!r} for project {NAME!r} — add its register() here"
-        )
+        raise SystemExit(f"register.py: unknown app name {app_name!r} for project {NAME!r} — add its register() here")
 
 
 if __name__ == "__main__":

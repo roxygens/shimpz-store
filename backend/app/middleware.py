@@ -36,9 +36,7 @@ _SECURITY_HEADERS = (
 
 
 def _clean(raw: bytes) -> str:
-    tid = _UNSAFE.sub("", raw.decode("latin-1"))[
-        :200
-    ]  # strip non-token chars (drops CTLs/unicode), cap 200
+    tid = _UNSAFE.sub("", raw.decode("latin-1"))[:200]  # strip non-token chars (drops CTLs/unicode), cap 200
     return tid or uuid4().hex  # empty after cleaning → mint a safe one
 
 
@@ -58,18 +56,12 @@ class TraceIdMiddleware:
 
         async def send_with_id(message):
             if message["type"] == "http.response.start":
-                managed = {name for name, _value in _SECURITY_HEADERS} | {
-                    b"x-request-id"
-                }
+                managed = {name for name, _value in _SECURITY_HEADERS} | {b"x-request-id"}
                 message["headers"] = [
-                    (name, value)
-                    for name, value in message.get("headers") or []
-                    if name.lower() not in managed
+                    (name, value) for name, value in message.get("headers") or [] if name.lower() not in managed
                 ]
                 message["headers"].extend(_SECURITY_HEADERS)
-                message["headers"].append(
-                    (b"x-request-id", trace_id.encode("ascii"))
-                )  # token-only → safe
+                message["headers"].append((b"x-request-id", trace_id.encode("ascii")))  # token-only → safe
             await send(message)
 
         await self.app(scope, receive, send_with_id)

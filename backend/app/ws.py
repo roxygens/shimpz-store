@@ -30,12 +30,10 @@ clients: set[WebSocket] = set()
 
 async def _fanout(event: dict) -> None:
     dead = []
-    for ws in list(
-        clients
-    ):  # snapshot: connects/disconnects mutate the set between awaits
+    for ws in list(clients):  # snapshot: connects/disconnects mutate the set between awaits
         try:
             await ws.send_json(event)
-        except (WebSocketDisconnect, RuntimeError, ConnectionError, OSError):
+        except WebSocketDisconnect, RuntimeError, ConnectionError, OSError:
             dead.append(ws)  # a dying socket must never stop the fan-out to the others
     for ws in dead:
         clients.discard(ws)
@@ -53,7 +51,7 @@ async def _pump() -> None:
                 await _fanout(event)
         except asyncio.CancelledError:
             raise  # shutdown — never swallow cancellation
-        except (KafkaError, OSError, RuntimeError, ValueError):
+        except KafkaError, OSError, RuntimeError, ValueError:
             log.exception("ws_pump_error", topic=TOPIC)
             await asyncio.sleep(3)
 
@@ -87,9 +85,7 @@ async def ws_endpoint(ws: WebSocket) -> None:
     log.info("ws_connected", clients=len(clients))
     try:
         while True:
-            await (
-                ws.receive_text()
-            )  # inbound frames are keepalives; server→client is the data path
+            await ws.receive_text()  # inbound frames are keepalives; server→client is the data path
     except WebSocketDisconnect:
         log.info("ws_disconnected", clients=len(clients) - 1)
     finally:

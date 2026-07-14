@@ -14,9 +14,7 @@ import time
 from pathlib import Path
 
 DB_PATH = Path(os.environ.get("SHIMPZ_STORE_DB", "/data/store.db"))
-APP_ID_RE = re.compile(
-    r"^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$"
-)  # same grammar the install path enforces
+APP_ID_RE = re.compile(r"^[a-z0-9][a-z0-9-]{0,38}[a-z0-9]$")  # same grammar the install path enforces
 MAX_COMMENT = 1000
 LIST_LIMIT = 100
 
@@ -61,9 +59,7 @@ def validate_comment(comment: object) -> str:
     return text
 
 
-def upsert(
-    app_id: str, account_id: str, username: str, stars: object, comment: object = ""
-) -> dict:
+def upsert(app_id: str, account_id: str, username: str, stars: object, comment: object = "") -> dict:
     """Create or replace a legacy review record using caller-supplied verified identity."""
     aid = validate_app_id(app_id)
     s = validate_stars(stars)
@@ -82,9 +78,7 @@ def for_app(app_id: str) -> dict:
     """Read a legacy aggregate and its latest review records for archive validation."""
     aid = validate_app_id(app_id)
     with _conn() as c:
-        agg = c.execute(
-            "SELECT AVG(stars), COUNT(*) FROM review WHERE app_id=?", (aid,)
-        ).fetchone()
+        agg = c.execute("SELECT AVG(stars), COUNT(*) FROM review WHERE app_id=?", (aid,)).fetchone()
         rows = c.execute(
             "SELECT username, stars, comment, updated_at FROM review WHERE app_id=? ORDER BY updated_at DESC LIMIT ?",
             (aid, LIST_LIMIT),
@@ -94,7 +88,5 @@ def for_app(app_id: str) -> dict:
         "app": aid,
         "average": average,
         "count": count,
-        "reviews": [
-            {"username": r[0], "stars": r[1], "comment": r[2], "ts": r[3]} for r in rows
-        ],
+        "reviews": [{"username": r[0], "stars": r[1], "comment": r[2], "ts": r[3]} for r in rows],
     }

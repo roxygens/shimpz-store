@@ -37,9 +37,7 @@ log = structlog.get_logger()
 
 BUILD = Path(os.environ.get("SHIMPZ_STORE_BUILD", "/app/build"))
 ACCOUNTS_URL = os.environ.get("SHIMPZ_ACCOUNTS_URL", "http://accounts:7079")
-CAPSULEDRIVER_URL = os.environ.get(
-    "SHIMPZ_CAPSULEDRIVER_URL", "http://capsule-driver:7077"
-)
+CAPSULEDRIVER_URL = os.environ.get("SHIMPZ_CAPSULEDRIVER_URL", "http://capsule-driver:7077")
 BRAIN_FINALIZE_TOKEN_FILE = Path(
     os.environ.get(
         "SHIMPZ_ACCOUNTS_BRAIN_FINALIZE_TOKEN_FILE",
@@ -48,9 +46,7 @@ BRAIN_FINALIZE_TOKEN_FILE = Path(
 )
 ACCOUNT_COOKIE = "shimpz_account"
 COOKIE_MAX_AGE = 7 * 24 * 3600
-MAX_CHAT_BODY_BYTES = max(
-    1024, int(os.environ.get("SHIMPZ_STORE_MAX_CHAT_BODY_BYTES", str(128 * 1024)))
-)
+MAX_CHAT_BODY_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_CHAT_BODY_BYTES", str(128 * 1024))))
 MAX_CAPSULE_CREATE_BODY_BYTES = max(
     1024,
     int(os.environ.get("SHIMPZ_STORE_MAX_CAPSULE_CREATE_BODY_BYTES", str(16 * 1024))),
@@ -59,45 +55,21 @@ MAX_CAPSULE_INSTALL_BODY_BYTES = max(
     1024,
     int(os.environ.get("SHIMPZ_STORE_MAX_CAPSULE_INSTALL_BODY_BYTES", str(4 * 1024))),
 )
-MAX_AUTH_BODY_BYTES = max(
-    1024, int(os.environ.get("SHIMPZ_STORE_MAX_AUTH_BODY_BYTES", str(16 * 1024)))
-)
-MAX_WS_FRAME_BYTES = max(
-    1024, int(os.environ.get("SHIMPZ_STORE_MAX_WS_FRAME_BYTES", str(128 * 1024)))
-)
-STREAM_QUEUE_MAX_EVENTS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_MAX_EVENTS", "32"))
-)
-STREAM_QUEUE_PUT_TIMEOUT = max(
-    1.0, float(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_PUT_TIMEOUT", "10"))
-)
-STREAM_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_STREAM_WORKER_THREADS", "32"))
-)
-STREAM_TURN_QUEUE_MAX = max(
-    0, int(os.environ.get("SHIMPZ_STORE_STREAM_TURN_QUEUE_MAX", "32"))
-)
-CONTROL_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_CONTROL_WORKER_THREADS", "8"))
-)
+MAX_AUTH_BODY_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_AUTH_BODY_BYTES", str(16 * 1024))))
+MAX_WS_FRAME_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_WS_FRAME_BYTES", str(128 * 1024))))
+STREAM_QUEUE_MAX_EVENTS = max(1, int(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_MAX_EVENTS", "32")))
+STREAM_QUEUE_PUT_TIMEOUT = max(1.0, float(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_PUT_TIMEOUT", "10")))
+STREAM_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_STREAM_WORKER_THREADS", "32")))
+STREAM_TURN_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_STREAM_TURN_QUEUE_MAX", "32")))
+CONTROL_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_CONTROL_WORKER_THREADS", "8")))
 CONTROL_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_CONTROL_QUEUE_MAX", "8")))
-AUTH_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_AUTH_WORKER_THREADS", "8"))
-)
+AUTH_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_AUTH_WORKER_THREADS", "8")))
 AUTH_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_AUTH_QUEUE_MAX", "8")))
-STOP_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_STOP_WORKER_THREADS", "4"))
-)
+STOP_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_STOP_WORKER_THREADS", "4")))
 STOP_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_STOP_QUEUE_MAX", "4")))
-WS_GLOBAL_CONNECTION_LIMIT = max(
-    1, int(os.environ.get("SHIMPZ_STORE_WS_GLOBAL_CONNECTION_LIMIT", "64"))
-)
-WS_ACCOUNT_CONNECTION_LIMIT = max(
-    1, int(os.environ.get("SHIMPZ_STORE_WS_ACCOUNT_CONNECTION_LIMIT", "4"))
-)
-WS_CAPSULE_CONNECTION_LIMIT = max(
-    1, int(os.environ.get("SHIMPZ_STORE_WS_CAPSULE_CONNECTION_LIMIT", "2"))
-)
+WS_GLOBAL_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_GLOBAL_CONNECTION_LIMIT", "64")))
+WS_ACCOUNT_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_ACCOUNT_CONNECTION_LIMIT", "4")))
+WS_CAPSULE_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_CAPSULE_CONNECTION_LIMIT", "2")))
 WS_POLL_WORKER_THREADS = min(
     WS_GLOBAL_CONNECTION_LIMIT,
     max(1, int(os.environ.get("SHIMPZ_STORE_WS_POLL_WORKER_THREADS", "8"))),
@@ -114,9 +86,7 @@ class _ExecutorSaturatedError(RuntimeError):
 class _BoundedThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
     """ThreadPoolExecutor with a hard cap on running plus queued futures."""
 
-    def __init__(
-        self, *, max_workers: int, max_outstanding: int, thread_name_prefix: str
-    ) -> None:
+    def __init__(self, *, max_workers: int, max_outstanding: int, thread_name_prefix: str) -> None:
         if max_outstanding < max_workers:
             raise ValueError("max_outstanding must cover every worker")
         self._permits = threading.BoundedSemaphore(max_outstanding)
@@ -235,9 +205,7 @@ class _TurnLease:
 class _WsConnectionAdmission:
     """Hard process/account/Capsule bounds for sockets and their one ask poller."""
 
-    def __init__(
-        self, global_limit: int, account_limit: int, capsule_limit: int
-    ) -> None:
+    def __init__(self, global_limit: int, account_limit: int, capsule_limit: int) -> None:
         if min(global_limit, account_limit, capsule_limit) < 1:
             raise ValueError("WebSocket connection limits must be positive")
         self.global_limit = global_limit
@@ -358,9 +326,7 @@ def _canonical_origin(value: str | None) -> str | None:
 
 WS_ALLOWED_ORIGINS = frozenset(
     origin
-    for raw in os.environ.get("SHIMPZ_WS_ALLOWED_ORIGINS", "https://shimpz.com").split(
-        ","
-    )
+    for raw in os.environ.get("SHIMPZ_WS_ALLOWED_ORIGINS", "https://shimpz.com").split(",")
     if (origin := _canonical_origin(raw.strip())) is not None
 )
 
@@ -406,15 +372,11 @@ async def _read_bounded_json(request: Request, max_bytes: int) -> dict:
         if length < 0:
             raise ClientPayloadError(400, "invalid Content-Length")
         if length > max_bytes:
-            raise ClientPayloadError(
-                413, f"request body too large (max {max_bytes} bytes)"
-            )
+            raise ClientPayloadError(413, f"request body too large (max {max_bytes} bytes)")
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > max_bytes:
-            raise ClientPayloadError(
-                413, f"request body too large (max {max_bytes} bytes)"
-            )
+            raise ClientPayloadError(413, f"request body too large (max {max_bytes} bytes)")
         body.extend(chunk)
     try:
         payload = jsonlib.loads(body or b"{}")
@@ -433,9 +395,7 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 
 @app.exception_handler(_ExecutorSaturatedError)
-async def executor_saturated(
-    request: Request, exc: _ExecutorSaturatedError
-) -> JSONResponse:
+async def executor_saturated(request: Request, exc: _ExecutorSaturatedError) -> JSONResponse:
     log.warning("store_capacity_rejected", path=request.url.path)
     return JSONResponse(
         status_code=429,
@@ -506,9 +466,7 @@ async def _authed_account_bounded(request: Request) -> tuple[str, str, str]:
 
 def _client_ip(request: Request) -> str:
     """The end user's IP as best we can know it — Cloudflare's header when fronted, else the socket peer."""
-    return request.headers.get("cf-connecting-ip", "") or (
-        request.client.host if request.client else ""
-    )
+    return request.headers.get("cf-connecting-ip", "") or (request.client.host if request.client else "")
 
 
 def _cid_for(account_id: str, name: str) -> str:
@@ -545,11 +503,7 @@ async def signup(request: Request) -> JSONResponse:
         {"username": payload.get("username"), "password": payload.get("password")},
         extra={"X-Forwarded-For": _client_ip(request)},
     )
-    body = (
-        {"account_id": data.get("account_id"), "username": data.get("username")}
-        if status == 200
-        else data
-    )
+    body = {"account_id": data.get("account_id"), "username": data.get("username")} if status == 200 else data
     resp = JSONResponse(body, status_code=status)
     if status == 200 and data.get("token"):
         _set_cookie(resp, data["token"])
@@ -571,11 +525,7 @@ async def login(request: Request) -> JSONResponse:
         {"username": payload.get("username"), "password": payload.get("password")},
         extra={"X-Forwarded-For": _client_ip(request)},
     )
-    body = (
-        {"account_id": data.get("account_id"), "username": data.get("username")}
-        if status == 200
-        else data
-    )
+    body = {"account_id": data.get("account_id"), "username": data.get("username")} if status == 200 else data
     resp = JSONResponse(body, status_code=status)
     if status == 200 and data.get("token"):
         _set_cookie(resp, data["token"])
@@ -683,11 +633,7 @@ async def brain_delete(request: Request, provider: str) -> JSONResponse:
 def _revocation_state(begin_data: dict) -> tuple[bool, int | None]:
     already_absent = begin_data.get("already_absent") is True
     generation = begin_data.get("generation")
-    if not already_absent and (
-        not isinstance(generation, int)
-        or isinstance(generation, bool)
-        or generation < 1
-    ):
+    if not already_absent and (not isinstance(generation, int) or isinstance(generation, bool) or generation < 1):
         raise ValueError("credential revocation returned invalid state")
     return already_absent, generation
 
@@ -722,9 +668,7 @@ def _purge_brain_from_capsules(token: str, provider: str) -> str | None:
     return None
 
 
-def _delete_brain_for_token(
-    token: str, provider: str, forwarded_for: str
-) -> JSONResponse:
+def _delete_brain_for_token(token: str, provider: str, forwarded_for: str) -> JSONResponse:
     begin_status, begin_data = _call(
         ACCOUNTS_URL,
         "POST",
@@ -903,16 +847,12 @@ async def capsule_uninstall(request: Request, cid: str, app_id: str) -> JSONResp
         f"/v1/capsules/{cid}/apps/{app_id}",
         extra={"X-Shimpz-Account": token},
     )
-    log.info(
-        "app_uninstall", account=account_id, capsule=cid, app=app_id, status=status
-    )
+    log.info("app_uninstall", account=account_id, capsule=cid, app=app_id, status=status)
     return JSONResponse(data, status_code=status)
 
 
 # ── the Captain's chat (ADR-0004): forwarded to the capsule-driver's named exec ops ──────────────
-MAX_UPLOAD_BYTES = (
-    25 * 1024 * 1024
-)  # well under Cloudflare's 100 MB proxied-body cap; big files → R2 later
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # well under Cloudflare's 100 MB proxied-body cap; big files → R2 later
 
 
 @app.get("/api/capsules/{cid}/brain")
@@ -1069,9 +1009,7 @@ async def capsule_file(request: Request, cid: str, file: UploadFile) -> JSONResp
         payload,
         extra={"X-Shimpz-Account": token},
     )
-    log.info(
-        "inbox_file", account=account_id, capsule=cid, bytes=len(data), status=status
-    )
+    log.info("inbox_file", account=account_id, capsule=cid, bytes=len(data), status=status)
     return JSONResponse(body, status_code=status)
 
 
@@ -1102,17 +1040,13 @@ async def _ws_receive_bounded_json(ws: WebSocket) -> dict:
         try:
             raw = data.decode()
         except UnicodeDecodeError as exc:
-            raise WebSocketPayloadError(
-                400, "WebSocket frame must be UTF-8 JSON", 1007
-            ) from exc
+            raise WebSocketPayloadError(400, "WebSocket frame must be UTF-8 JSON", 1007) from exc
     elif len(raw.encode()) > MAX_WS_FRAME_BYTES:
         raise WebSocketPayloadError(413, "WebSocket frame too large", 1009)
     try:
         payload = jsonlib.loads(raw)
     except jsonlib.JSONDecodeError as exc:
-        raise WebSocketPayloadError(
-            400, "WebSocket frame must be valid JSON", 1007
-        ) from exc
+        raise WebSocketPayloadError(400, "WebSocket frame must be valid JSON", 1007) from exc
     if not isinstance(payload, dict):
         raise WebSocketPayloadError(400, "WebSocket JSON must be an object", 1007)
     return payload
@@ -1122,9 +1056,7 @@ async def _ws_verify(ws: WebSocket) -> tuple[str, str]:
     token = ws.cookies.get(ACCOUNT_COOKIE, "")
     if not token:
         return "", ""
-    status, data = await _bounded_call(
-        _AUTH_EXECUTOR, ACCOUNTS_URL, "POST", "/v1/verify", {"token": token}
-    )
+    status, data = await _bounded_call(_AUTH_EXECUTOR, ACCOUNTS_URL, "POST", "/v1/verify", {"token": token})
     account_id = data.get("account_id") if status == 200 else None
     return (token, str(account_id)) if account_id else ("", "")
 
@@ -1152,9 +1084,7 @@ async def _ws_push_asks(ws: WebSocket, cid: str, hdr: dict, seen: set[str]) -> N
             await ws.close(code=4429)
             return
         if status == 404:  # not the Captain's capsule (the driver's owner-scoping)
-            await ws.send_json(
-                {"type": "error", "status": 404, "detail": "capsule not found"}
-            )
+            await ws.send_json({"type": "error", "status": 404, "detail": "capsule not found"})
             await ws.close(code=4404)
             return
         if status == 200:
@@ -1166,15 +1096,13 @@ async def _ws_push_asks(ws: WebSocket, cid: str, hdr: dict, seen: set[str]) -> N
         await asyncio.sleep(WS_ASK_POLL_SECONDS)
 
 
-def _stream_queue_put(
-    queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, item: dict | None
-) -> bool:
+def _stream_queue_put(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, item: dict | None) -> bool:
     """Thread→event-loop handoff with a hard queue bound and real producer backpressure."""
     pending = None
     try:
         pending = asyncio.run_coroutine_threadsafe(queue.put(item), loop)
         pending.result(timeout=STREAM_QUEUE_PUT_TIMEOUT)
-    except (TimeoutError, concurrent.futures.CancelledError, RuntimeError):
+    except TimeoutError, concurrent.futures.CancelledError, RuntimeError:
         if pending is not None:
             pending.cancel()
         return False
@@ -1244,9 +1172,7 @@ def _relay_upstream_events(
             if event is None:
                 raise _StreamProtocolError("brain stream contained malformed JSONL")
             if terminal_event is not None:
-                raise _StreamProtocolError(
-                    "brain stream emitted data after its terminal event"
-                )
+                raise _StreamProtocolError("brain stream emitted data after its terminal event")
             if event.get("type") in {"done", "error", "stopped"}:
                 terminal_event = event
                 continue
@@ -1345,9 +1271,7 @@ def _stream_lines(relay: _StreamRelay) -> None:
             _stream_queue_put(
                 relay.queue,
                 relay.loop,
-                _upstream_error_event(
-                    resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)
-                ),
+                _upstream_error_event(resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)),
             )
             return
         _relay_upstream_events(resp, relay.queue, relay.loop)
@@ -1402,16 +1326,12 @@ def _relay_capacity_event() -> dict:
     }
 
 
-async def _deliver_turn(
-    turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future
-) -> None:
+async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future) -> None:
     delivery = _RelayDelivery()
     try:
         while True:
             pending = asyncio.create_task(queue.get())
-            done, _pending = await asyncio.wait(
-                {pending, worker}, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, _pending = await asyncio.wait({pending, worker}, return_when=asyncio.FIRST_COMPLETED)
             if pending not in done:
                 pending.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -1419,9 +1339,7 @@ async def _deliver_turn(
                 while not queue.empty():
                     evt = queue.get_nowait()
                     if evt is not None:
-                        await _send_relay_event(
-                            turn.ws, turn.cid, turn.headers, evt, delivery
-                        )
+                        await _send_relay_event(turn.ws, turn.cid, turn.headers, evt, delivery)
                 break
             evt = pending.result()
             if evt is None:
@@ -1436,7 +1354,7 @@ async def _deliver_turn(
                     "detail": "brain stream relay ended before a terminal event",
                 }
             )
-    except (WebSocketDisconnect, OSError, RuntimeError, asyncio.CancelledError):
+    except WebSocketDisconnect, OSError, RuntimeError, asyncio.CancelledError:
         await _stop_delivery_once(turn.cid, turn.headers, delivery)
         raise
     finally:
@@ -1527,9 +1445,7 @@ async def _ws_stop_turn(ws: WebSocket, cid: str, hdr: dict, state: dict) -> None
     turns = state["turns"]
     active = next((turn for turn in turns if not turn.done()), None)
     if active is None:
-        await ws.send_json(
-            {"type": "error", "status": 409, "detail": "no active chat turn"}
-        )
+        await ws.send_json({"type": "error", "status": 409, "detail": "no active chat turn"})
         return
     lease = state["leases"][active]
     queued = lease.cancel_if_queued()
@@ -1553,9 +1469,7 @@ async def _ws_stop_turn(ws: WebSocket, cid: str, hdr: dict, state: dict) -> None
             {
                 "type": "error",
                 "status": status if status != 200 else 409,
-                "detail": data.get("detail")
-                or data.get("error")
-                or "chat turn could not be stopped",
+                "detail": data.get("detail") or data.get("error") or "chat turn could not be stopped",
             }
         )
 
@@ -1576,9 +1490,7 @@ async def _ws_answer(ws: WebSocket, cid: str, hdr: dict, msg: dict, seen: set) -
     await ws.send_json({"type": "answered", "status": status, **data})
 
 
-async def _ws_dispatch(
-    ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dict
-) -> None:
+async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dict) -> None:
     seen, turns = state["seen"], state["turns"]
     starts = state.setdefault("starts", {})
     dispatches = state.setdefault("dispatches", {})

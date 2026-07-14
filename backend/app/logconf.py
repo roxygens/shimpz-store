@@ -18,9 +18,7 @@ def setup(service: str) -> None:
     _lvl = os.getenv("LOG_LEVEL", "INFO").upper()
     level = getattr(logging, _lvl, None)
     if not isinstance(level, int):
-        raise ValueError(
-            f"invalid LOG_LEVEL={_lvl!r} (use DEBUG/INFO/WARNING/ERROR/CRITICAL)"
-        )
+        raise ValueError(f"invalid LOG_LEVEL={_lvl!r} (use DEBUG/INFO/WARNING/ERROR/CRITICAL)")
     shared = [
         structlog.contextvars.merge_contextvars,  # inject per-request binds (trace_id, ...)
         structlog.processors.add_log_level,

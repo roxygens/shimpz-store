@@ -310,9 +310,7 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
 
 
 def test_websocket_connection_admission_bounds_global_account_and_capsule_counts():
-    admission = main._WsConnectionAdmission(
-        global_limit=3, account_limit=2, capsule_limit=1
-    )
+    admission = main._WsConnectionAdmission(global_limit=3, account_limit=2, capsule_limit=1)
     account_a_one = admission.reserve("account-a", "cap-1")
     assert account_a_one is not None
     assert admission.reserve("account-a", "cap-1") is None
@@ -397,9 +395,7 @@ def test_public_auth_json_is_bounded_before_any_upstream_hop():
     oversized = json.dumps({"padding": "x" * (main.MAX_AUTH_BODY_BYTES + 1)})
     with TestClient(app) as client:
         responses = [
-            client.post(
-                path, content=oversized, headers={"Content-Type": "application/json"}
-            )
+            client.post(path, content=oversized, headers={"Content-Type": "application/json"})
             for path in ("/api/signup", "/api/login")
         ]
     assert [response.status_code for response in responses] == [413, 413]
@@ -413,9 +409,7 @@ def test_retired_public_marketplace_routes_are_absent():
     with TestClient(app) as client:
         responses = (
             client.post("/api/accounts/v1/verify", json={"token": "unused"}),
-            client.post(
-                "/api/apps/dormant/reviews", json={"rating": 5, "body": "unused"}
-            ),
+            client.post("/api/apps/dormant/reviews", json={"rating": 5, "body": "unused"}),
         )
 
     # The GET-only static catch-all makes unknown POST paths method-not-allowed; neither path has an
@@ -525,9 +519,7 @@ def test_upstream_relay_emits_first_event_before_response_eof():
             first_flushed,
             release_rest,
         ):
-            relay = asyncio.create_task(
-                asyncio.to_thread(_relay_upstream_events, response, queue, loop)
-            )
+            relay = asyncio.create_task(asyncio.to_thread(_relay_upstream_events, response, queue, loop))
             assert await asyncio.to_thread(first_flushed.wait, 1)
             assert await asyncio.wait_for(queue.get(), timeout=1) == {
                 "type": "text",
@@ -639,11 +631,7 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
         response = json.dumps(terminal, separators=(",", ":")).encode() + b"\n"
         with _real_stream_driver(response) as requests:
             await main._ws_run_turn(websocket, "cap-terminal", {}, "hello", started)
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert started.is_set()
         assert len(requests) == 1
         assert events == [terminal]
@@ -667,14 +655,8 @@ def test_real_upstream_non_2xx_reaches_websocket_unchanged(status: int, payload:
         started = asyncio.Event()
         body = json.dumps(payload, separators=(",", ":")).encode()
         with _real_stream_driver(body, status=status) as requests:
-            await main._ws_run_turn(
-                websocket, "cap-upstream-error", {}, "hello", started
-            )
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+            await main._ws_run_turn(websocket, "cap-upstream-error", {}, "hello", started)
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert started.is_set()
         assert len(requests) == 1
         assert events == [
@@ -812,11 +794,7 @@ def test_local_relay_eof_stops_provider_before_browser_error():
         started = asyncio.Event()
         with _real_relay_abort_driver() as calls:
             await main._ws_run_turn(websocket, "cap-abort", {}, "hello", started)
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert events == [
             {"type": "text", "text": "partial"},
             {
@@ -943,9 +921,7 @@ class _BrainControlHandler(BaseHTTPRequestHandler):
 
 
 @contextlib.contextmanager
-def _brain_control_plane(
-    *, revoke_status: int = 200, finalize_token_available: bool = True
-):
+def _brain_control_plane(*, revoke_status: int = 200, finalize_token_available: bool = True):
     calls: list[tuple[str, str, dict]] = []
     finalize_token = secrets.token_hex(32)
     handler = type(
@@ -1008,15 +984,8 @@ def test_brain_delete_revokes_every_matching_capsule_before_deleting_ciphertext(
     )
     assert begin in calls
     assert deconfigure in calls
-    assert not any(
-        call[1] == "/v1/capsules/cap-claude/brain/deconfigure" for call in calls
-    )
-    assert (
-        calls.index(begin)
-        < calls.index(inventory)
-        < calls.index(deconfigure)
-        < calls.index(finalize)
-    )
+    assert not any(call[1] == "/v1/capsules/cap-claude/brain/deconfigure" for call in calls)
+    assert calls.index(begin) < calls.index(inventory) < calls.index(deconfigure) < calls.index(finalize)
 
 
 def test_capsule_create_forwards_the_account_scoped_model_to_the_real_control_plane():
@@ -1030,9 +999,7 @@ def test_capsule_create_forwards_the_account_scoped_model_to_the_real_control_pl
     creates = [
         call
         for call in calls
-        if call[0] == "POST"
-        and call[1].startswith("/v1/capsules/")
-        and call[1].endswith("/create")
+        if call[0] == "POST" and call[1].startswith("/v1/capsules/") and call[1].endswith("/create")
     ]
     assert creates == [
         (
@@ -1046,12 +1013,8 @@ def test_capsule_create_forwards_the_account_scoped_model_to_the_real_control_pl
 def test_capsule_ids_bind_the_complete_account_and_normalized_name():
     first = main._cid_for("account-prefix-one", "A very long shared capsule name alpha")
     same = main._cid_for("account-prefix-one", "A very long shared capsule name alpha")
-    other_account = main._cid_for(
-        "account-prefix-two", "A very long shared capsule name alpha"
-    )
-    other_tail = main._cid_for(
-        "account-prefix-one", "A very long shared capsule name omega"
-    )
+    other_account = main._cid_for("account-prefix-two", "A very long shared capsule name alpha")
+    other_tail = main._cid_for("account-prefix-one", "A very long shared capsule name omega")
 
     assert first == same
     assert first != other_account
@@ -1089,9 +1052,7 @@ def test_capsule_create_and_install_reject_bodies_before_control_plane_forwardin
     assert create.status_code == 413
     assert install.status_code == 413
     forwarded_mutations = [
-        path
-        for method, path, _body in calls
-        if method == "POST" and path.endswith(("/create", "/apps"))
+        path for method, path, _body in calls if method == "POST" and path.endswith(("/create", "/apps"))
     ]
     assert forwarded_mutations == []
 
@@ -1125,9 +1086,7 @@ def test_brain_delete_retry_resumes_the_same_revoking_generation():
     assert first.status_code == 502
     assert second.status_code == 200
     begins = [call for call in calls if call[1] == "/v1/brains/revoke-begin"]
-    finalizes = [
-        call for call in calls if call[1] == "/v1/internal/brains/revoke-finalize"
-    ]
+    finalizes = [call for call in calls if call[1] == "/v1/internal/brains/revoke-finalize"]
     assert len(begins) == 2
     assert finalizes == [
         (
