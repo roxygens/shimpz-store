@@ -4,6 +4,7 @@
   import { u } from "$lib/url";
   import Seo from "$lib/components/Seo.svelte";
   import DriverCard from "$lib/components/DriverCard.svelte";
+  import PageIntro from "$lib/components/PageIntro.svelte";
 
   let { data } = $props();
   const lang = $derived(data.lang as Locale);
@@ -13,9 +14,8 @@
 
 <Seo title={`${cap.name} (@${cap.handle}) · Shimpz`} description={t(cap.bio, lang)} {lang} />
 
-<section class="wrap pt-10">
-
-  <div class="flex flex-col items-start gap-6 sm:flex-row sm:items-center">
+<section class="wrap pt-10" aria-labelledby="creator-title">
+  {#snippet media()}
     <img
       src={`https://github.com/${cap.github}.png?size=200`}
       alt={cap.name}
@@ -24,15 +24,17 @@
       class="size-24 shrink-0 rounded-full"
       style="box-shadow:inset 0 0 0 1px var(--color-border-strong)"
       onerror={(e) => ((e.currentTarget as HTMLImageElement).style.display = "none")} />
-    <div class="min-w-0">
-      <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 class="text-3xl font-bold tracking-tight">{cap.name}</h1>
-        <span class="mono text-lg" style="color:var(--color-primary)">@{cap.handle}</span>
-      </div>
-      <p class="mt-2 max-w-2xl text-lg leading-relaxed dim">{t(cap.bio, lang)}</p>
-      <a href={`https://github.com/${cap.github}`} target="_blank" rel="noopener" class="btn-ghost mt-4 inline-flex !py-2 text-sm">{tr("view_github", lang)}</a>
-    </div>
-  </div>
+  {/snippet}
+  {#snippet meta()}
+    <a href={`https://github.com/${cap.github}`} target="_blank" rel="noopener" class="btn-ghost inline-flex !py-2 text-sm">{tr("view_github", lang)}</a>
+  {/snippet}
+  <PageIntro
+    headingId="creator-title"
+    kicker={`@${cap.handle}`}
+    title={cap.name}
+    description={t(cap.bio, lang)}
+    {media}
+    {meta} />
 
   {#if drivers.length}
     <div class="mt-12">

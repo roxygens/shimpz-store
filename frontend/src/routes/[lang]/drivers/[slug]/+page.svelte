@@ -5,6 +5,7 @@
   import Seo from "$lib/components/Seo.svelte";
   import Icon from "$lib/components/Icon.svelte";
   import CreatorTag from "$lib/components/CreatorTag.svelte";
+  import PageIntro from "$lib/components/PageIntro.svelte";
 
   let { data } = $props();
   const lang = $derived(data.lang as Locale);
@@ -13,19 +14,20 @@
 
 <Seo title={`${driver.name} · Shimpz drivers`} description={t(driver.summary, lang)} {lang} />
 
-<section class="wrap pt-10">
-
-  <div class="flex items-center gap-5">
+<section class="wrap pt-10" aria-labelledby="driver-title">
+  {#snippet media()}
     <Icon glyph={driver.icon} id={driver.id} size={80} brand={driver.brand} />
-    <div>
-      <div class="flex flex-wrap items-center gap-3">
-        <h1 class="text-3xl font-bold tracking-tight">{driver.name}</h1>
-        <span class="badge">{driver.category}</span>
-      </div>
-      <p class="mt-1.5 text-lg dim">{t(driver.summary, lang)}</p>
-      <div class="mt-3"><CreatorTag handle={creatorOf(driver)} {lang} /></div>
-    </div>
-  </div>
+  {/snippet}
+  {#snippet meta()}
+    <CreatorTag handle={creatorOf(driver)} {lang} />
+  {/snippet}
+  <PageIntro
+    headingId="driver-title"
+    kicker={driver.category}
+    title={driver.name}
+    description={t(driver.summary, lang)}
+    {media}
+    {meta} />
 
   <div class="mt-10 grid gap-8 lg:grid-cols-[1fr_320px]">
     <div class="space-y-10">
