@@ -73,7 +73,9 @@ const D: Dict = {
   },
   home_copy: { en: "Copy", pt: "Copiar" },
   home_copied: { en: "Copied", pt: "Copiado" },
+  home_copy_failed: { en: "Try again", pt: "Tentar novamente" },
   home_read_docs: { en: "Read installation guide", pt: "Ler guia de instalação" },
+  opens_new_tab: { en: "opens in a new tab", pt: "abre em uma nova aba" },
   nav_drivers: { en: "Drivers", pt: "Drivers" },
   nav_main: { en: "Main", pt: "Principal" },
   // "Minhas Cápsulas" full-screen chooser

@@ -24,7 +24,7 @@
 
     <div class="hero-actions">
       <a class="btn-primary" href="https://docs.shimpz.com" target="_blank" rel="noopener noreferrer">
-        {tr("home_install", lang)} <span aria-hidden="true">↗</span>
+        {tr("home_install", lang)} <span aria-hidden="true">↗</span><span class="sr-only"> ({tr("opens_new_tab", lang)})</span>
       </a>
       <a class="btn-ghost" href={u.capsule(lang)}>{tr("home_open_capsules", lang)} <span aria-hidden="true">→</span></a>
     </div>
@@ -113,7 +113,7 @@
     <h2 id="install-title">{tr("home_install_title", lang)}</h2>
     <p>{tr("home_install_lead", lang)}</p>
     <a href="https://docs.shimpz.com" target="_blank" rel="noopener noreferrer">
-      {tr("home_read_docs", lang)} <span aria-hidden="true">↗</span>
+      {tr("home_read_docs", lang)} <span aria-hidden="true">↗</span><span class="sr-only"> ({tr("opens_new_tab", lang)})</span>
     </a>
   </div>
   <InstallCommand {lang} />
@@ -325,7 +325,7 @@
     overflow: hidden;
     background: linear-gradient(145deg, var(--color-card-2), var(--color-card));
     box-shadow: inset 0 0 0 1px var(--color-border);
-    clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   }
 
   .principle-grid article:not(.principle-featured) {
@@ -426,10 +426,13 @@
     h1 { max-width: 13ch; }
   }
 
+  @media (max-width: 860px) {
+    .install { grid-template-columns: minmax(0, 1fr); }
+  }
+
   @media (max-width: 780px) {
     .section-intro,
-    .principles-intro,
-    .install { grid-template-columns: minmax(0, 1fr); }
+    .principles-intro { grid-template-columns: minmax(0, 1fr); }
     .section-intro > p:last-child,
     .principles-intro > p:last-child { margin-top: 1.4rem; }
     .architecture-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); }

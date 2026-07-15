@@ -5,17 +5,39 @@
 
   const command = "curl -fsSL https://install.shimpz.com | sh";
   let { lang }: { lang: Locale } = $props();
-  let copied = $state(false);
+  let copyState = $state<"idle" | "copied" | "error">("idle");
   let resetTimer: ReturnType<typeof setTimeout> | undefined;
+  let copyButton: HTMLButtonElement;
+
+  function fallbackCopy(): boolean {
+    const textarea = document.createElement("textarea");
+    textarea.value = command;
+    textarea.setAttribute("readonly", "");
+    textarea.style.position = "fixed";
+    textarea.style.inset = "-9999px auto auto -9999px";
+    document.body.appendChild(textarea);
+    textarea.select();
+
+    const copied = document.execCommand("copy");
+    textarea.remove();
+    copyButton?.focus();
+    return copied;
+  }
 
   async function copyCommand() {
     try {
-      await navigator.clipboard.writeText(command);
-      copied = true;
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(command);
+      } else if (!fallbackCopy()) {
+        throw new Error("Clipboard unavailable");
+      }
+      copyState = "copied";
       if (resetTimer) clearTimeout(resetTimer);
-      resetTimer = setTimeout(() => (copied = false), 1800);
+      resetTimer = setTimeout(() => (copyState = "idle"), 1800);
     } catch {
-      copied = false;
+      copyState = "error";
+      if (resetTimer) clearTimeout(resetTimer);
+      resetTimer = setTimeout(() => (copyState = "idle"), 2400);
     }
   }
 
@@ -27,15 +49,23 @@
 <div class="command-shell">
   <span class="prompt" aria-hidden="true">$</span>
   <code>{command}</code>
-  <button type="button" onclick={copyCommand} aria-label={tr(copied ? "home_copied" : "home_copy", lang)}>
-    {#if copied}
+  <button
+    bind:this={copyButton}
+    class:error={copyState === "error"}
+    type="button"
+    onclick={copyCommand}
+    aria-label={tr(copyState === "copied" ? "home_copied" : copyState === "error" ? "home_copy_failed" : "home_copy", lang)}
+  >
+    {#if copyState === "copied"}
       <svg aria-hidden="true" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></svg>
     {:else}
       <svg aria-hidden="true" viewBox="0 0 24 24"><rect x="8" y="8" width="11" height="11" /><path d="M16 8V5H5v11h3" /></svg>
     {/if}
-    <span>{tr(copied ? "home_copied" : "home_copy", lang)}</span>
+    <span>{tr(copyState === "copied" ? "home_copied" : copyState === "error" ? "home_copy_failed" : "home_copy", lang)}</span>
   </button>
-  <span class="sr-status" aria-live="polite">{copied ? tr("home_copied", lang) : ""}</span>
+  <span class="sr-status" aria-live="polite">
+    {copyState === "copied" ? tr("home_copied", lang) : copyState === "error" ? tr("home_copy_failed", lang) : ""}
+  </span>
 </div>
 
 <style>
@@ -48,7 +78,7 @@
     padding: 0.75rem 0.8rem 0.75rem 1.1rem;
     background: #000000;
     box-shadow: inset 0 0 0 1px var(--color-border-strong);
-    clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   }
 
   .prompt,
@@ -88,6 +118,7 @@
   }
 
   button:hover { box-shadow: inset 0 0 0 1px var(--color-cyan); }
+  button.error { color: var(--color-danger); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-danger) 70%, var(--color-border)); }
 
   svg {
     width: 1rem;

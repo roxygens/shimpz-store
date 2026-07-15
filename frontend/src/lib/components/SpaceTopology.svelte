@@ -5,9 +5,9 @@
   let { lang }: { lang: Locale } = $props();
 </script>
 
-<figure class="topology" aria-labelledby="topology-title">
+<figure class="topology" aria-labelledby="topology-label topology-title">
   <div class="topology-header">
-    <span class="topology-index">01 // {tr("topology_label", lang)}</span>
+    <span class="topology-index" id="topology-label">01 // {tr("topology_label", lang)}</span>
     <span class="status"><i aria-hidden="true"></i>{tr("topology_status", lang)}</span>
   </div>
 
@@ -72,11 +72,11 @@
     overflow: hidden;
     background:
       radial-gradient(circle at 86% 8%, rgba(0, 240, 255, 0.1), transparent 27%),
-      linear-gradient(145deg, var(--color-card-2), #030303 68%);
+      linear-gradient(145deg, var(--color-card-2), var(--color-card) 68%);
     box-shadow:
       inset 0 0 0 1px var(--color-border-strong),
       var(--shadow-panel);
-    clip-path: polygon(18px 0, 100% 0, 100% calc(100% - 18px), calc(100% - 18px) 100%, 0 100%, 0 18px);
+    clip-path: polygon(var(--cut-lg) 0, 100% 0, 100% calc(100% - var(--cut-lg)), calc(100% - var(--cut-lg)) 100%, 0 100%, 0 var(--cut-lg));
   }
 
   .topology::before {
@@ -141,7 +141,7 @@
     padding: 0.85rem 1rem;
     background: rgba(0, 0, 0, 0.72);
     box-shadow: inset 0 0 0 1px var(--color-border);
-    clip-path: polygon(9px 0, 100% 0, 100% calc(100% - 9px), calc(100% - 9px) 100%, 0 100%, 0 9px);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
   }
 
   .space-node img {
@@ -177,7 +177,7 @@
   .control-plane {
     align-self: flex-end;
     color: var(--color-muted-2);
-    font-size: 0.54rem;
+    font-size: 0.625rem;
     letter-spacing: 0.08em;
   }
 
@@ -200,7 +200,7 @@
   .rail-title small,
   .capsule-heading small {
     color: var(--color-muted-2);
-    font-size: 0.52rem;
+    font-size: 0.625rem;
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
@@ -225,7 +225,7 @@
     background: var(--color-card-2);
     color: var(--color-muted);
     font-family: var(--font-mono);
-    font-size: 0.56rem;
+    font-size: 0.625rem;
     font-weight: 600;
     overflow-wrap: anywhere;
     text-align: center;
@@ -263,12 +263,12 @@
     padding: 0.85rem;
     border: 1px solid var(--color-border-strong);
     background: rgba(0, 0, 0, 0.8);
-    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+    clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
   }
 
   .capsule-heading > span {
     color: var(--color-magenta);
-    font-size: 0.58rem;
+    font-size: 0.625rem;
     font-weight: 700;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -289,7 +289,7 @@
     border: 1px solid var(--color-border);
     background: var(--color-card-2);
     color: var(--color-muted);
-    font-size: 0.52rem;
+    font-size: 0.625rem;
     font-weight: 600;
     text-transform: uppercase;
   }
@@ -299,7 +299,7 @@
   .capsules p {
     margin: 0.55rem 0 0;
     color: var(--color-muted-2);
-    font-size: 0.62rem;
+    font-size: 0.68rem;
   }
 
   figcaption {
@@ -307,7 +307,7 @@
     padding-top: 0.8rem;
     border-top: 1px solid var(--color-border);
     color: var(--color-muted-2);
-    font-size: 0.56rem;
+    font-size: 0.625rem;
     letter-spacing: 0.02em;
   }
 
