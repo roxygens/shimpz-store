@@ -65,9 +65,9 @@
     </div>
 
     <div class="panel space-y-4">
-      <div class="grid grid-cols-2 gap-1 rounded-lg p-1" style="box-shadow:inset 0 0 0 1px var(--color-border)">
-        <button class="rounded-md py-1.5 text-sm font-semibold transition" style={mode === "login" ? "background:var(--color-elevated);color:var(--color-fg)" : "color:var(--color-muted)"} onclick={() => switchMode("login")}>{tr("log_in", lang)}</button>
-        <button class="rounded-md py-1.5 text-sm font-semibold transition" style={mode === "signup" ? "background:var(--color-elevated);color:var(--color-fg)" : "color:var(--color-muted)"} onclick={() => switchMode("signup")}>{tr("sign_up", lang)}</button>
+      <div class="hud-pill grid grid-cols-2 gap-1 p-1">
+        <button class="navbtn justify-center !px-3" class:is-active={mode === "login"} aria-pressed={mode === "login"} onclick={() => switchMode("login")}>{tr("log_in", lang)}</button>
+        <button class="navbtn justify-center !px-3" class:is-active={mode === "signup"} aria-pressed={mode === "signup"} onclick={() => switchMode("signup")}>{tr("sign_up", lang)}</button>
       </div>
 
       <label class="block">
@@ -87,7 +87,7 @@
         </div>
       </label>
 
-      {#if error}<p class="text-sm" style="color:var(--color-magenta)">{error}</p>{/if}
+      {#if error}<p class="notice notice-error px-3 py-2 text-sm" role="alert">{error}</p>{/if}
 
       <button class="btn-primary w-full justify-center" disabled={busy || !username.trim() || !password} onclick={submit}>
         {busy ? "…" : tr(mode === "signup" ? "sign_up" : "log_in", lang)}

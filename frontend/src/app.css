@@ -149,6 +149,20 @@ button, a { -webkit-tap-highlight-color: transparent; }
   }
   .btn-ghost:hover { box-shadow: inset 0 0 0 1px var(--color-cyan); filter: drop-shadow(0 0 8px rgba(0, 240, 255, 0.35)); }
   .btn-ghost:disabled { opacity: 0.45; cursor: default; }
+  .btn-danger {
+    @apply inline-flex items-center justify-center gap-2 px-6 py-2.5 text-sm font-bold uppercase transition;
+    min-height: 2.85rem;
+    font-family: var(--font-mono); letter-spacing: 0.06em; color: var(--color-danger);
+    background: #000000;
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-danger) 48%, var(--color-border-strong));
+    clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
+  }
+  .btn-danger:hover {
+    background: color-mix(in oklab, var(--color-danger) 7%, #000000);
+    box-shadow: inset 0 0 0 1px var(--color-danger);
+    filter: drop-shadow(0 0 8px color-mix(in oklab, var(--color-danger) 36%, transparent));
+  }
+  .btn-danger:disabled { opacity: 0.45; cursor: default; }
 
   /* nav button — the primary menu, moved out of the header into its own bar. Chamfered HUD chip that
      wakes neon on hover and stays lit for the active section. */
@@ -260,7 +274,22 @@ button, a { -webkit-tap-highlight-color: transparent; }
 
   /* inline status banner (error / brain-ok) — chamfered like .panel; pair with an inset box-shadow
      border (a real border clips at the notch and leaves a gap). Same two-corner cut as the HUD. */
-  .notice { clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut)); }
+  .notice {
+    display: block;
+    background: var(--color-card);
+    box-shadow: inset 0 0 0 1px var(--color-border);
+    clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+  }
+  .notice-error {
+    background: color-mix(in oklab, var(--color-danger) 7%, var(--color-card));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-danger) 48%, var(--color-border));
+    color: var(--color-danger);
+  }
+  .notice-success {
+    background: color-mix(in oklab, var(--color-green) 6%, var(--color-card));
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-green) 42%, var(--color-border));
+    color: var(--color-green);
+  }
 
   /* live streaming caret on the message currently being written */
   .caret::after {

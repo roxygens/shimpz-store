@@ -21,6 +21,7 @@
   let brainAuth = $state<Record<string, string>>({ "claude-code": "api_key", codex: "api_key" });
   let brainBusy = $state("");
   let brainMessage = $state<Record<string, string>>({});
+  let brainMessageTone = $state<Record<string, "" | "error" | "success">>({});
 
   async function loadBrains() {
     const r = await fetch("/api/brains").catch(() => null);
@@ -81,6 +82,7 @@
     if (!secret || brainBusy) return;
     brainBusy = provider;
     brainMessage[provider] = "";
+    brainMessageTone[provider] = "";
     try {
       const r = await fetch(`/api/brains/${provider}`, {
         method: "POST",
@@ -90,12 +92,14 @@
       const result = await r.json().catch(() => ({}));
       if (!r.ok) {
         brainMessage[provider] = result.detail ?? result.error ?? "save failed";
+        brainMessageTone[provider] = "error";
         return;
       }
       brainSecrets[provider] = "";
       await loadBrains();
       const applied = await applyBrainToCapsules(provider);
       brainMessage[provider] = tr(applied ? "brain_saved" : "brain_saved_apply_failed", lang);
+      brainMessageTone[provider] = applied ? "success" : "error";
     } finally {
       brainBusy = "";
     }
@@ -105,16 +109,19 @@
     if (brainBusy) return;
     brainBusy = provider;
     brainMessage[provider] = "";
+    brainMessageTone[provider] = "";
     try {
       const r = await fetch(`/api/brains/${provider}`, { method: "DELETE" }).catch(() => null);
       const result = await r?.json().catch(() => ({}));
       if (!r?.ok) {
         await loadBrains();
         brainMessage[provider] = result?.detail ?? result?.error ?? "remove failed";
+        brainMessageTone[provider] = "error";
         return;
       }
       await loadBrains();
       brainMessage[provider] = tr("brain_removed", lang);
+      brainMessageTone[provider] = "success";
     } finally {
       brainBusy = "";
     }
@@ -165,7 +172,7 @@
       <p class="mt-3 text-sm leading-relaxed dim">{tr("account_brains_lead", lang)}</p>
       <div class="mt-5 space-y-5">
         {#each providers as provider (provider.id)}
-          <div class="rounded-xl border hair p-4">
+          <div class="panel !p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div class="font-semibold">{provider.title}</div>
               <span
@@ -207,13 +214,18 @@
                 onclick={() => saveBrain(provider.id)}>{tr("brain_save", lang)}</button>
               {#if removable(provider.id)}
                 <button
-                  class="btn-ghost !py-2 text-sm"
+                  class="btn-danger !py-2 text-sm"
                   disabled={brainBusy !== ""}
                   onclick={() => removeBrain(provider.id)}
                 >{revoking(provider.id) ? retryRemovalLabel() : tr("brain_remove", lang)}</button>
               {/if}
               {#if brainMessage[provider.id]}
-                <span class="text-xs dim" aria-live="polite">{brainMessage[provider.id]}</span>
+                <span
+                  class="notice px-3 py-2 text-xs"
+                  class:notice-error={brainMessageTone[provider.id] === "error"}
+                  class:notice-success={brainMessageTone[provider.id] === "success"}
+                  role={brainMessageTone[provider.id] === "error" ? "alert" : "status"}
+                >{brainMessage[provider.id]}</span>
               {/if}
             </div>
           </div>
@@ -225,11 +237,7 @@
       <span class="kicker">{tr("account_session", lang)}</span>
       <div class="mt-4 flex flex-wrap gap-3">
         <a href={u.capsule(lang)} class="btn-ghost !py-2 text-sm">{tr("my_capsules", lang)} →</a>
-        <button
-          class="btn-ghost !py-2 text-sm"
-          style="color:var(--color-magenta);box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--color-magenta) 45%, transparent)"
-          disabled={busy}
-          onclick={logout}>{tr("log_out", lang)}</button>
+        <button class="btn-danger !py-2 text-sm" disabled={busy} onclick={logout}>{tr("log_out", lang)}</button>
       </div>
     </div>
   {/if}

@@ -89,7 +89,7 @@
         finishStreamingBrainMessage();
         busy = false;
         status = "";
-        messages.push({ role: "system", text: tr("chat_disconnected", lang) });
+        messages.push({ role: "system", tone: "error", text: tr("chat_disconnected", lang) });
         scrollDown(true);
       }
     };
@@ -120,7 +120,7 @@
         finishStreamingBrainMessage();
         busy = false;
         status = "";
-        messages.push({ role: "system", text: chatErrorText(m.status, m.detail ?? m.error) });
+        messages.push({ role: "system", tone: "error", text: chatErrorText(m.status, m.detail ?? m.error) });
       } else if (m.type === "ask") {
         messages.push({ role: "ask", rid: m.rid, text: m.text, options: m.options ?? [], answered: false, custom: "" });
       } else if (m.type === "answered" && m.answered) {
@@ -296,10 +296,10 @@
         messages.push({ role: "brain", text: d.reply || "…" });
         await refreshBrainStatus();
       } else {
-        messages.push({ role: "system", text: chatErrorText(r.status, d.detail ?? d.error) });
+        messages.push({ role: "system", tone: "error", text: chatErrorText(r.status, d.detail ?? d.error) });
       }
     } catch {
-      messages.push({ role: "system", text: "✗ network error" });
+      messages.push({ role: "system", tone: "error", text: "✗ network error" });
     } finally {
       busy = false;
       status = "";
@@ -318,8 +318,8 @@
       const d = await r.json().catch(() => ({}));
       messages.push(
         r.ok
-          ? { role: "system", text: `${tr("chat_file_ok", lang)} ${d.path}` }
-          : { role: "system", text: "✗ " + (d.error ?? d.detail ?? "upload error") },
+          ? { role: "system", tone: "success", text: `${tr("chat_file_ok", lang)} ${d.path}` }
+          : { role: "system", tone: "error", text: "✗ " + (d.error ?? d.detail ?? "upload error") },
       );
     } finally {
       uploading = false;
@@ -400,20 +400,20 @@
 
       <div class="order-1 flex min-w-0 flex-1 flex-col lg:order-none">
         {#if brain && !brain.configured}
-          <div class="notice mb-4 space-y-3 px-4 py-3 text-sm" style="box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--color-magenta) 40%, var(--color-border))">
-            <p style="color:var(--color-magenta)">{tr("brain_wait", lang)}</p>
+          <div class="notice notice-error mb-4 space-y-3 px-4 py-3 text-sm">
+            <p>{tr("brain_wait", lang)}</p>
             <div class="flex flex-wrap items-center gap-2">
               <a class="btn-primary !py-2 text-sm" href={u.account(lang)}>{tr("brain_account_cta", lang)} →</a>
               <button class="btn-ghost !py-2 text-sm" disabled={configureBusy} onclick={applyAccountBrain}>
                 {configureBusy ? "…" : tr("brain_apply", lang)}
               </button>
             </div>
-            {#if configureErr}<p class="text-xs" style="color:var(--color-magenta)">{configureErr}</p>{/if}
+            {#if configureErr}<p class="text-xs" role="alert">{configureErr}</p>{/if}
             {#if brain.brain === "claude-code"}
               <p class="text-xs dim">{tr("brain_interactive_or", lang)}</p>
               {#if oauthPhase === "idle" || oauthPhase === "err"}
                 {#if oauthPhase === "err"}
-                  <p class="text-xs" style="color:var(--color-magenta)">{tr("brain_code_err", lang)}{#if oauthErr}<span class="mono block mt-1 opacity-80">{oauthErr}</span>{/if}</p>
+                  <p class="text-xs" role="alert">{tr("brain_code_err", lang)}{#if oauthErr}<span class="mono block mt-1 opacity-80">{oauthErr}</span>{/if}</p>
                 {/if}
                 <button class="btn-ghost !py-2 text-sm" onclick={startOauth}>{tr("brain_configure", lang)}</button>
               {:else if oauthPhase === "starting"}
@@ -436,7 +436,7 @@
           </div>
         {/if}
         {#if oauthPhase === "done" && brain?.authenticated}
-          <div class="notice mb-4 px-4 py-3 text-sm" style="box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--color-primary) 40%, var(--color-border));color:var(--color-primary)">
+          <div class="notice notice-success mb-4 px-4 py-3 text-sm" role="status">
             {tr("brain_ok", lang)}
           </div>
         {/if}
@@ -460,7 +460,14 @@
                 {#if !m.answered}
                   <div class="flex flex-wrap gap-2">
                     {#each m.options as opt, oi (oi)}
-                      <button class="btn-ghost min-h-11 !px-3 !py-1.5 text-xs" onclick={() => answerAsk(m, opt)}>{oi === 0 ? "⭐ " : ""}{opt}</button>
+                      <button class="btn-ghost min-h-11 !px-3 !py-1.5 text-xs" onclick={() => answerAsk(m, opt)}>
+                        {#if oi === 0}
+                          <svg class="size-3.5 shrink-0" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="miter">
+                            <path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" />
+                          </svg>
+                        {/if}
+                        {opt}
+                      </button>
                     {/each}
                   </div>
                   <div class="flex gap-2">
@@ -472,7 +479,14 @@
                 {/if}
               </div>
             {:else}
-              <p class="text-center text-xs dim">{m.text}</p>
+              <p
+                class="px-3 py-2 text-center text-xs"
+                class:dim={!m.tone}
+                class:notice={Boolean(m.tone)}
+                class:notice-error={m.tone === "error"}
+                class:notice-success={m.tone === "success"}
+                role={m.tone === "error" ? "alert" : m.tone === "success" ? "status" : undefined}
+              >{m.text}</p>
             {/if}
           {/each}
           {#if busy && status}<p class="text-xs dim">{status}</p>{/if}
@@ -480,7 +494,15 @@
         </div>
         <div class="mt-3 flex items-end gap-2">
           <input bind:this={fileInput} type="file" class="hidden" onchange={upload} />
-          <button class="btn-ghost min-h-11 min-w-11 !px-3" title={tr("chat_attach", lang)} aria-label={tr("chat_attach", lang)} disabled={uploading || !brain?.configured} onclick={() => fileInput?.click()}>{uploading ? "…" : "📎"}</button>
+          <button class="btn-ghost min-h-11 min-w-11 !px-3" title={tr("chat_attach", lang)} aria-label={tr("chat_attach", lang)} disabled={uploading || !brain?.configured} onclick={() => fileInput?.click()}>
+            {#if uploading}
+              …
+            {:else}
+              <svg class="size-4" aria-hidden="true" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="square" stroke-linejoin="miter">
+                <path d="m8 12.5 6.7-6.7a3.2 3.2 0 0 1 4.5 4.5l-8.5 8.5a5 5 0 0 1-7.1-7.1l8-8" />
+              </svg>
+            {/if}
+          </button>
           <textarea
             class="field field-area max-h-40 flex-1"
             placeholder={tr("chat_placeholder", lang)}
@@ -489,7 +511,7 @@
             bind:value={draft}
             onkeydown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}></textarea>
           {#if busy}
-            <button class="btn-ghost !px-4" style="color:var(--color-magenta);box-shadow:inset 0 0 0 1px color-mix(in oklab, var(--color-magenta) 55%, transparent)" onclick={stopTurn}>■ {tr("chat_stop", lang)}</button>
+            <button class="btn-danger !px-4" onclick={stopTurn}>■ {tr("chat_stop", lang)}</button>
           {:else}
             <button class="btn-primary" disabled={!draft.trim() || !brain?.configured} onclick={send}>{tr("chat_send", lang)}</button>
           {/if}
