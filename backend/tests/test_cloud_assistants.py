@@ -185,6 +185,37 @@ def test_cloud_assistant_install_rejects_origin_content_type_shape_and_unrelease
         _assert_private(response)
 
 
+def test_legacy_app_install_cannot_bypass_origin_json_or_exact_body_contract():
+    cases = (
+        ({"Content-Type": "text/plain"}, b'{"app":"hello-pulse"}', 403),
+        (
+            {"Origin": "https://store.shimpz.com", "Content-Type": "text/plain"},
+            b'{"app":"hello-pulse"}',
+            403,
+        ),
+        (
+            {"Origin": "https://shimpz.com", "Content-Type": "text/plain"},
+            b'{"app":"hello-pulse"}',
+            415,
+        ),
+        (
+            _mutation_headers(),
+            b'{"app":"hello-pulse","image":"attacker/image"}',
+            400,
+        ),
+    )
+    with _assistant_control_plane() as calls, TestClient(main.app) as client:
+        _authenticate(client)
+        responses = [
+            client.post("/api/capsules/cap_one/install", content=body, headers=headers)
+            for headers, body, _status in cases
+        ]
+    assert [response.status_code for response in responses] == [case[2] for case in cases]
+    assert not any(path.endswith("/apps") for _method, path, _body, _token in calls)
+    for response in responses:
+        _assert_private(response)
+
+
 def test_cloud_assistant_delete_rejects_untrusted_origins_and_nonreleased_ids_before_driver():
     cases = (
         ("/api/capsules/cap_one/assistants/hello-pulse", {}, 403),

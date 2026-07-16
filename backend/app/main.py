@@ -834,31 +834,40 @@ async def capsule_install(request: Request, cid: str) -> JSONResponse:
     """
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+        return _private_json({"detail": "not authenticated"}, 401)
     try:
+        if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
+            raise ClientPayloadError(403, "forbidden origin")
+        if request.headers.get("content-type", "").strip().lower() != "application/json":
+            raise ClientPayloadError(415, "Content-Type must be application/json")
+        capsule_id = _canonical_capsule_id(cid)
+        if capsule_id is None:
+            raise ClientPayloadError(400, "bad capsule id")
         payload = await _read_bounded_json(request, MAX_CAPSULE_INSTALL_BODY_BYTES)
+        if set(payload) != {"app"}:
+            raise ClientPayloadError(400, "body must contain only app")
+        app_id = _canonical_assistant_id(payload["app"])
+        if app_id is None:
+            raise ClientPayloadError(400, "bad app id")
     except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
-    app_id = str(payload.get("app", "")).strip()
-    if not app_id.replace("-", "").isalnum():
-        return JSONResponse({"detail": "bad app id"}, status_code=400)
+        return _private_json({"detail": exc.detail}, exc.status)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
         CAPSULEDRIVER_URL,
         "POST",
-        f"/v1/capsules/{cid}/apps",
+        f"/v1/capsules/{capsule_id}/apps",
         {"app": app_id},
         {"X-Shimpz-Account": token},
     )
     log.info(
         "app_install",
         account=account_id,
-        capsule=cid,
+        capsule=capsule_id,
         app=app_id,
         status=status,
         installed=data.get("installed"),
     )
-    return JSONResponse(data, status_code=status)
+    return _private_json(data, status)
 
 
 @app.get("/api/capsules/{cid}/apps")

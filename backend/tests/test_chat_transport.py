@@ -1060,9 +1060,9 @@ def test_capsule_create_and_install_reject_bodies_before_control_plane_forwardin
             headers={"Content-Type": "application/json"},
         )
         install = client.post(
-            "/api/capsules/cap-codex/install",
+            "/api/capsules/cap_codex/install",
             content=install_body,
-            headers={"Content-Type": "application/json"},
+            headers={"Content-Type": "application/json", "Origin": "https://shimpz.com"},
         )
     assert create.status_code == 413
     assert install.status_code == 413
