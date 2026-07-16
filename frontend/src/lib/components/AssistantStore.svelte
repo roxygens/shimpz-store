@@ -1,29 +1,63 @@
 <script lang="ts">
+  import { onMount } from "svelte";
   import { ASSISTANT_CATALOG, t, type Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
+  import {
+    ASSISTANT_INSTALL_ACK_TIMEOUT_MS,
+    classifyAssistantInstallAck,
+    createAssistantInstallRequest,
+    resolveInstallParentOrigin,
+  } from "$lib/assistantInstallBridge.js";
   import HudIcon from "$lib/components/HudIcon.svelte";
   import InstallCommand from "$lib/components/InstallCommand.svelte";
   import PageIntro from "$lib/components/PageIntro.svelte";
 
   let { lang, embedded = false }: { lang: Locale; embedded?: boolean } = $props();
-  let installState = $state<"idle" | "sent" | "error">("idle");
+  let installState = $state<"idle" | "pending" | "sent" | "error">("idle");
+  let pendingAssistant = $state("");
+  let pendingParentOrigin = "";
+  let ackTimeout: ReturnType<typeof setTimeout> | undefined;
+
+  function finishInstallRequest(state: "sent" | "error") {
+    if (ackTimeout) clearTimeout(ackTimeout);
+    ackTimeout = undefined;
+    installState = state;
+    pendingAssistant = "";
+    pendingParentOrigin = "";
+  }
 
   function requestInstall(assistant: string) {
-    installState = "idle";
+    if (installState === "pending") return;
     try {
-      if (window.parent === window || !document.referrer) throw new Error("not embedded");
-      const parent = new URL(document.referrer);
-      const loopback = parent.hostname === "127.0.0.1" || parent.hostname === "localhost" || parent.hostname === "[::1]";
-      if (parent.protocol !== "http:" || !loopback) throw new Error("unexpected parent");
-      window.parent.postMessage(
-        { type: "shimpz:assistant-install", version: 1, assistant },
-        parent.origin,
-      );
-      installState = "sent";
+      if (window.parent === window) throw new Error("not embedded");
+      pendingParentOrigin = resolveInstallParentOrigin(document.referrer);
+      pendingAssistant = assistant;
+      installState = "pending";
+      window.parent.postMessage(createAssistantInstallRequest(assistant), pendingParentOrigin);
+      ackTimeout = setTimeout(() => finishInstallRequest("error"), ASSISTANT_INSTALL_ACK_TIMEOUT_MS);
     } catch {
-      installState = "error";
+      finishInstallRequest("error");
     }
   }
+
+  function receiveInstallAck(event: MessageEvent) {
+    if (!pendingAssistant || !pendingParentOrigin) return;
+    const result = classifyAssistantInstallAck(event, {
+      parentWindow: window.parent,
+      parentOrigin: pendingParentOrigin,
+      assistant: pendingAssistant,
+    });
+    if (result === "accepted") finishInstallRequest("sent");
+    else if (result === "invalid") finishInstallRequest("error");
+  }
+
+  onMount(() => {
+    window.addEventListener("message", receiveInstallAck);
+    return () => {
+      window.removeEventListener("message", receiveInstallAck);
+      if (ackTimeout) clearTimeout(ackTimeout);
+    };
+  });
 
   const principles = [
     ["assistants_capsule_title", "assistants_capsule_body", "CAPSULE // 01"],
@@ -92,15 +126,15 @@
             </div>
 
             {#if embedded}
-              <button class="btn-primary install-action" type="button" onclick={() => requestInstall(assistant.id)}>
-                <HudIcon name="add" size={18} />{tr("assistants_install_local", lang)}
+              <button class="btn-primary install-action" type="button" disabled={installState === "pending"} onclick={() => requestInstall(assistant.id)}>
+                <HudIcon name="add" size={18} />{tr(installState === "pending" ? "assistants_request_waiting" : "assistants_install_local", lang)}
               </button>
             {:else}
               <a class="btn-primary install-action" href="http://127.0.0.1:7777/assistants/" target="_blank" rel="noopener noreferrer">
                 <HudIcon name="add" size={18} />{tr("assistants_install_local", lang)}
               </a>
             {/if}
-            {#if installState !== "idle"}
+            {#if installState === "sent" || installState === "error"}
               <p class:error={installState === "error"} class="install-status" role={installState === "error" ? "alert" : "status"}>
                 {tr(installState === "sent" ? "assistants_request_sent" : "assistants_request_failed", lang)}
               </p>

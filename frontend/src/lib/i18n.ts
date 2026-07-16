@@ -298,6 +298,7 @@ const D: Dict = {
   assistants_no_permissions: { en: "No Services, secrets or egress", pt: "Sem Services, secrets ou egress" },
   assistants_operation: { en: "Operation", pt: "Operação" },
   assistants_install_local: { en: "Install in local Admin", pt: "Instalar no Admin local" },
+  assistants_request_waiting: { en: "Contacting local Admin…", pt: "Contatando o Admin local…" },
   assistants_request_sent: { en: "Install request sent to your Admin.", pt: "Pedido de instalação enviado ao seu Admin." },
   assistants_request_failed: {
     en: "Open this Store from your local Admin to install.",

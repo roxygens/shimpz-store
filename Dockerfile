@@ -11,7 +11,8 @@ RUN corepack enable \
  && corepack prepare pnpm@11.9.0 --activate \
  && pnpm install --frozen-lockfile
 COPY frontend/ ./
-RUN pnpm run build \
+RUN pnpm test \
+ && pnpm run build \
  && find /w/build -depth -exec touch -h -d "@${SOURCE_DATE_EPOCH}" {} + \
  && rm -rf /root/.cache/node /root/.local/share/pnpm /root/.npm
 # adapter-static writes the prerendered site to /w/build
