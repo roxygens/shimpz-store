@@ -16,23 +16,50 @@ from uuid import uuid4
 import structlog
 
 _UNSAFE = re.compile(r"[^A-Za-z0-9._-]")
-_SECURITY_HEADERS = (
+_CSP_PREFIX = (
+    b"default-src 'self'; base-uri 'self'; object-src 'none'; "
+)
+_CSP_SUFFIX = (
+    b"form-action 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; "
+    b"img-src 'self' data: https:; font-src 'self' data:; connect-src 'self' https: wss:; "
+    b"worker-src 'self' blob:; manifest-src 'self'; upgrade-insecure-requests"
+)
+_COMMON_SECURITY_HEADERS = (
     (b"strict-transport-security", b"max-age=31536000; includeSubDomains"),
-    (
-        b"content-security-policy",
-        b"default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; form-action 'self'; "
-        b"script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; "
-        b"font-src 'self' data:; connect-src 'self' https: wss:; worker-src 'self' blob:; manifest-src 'self'; "
-        b"upgrade-insecure-requests",
-    ),
     (b"x-content-type-options", b"nosniff"),
-    (b"x-frame-options", b"DENY"),
     (b"referrer-policy", b"strict-origin-when-cross-origin"),
     (
         b"permissions-policy",
         b"camera=(), microphone=(), geolocation=(), payment=(), usb=()",
     ),
 )
+_SECURITY_HEADERS = (
+    _COMMON_SECURITY_HEADERS[0],
+    (b"content-security-policy", _CSP_PREFIX + b"frame-ancestors 'none'; " + _CSP_SUFFIX),
+    _COMMON_SECURITY_HEADERS[1],
+    (b"x-frame-options", b"DENY"),
+    _COMMON_SECURITY_HEADERS[2],
+    _COMMON_SECURITY_HEADERS[3],
+)
+_EMBED_SECURITY_HEADERS = (
+    _COMMON_SECURITY_HEADERS[0],
+    (
+        b"content-security-policy",
+        _CSP_PREFIX + b"frame-ancestors http://127.0.0.1:* http://localhost:*; " + _CSP_SUFFIX,
+    ),
+    _COMMON_SECURITY_HEADERS[1],
+    _COMMON_SECURITY_HEADERS[2],
+    _COMMON_SECURITY_HEADERS[3],
+    (b"x-robots-tag", b"noindex, nofollow"),
+)
+_MANAGED_SECURITY_HEADERS = {
+    name for name, _value in (*_SECURITY_HEADERS, *_EMBED_SECURITY_HEADERS)
+}
+_EMBED_PATH = re.compile(r"^/(?:en|pt)/assistants/embed/?$")
+
+
+def _security_headers(path: str) -> tuple[tuple[bytes, bytes], ...]:
+    return _EMBED_SECURITY_HEADERS if _EMBED_PATH.fullmatch(path) else _SECURITY_HEADERS
 
 
 def _clean(raw: bytes) -> str:
@@ -53,14 +80,15 @@ class TraceIdMiddleware:
         # Bind WITHOUT reset: each request runs in its own contextvars copy (can't leak across requests),
         # and the id must stay visible to the exception handler in the outer error middleware.
         structlog.contextvars.bind_contextvars(trace_id=trace_id)
+        security_headers = _security_headers(scope.get("path", ""))
 
         async def send_with_id(message):
             if message["type"] == "http.response.start":
-                managed = {name for name, _value in _SECURITY_HEADERS} | {b"x-request-id"}
+                managed = _MANAGED_SECURITY_HEADERS | {b"x-request-id"}
                 message["headers"] = [
                     (name, value) for name, value in message.get("headers") or [] if name.lower() not in managed
                 ]
-                message["headers"].extend(_SECURITY_HEADERS)
+                message["headers"].extend(security_headers)
                 message["headers"].append((b"x-request-id", trace_id.encode("ascii")))  # token-only → safe
             await send(message)
 

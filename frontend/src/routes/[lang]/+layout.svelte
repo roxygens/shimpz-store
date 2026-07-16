@@ -7,16 +7,18 @@
   let { data, children } = $props();
   const lang = $derived(data.lang as Locale);
   const path = $derived($page.url.pathname);
+  const embedded = $derived(/^\/(?:en|pt)\/assistants\/embed\/?$/.test(path));
 </script>
 
-<SiteHeader {lang} {path} />
+{#if !embedded}<SiteHeader {lang} {path} />{/if}
 
-<main id="main-content">
+<main id="main-content" class:embedded>
   {@render children()}
 </main>
 
-<SiteFooter {lang} />
+{#if !embedded}<SiteFooter {lang} />{/if}
 
 <style>
   main { min-height: calc(100vh - 12rem); }
+  main.embedded { min-height: 100vh; padding-bottom: 2rem; }
 </style>
