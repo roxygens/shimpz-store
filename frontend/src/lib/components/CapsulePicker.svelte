@@ -4,6 +4,7 @@
   import type { Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
   import { u } from "$lib/url";
+  import HudIcon from "$lib/components/HudIcon.svelte";
 
   let { lang }: { lang: Locale } = $props();
 
@@ -44,7 +45,7 @@
     localStorage.setItem("shimpz_current_capsule", capsule.id);
     localStorage.setItem("shimpz_current_capsule_name", name);
     closePicker();
-    goto(u.chat(lang));
+    goto(u.chat(lang, capsule.id));
   }
 
   $effect(() => {
@@ -74,7 +75,7 @@
   >
     <header>
       <div class="wrap dialog-topbar">
-        <h2 id="capsule-dialog-title"><span aria-hidden="true">⬡</span> {tr("my_capsules", lang)}</h2>
+        <h2 id="capsule-dialog-title"><span aria-hidden="true"><HudIcon name="capsule" size={24} /></span> {tr("my_capsules", lang)}</h2>
         <button class="btn-ghost" type="button" onclick={closePicker} aria-label={tr("close", lang)}>✕</button>
       </div>
     </header>
@@ -95,7 +96,7 @@
         <div class="capsule-grid">
           {#each capsules as capsule (capsule.id)}
             <button class="card capsule-card" type="button" onclick={() => chooseCapsule(capsule)}>
-              <span class="capsule-glyph" aria-hidden="true">⬡</span>
+              <span class="capsule-glyph" aria-hidden="true"><HudIcon name="capsule" size={25} /></span>
               <span>
                 <strong>{capsule.name ?? capsule.id}</strong>
                 <small>{capsule.id}</small>
@@ -104,7 +105,7 @@
             </button>
           {/each}
         </div>
-        <a href={u.capsule(lang)} class="btn-ghost new-capsule" onclick={closePicker}>{tr("caps_new", lang)} +</a>
+        <a href={u.capsule(lang)} class="btn-ghost new-capsule" onclick={closePicker}><HudIcon name="add" size={17} /> {tr("caps_new", lang)}</a>
       {/if}
     </div>
   </div>
@@ -189,7 +190,7 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .new-capsule { margin-top: 1.25rem; }
+  .new-capsule { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 1.25rem; }
 
   @media (max-width: 960px) {
     .capsule-trigger { flex: none; }

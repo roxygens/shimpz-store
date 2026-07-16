@@ -97,6 +97,23 @@ const D: Dict = {
   explore_drivers: { en: "Explore Services", pt: "Explorar Services" },
   create_capsule: { en: "Create your Capsule", pt: "Criar sua Cápsula" },
   capsule_title: { en: "Create a Capsule — Shimpz", pt: "Criar uma Cápsula — Shimpz" },
+  capsule_list_title: { en: "Your Capsules — Shimpz", pt: "Suas Cápsulas — Shimpz" },
+  capsule_list_kicker: { en: "Capsules // isolated workspaces", pt: "Cápsulas // ambientes isolados" },
+  capsule_list_lead: {
+    en: "Each Capsule keeps its Brain, Assistants, data and conversations inside one isolated boundary. Choose where you want to work or create a new one.",
+    pt: "Cada Cápsula mantém seu Cérebro, Assistants, dados e conversas dentro de um limite isolado. Escolha onde trabalhar ou crie uma nova.",
+  },
+  capsule_count_label: { en: "Capsules", pt: "Cápsulas" },
+  capsule_actions: { en: "Capsule actions", pt: "Ações da Cápsula" },
+  capsule_list_load_failed: {
+    en: "We could not load your Capsules. Try again in a moment.",
+    pt: "Não foi possível carregar suas Cápsulas. Tente novamente em instantes.",
+  },
+  capsule_apps_load_failed: {
+    en: "We could not load this Capsule's Assistants.",
+    pt: "Não foi possível carregar os Assistants desta Cápsula.",
+  },
+  retry: { en: "Try again", pt: "Tentar novamente" },
   capsule_lead: {
     en: "A Capsule is your own sealed, isolated environment — its own agent, its own database, its own network. Name it, and we spin one up from scratch.",
     pt: "Uma Cápsula é seu ambiente próprio, selado e isolado — agente próprio, banco próprio, rede própria. Dê um nome e a gente sobe uma do zero.",
