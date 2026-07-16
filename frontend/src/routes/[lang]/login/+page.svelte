@@ -4,7 +4,7 @@
   import type { Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
   import { u } from "$lib/url";
-  import { resolveClosedLoginReturn } from "$lib/cloudAssistantLifecycle.js";
+  import { resolveClosedAssistantReturn } from "$lib/cloudAssistantLifecycle.js";
   import Seo from "$lib/components/Seo.svelte";
   import ShimpzBrand from "$lib/components/ShimpzBrand.svelte";
 
@@ -19,7 +19,7 @@
   let error = $state("");
 
   function destinationAfterLogin(): string {
-    return resolveClosedLoginReturn(lang, window.location.search) ?? u.capsule(lang);
+    return resolveClosedAssistantReturn(lang, window.location.search) ?? u.capsule(lang);
   }
 
   onMount(async () => {

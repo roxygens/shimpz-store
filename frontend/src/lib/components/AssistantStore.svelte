@@ -19,6 +19,7 @@
   } from "$lib/assistantInstallBridge.js";
   import {
     assistantStoreMode,
+    closedAssistantCapsuleHref,
     closedAssistantLoginHref,
     cloudAssistantAction,
     cloudRequestIsCurrent,
@@ -383,7 +384,7 @@
       return;
     }
     if (cloudPhase === "empty") {
-      await goto(u.capsule(lang));
+      await goto(closedAssistantCapsuleHref(lang, assistant));
       return;
     }
     if (cloudPhase === "error") {

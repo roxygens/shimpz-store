@@ -4,6 +4,7 @@
   import type { Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
   import { u } from "$lib/url";
+  import { resolveClosedAssistantReturn } from "$lib/cloudAssistantLifecycle.js";
   import HudIcon from "$lib/components/HudIcon.svelte";
   import PageIntro from "$lib/components/PageIntro.svelte";
   import Seo from "$lib/components/Seo.svelte";
@@ -128,6 +129,8 @@
         capName = "";
         createOpen = false;
         await refresh();
+        const destination = resolveClosedAssistantReturn(lang, window.location.search);
+        if (destination) await goto(destination);
       } else {
         const result = await r.json().catch(() => ({}));
         error = result.detail ?? result.error ?? `create failed (${r.status})`;

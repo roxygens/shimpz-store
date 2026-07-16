@@ -137,8 +137,16 @@ export function closedAssistantLoginHref(locale, assistant) {
   return `/${locale}/login?return=assistants&assistant=${encodeURIComponent(assistant)}`;
 }
 
+/** @param {unknown} locale @param {unknown} assistant */
+export function closedAssistantCapsuleHref(locale, assistant) {
+  if (typeof locale !== "string" || typeof assistant !== "string" || !LOCALES.has(locale) || !RELEASED_ASSISTANTS.has(assistant)) {
+    throw new Error("invalid Assistant Capsule destination");
+  }
+  return `/${locale}/capsule?return=assistants&assistant=${encodeURIComponent(assistant)}`;
+}
+
 /** @param {unknown} locale @param {unknown} search @returns {string | null} */
-export function resolveClosedLoginReturn(locale, search) {
+export function resolveClosedAssistantReturn(locale, search) {
   if (typeof locale !== "string" || !LOCALES.has(locale) || typeof search !== "string") return null;
   const params = new URLSearchParams(search);
   const keys = [...params.keys()];

@@ -6,6 +6,7 @@ import {
   CLOUD_ASSISTANT_LIMIT,
   CLOUD_CAPSULE_LIMIT,
   assistantStoreMode,
+  closedAssistantCapsuleHref,
   closedAssistantLoginHref,
   closedAssistantStoreHref,
   cloudAssistantAction,
@@ -15,7 +16,7 @@ import {
   parseCloudAssistantInventory,
   parseCloudCapsules,
   requestedAssistantFromSearch,
-  resolveClosedLoginReturn,
+  resolveClosedAssistantReturn,
   selectCloudCapsule,
 } from "../src/lib/cloudAssistantLifecycle.js";
 
@@ -95,7 +96,11 @@ test("uses a closed Store/login return enum and never accepts an arbitrary redir
     "/pt/login?return=assistants&assistant=hello-pulse",
   );
   assert.equal(
-    resolveClosedLoginReturn("en", "?return=assistants&assistant=hello-pulse"),
+    closedAssistantCapsuleHref("en", "hello-pulse"),
+    "/en/capsule?return=assistants&assistant=hello-pulse",
+  );
+  assert.equal(
+    resolveClosedAssistantReturn("en", "?return=assistants&assistant=hello-pulse"),
     "/en/assistants?assistant=hello-pulse",
   );
   for (const search of [
@@ -104,11 +109,12 @@ test("uses a closed Store/login return enum and never accepts an arbitrary redir
     "?return=assistants&assistant=hello-pulse&next=https://evil.example",
     "?return=assistants&return=assistants&assistant=hello-pulse",
   ]) {
-    assert.equal(resolveClosedLoginReturn("en", search), null);
+    assert.equal(resolveClosedAssistantReturn("en", search), null);
   }
   assert.equal(requestedAssistantFromSearch("?assistant=hello-pulse"), "hello-pulse");
   assert.equal(requestedAssistantFromSearch("?assistant=hello-pulse&install=true"), "");
   assert.equal(requestedAssistantFromSearch("?assistant=unknown"), "");
   assert.throws(() => closedAssistantStoreHref("en", "unknown"));
   assert.throws(() => closedAssistantLoginHref("xx", "hello-pulse"));
+  assert.throws(() => closedAssistantCapsuleHref("en", "unknown"));
 });
