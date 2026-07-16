@@ -19,13 +19,8 @@ def test_only_the_assistant_embed_allows_loopback_admin_framing():
             embedded = client.get(f"/{locale}/assistants/embed")
             policy = embedded.headers["content-security-policy"]
             assert "x-frame-options" not in embedded.headers
-            assert (
-                "frame-ancestors http://127.0.0.1:* http://localhost:* http://[::1]:*"
-                in policy
-            )
-            assert (
-                "https:" not in policy.split("frame-ancestors", 1)[1].split(";", 1)[0]
-            )
+            assert "frame-ancestors http://127.0.0.1:* http://localhost:* http://[::1]:*" in policy
+            assert "https:" not in policy.split("frame-ancestors", 1)[1].split(";", 1)[0]
             assert embedded.headers["x-robots-tag"] == "noindex, nofollow"
 
         lookalike = client.get("/en/assistants/embed/anything")
