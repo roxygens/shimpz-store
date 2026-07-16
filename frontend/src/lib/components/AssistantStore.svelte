@@ -158,12 +158,15 @@
   bind:this={storeElement}
   class:embedded
   class="wrap assistants-page"
-  aria-labelledby="assistants-title">
-  <PageIntro
-    headingId="assistants-title"
-    kicker={tr("assistants_preview", lang)}
-    title={tr("assistants_title", lang)}
-    description={tr("assistants_lead", lang)} />
+  aria-label={embedded ? tr("assistants_title", lang) : undefined}
+  aria-labelledby={embedded ? undefined : "assistants-title"}>
+  {#if !embedded}
+    <PageIntro
+      headingId="assistants-title"
+      kicker={tr("assistants_preview", lang)}
+      title={tr("assistants_title", lang)}
+      description={tr("assistants_lead", lang)} />
+  {/if}
 
   {#if embedded && contextState === "error"}
     <div class="context-error" role="alert">
@@ -249,7 +252,8 @@
 
 <style>
   .assistants-page { padding-top: 2.5rem; }
-  .assistants-page.embedded { padding-top: 0.5rem; }
+  .assistants-page.embedded { padding-top: 0; }
+  .assistants-page.embedded .assistant-grid { margin-top: 0; }
 
   .assistant-grid {
     display: grid;
