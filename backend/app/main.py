@@ -77,6 +77,8 @@ WS_POLL_WORKER_THREADS = min(
 MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
 MAX_UPSTREAM_STREAM_LINE_BYTES = 256 * 1024
 MAX_UPSTREAM_STREAM_BYTES = 2 * 1024 * 1024
+HTML_CACHE_CONTROL = "no-cache, max-age=0, must-revalidate"
+IMMUTABLE_CACHE_CONTROL = "public, max-age=31536000, immutable"
 
 
 class _ExecutorSaturatedError(RuntimeError):
@@ -1627,9 +1629,21 @@ def _resolve(rel: str) -> Path | None:
     return None
 
 
+def _static_cache_control(path: str, hit: Path) -> str:
+    """Revalidate navigations while retaining SvelteKit's content-addressed asset cache."""
+    rel = path.strip("/")
+    if hit.suffix.lower() not in {".html", ".htm"} and rel.startswith("_app/immutable/"):
+        return IMMUTABLE_CACHE_CONTROL
+    return HTML_CACHE_CONTROL
+
+
 @app.get("/{path:path}")
 def static_files(path: str) -> Response:
     hit = _resolve(path)
     if hit:
-        return FileResponse(hit)
-    return PlainTextResponse("not found", status_code=404)
+        return FileResponse(hit, headers={"Cache-Control": _static_cache_control(path, hit)})
+    return PlainTextResponse(
+        "not found",
+        status_code=404,
+        headers={"Cache-Control": HTML_CACHE_CONTROL},
+    )
