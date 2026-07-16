@@ -24,9 +24,7 @@ class _AssistantControlHandler(BaseHTTPRequestHandler):
         return json.loads(self.rfile.read(length) or b"{}")
 
     def do_GET(self) -> None:
-        self.calls.append(
-            ("GET", self.path, {}, self.headers.get("X-Shimpz-Account", ""))
-        )
+        self.calls.append(("GET", self.path, {}, self.headers.get("X-Shimpz-Account", "")))
         if self.path == "/v1/capsules/cap_one/apps":
             self._json(
                 self.app_status,
@@ -60,23 +58,17 @@ class _AssistantControlHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/capsules/cap_one/apps":
             self._json(
                 self.app_status,
-                {"installed": True}
-                if self.app_status == 200
-                else {"detail": "blocked"},
+                {"installed": True} if self.app_status == 200 else {"detail": "blocked"},
             )
             return
         self._json(404, {"detail": "not found"})
 
     def do_DELETE(self) -> None:
-        self.calls.append(
-            ("DELETE", self.path, {}, self.headers.get("X-Shimpz-Account", ""))
-        )
+        self.calls.append(("DELETE", self.path, {}, self.headers.get("X-Shimpz-Account", "")))
         if self.path.startswith("/v1/capsules/cap_one/apps/"):
             self._json(
                 self.app_status,
-                {"uninstalled": True}
-                if self.app_status == 200
-                else {"detail": "blocked"},
+                {"uninstalled": True} if self.app_status == 200 else {"detail": "blocked"},
             )
             return
         self._json(404, {"detail": "not found"})
@@ -97,9 +89,7 @@ def _assistant_control_plane(*, app_status: int = 200):
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
     previous = main.ACCOUNTS_URL, main.CAPSULEDRIVER_URL
-    main.ACCOUNTS_URL = main.CAPSULEDRIVER_URL = (
-        f"http://127.0.0.1:{server.server_port}"
-    )
+    main.ACCOUNTS_URL = main.CAPSULEDRIVER_URL = f"http://127.0.0.1:{server.server_port}"
     try:
         yield calls
     finally:
@@ -188,13 +178,8 @@ def test_cloud_assistant_install_rejects_origin_content_type_shape_and_unrelease
     )
     with _assistant_control_plane() as calls, TestClient(main.app) as client:
         _authenticate(client)
-        responses = [
-            client.post(path, content=body, headers=headers)
-            for path, headers, body, _ in cases
-        ]
-    assert [response.status_code for response in responses] == [
-        case[3] for case in cases
-    ]
+        responses = [client.post(path, content=body, headers=headers) for path, headers, body, _ in cases]
+    assert [response.status_code for response in responses] == [case[3] for case in cases]
     assert not any(path.endswith("/apps") for _method, path, _body, _token in calls)
     for response in responses:
         _assert_private(response)
@@ -221,12 +206,8 @@ def test_cloud_assistant_delete_rejects_untrusted_origins_and_nonreleased_ids_be
     )
     with _assistant_control_plane() as calls, TestClient(main.app) as client:
         _authenticate(client)
-        responses = [
-            client.delete(path, headers=headers) for path, headers, _status in cases
-        ]
-    assert [response.status_code for response in responses] == [
-        case[2] for case in cases
-    ]
+        responses = [client.delete(path, headers=headers) for path, headers, _status in cases]
+    assert [response.status_code for response in responses] == [case[2] for case in cases]
     assert not any(method == "DELETE" for method, _path, _body, _token in calls)
     for response in responses:
         _assert_private(response)
@@ -266,9 +247,7 @@ def test_cloud_assistant_mutations_translate_only_identity_and_refreshable_accep
         {},
         "valid-token",
     ) in calls
-    assert not any(
-        path.endswith("/retired-assistant") for _method, path, _body, _token in calls
-    )
+    assert not any(path.endswith("/retired-assistant") for _method, path, _body, _token in calls)
 
 
 def test_cloud_assistant_upstream_failures_remain_private_and_typed():

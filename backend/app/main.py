@@ -349,25 +349,15 @@ def _assistant_mutation_origin_allowed(origin: str | None) -> bool:
 
 
 def _private_json(content: dict, status_code: int = 200) -> JSONResponse:
-    return JSONResponse(
-        content, status_code=status_code, headers=PRIVATE_NO_STORE_HEADERS
-    )
+    return JSONResponse(content, status_code=status_code, headers=PRIVATE_NO_STORE_HEADERS)
 
 
 def _canonical_capsule_id(value: object) -> str | None:
-    return (
-        value
-        if isinstance(value, str) and CAPSULE_ID_RE.fullmatch(value) is not None
-        else None
-    )
+    return value if isinstance(value, str) and CAPSULE_ID_RE.fullmatch(value) is not None else None
 
 
 def _canonical_assistant_id(value: object) -> str | None:
-    if (
-        not isinstance(value, str)
-        or len(value) > 80
-        or ASSISTANT_ID_RE.fullmatch(value) is None
-    ):
+    if not isinstance(value, str) or len(value) > 80 or ASSISTANT_ID_RE.fullmatch(value) is None:
         return None
     return value
 
@@ -928,26 +918,26 @@ async def cloud_assistants_list(request: Request, cid: str) -> JSONResponse:
 
 
 @app.post("/api/capsules/{cid}/assistants")
-async def cloud_assistant_install(request: Request, cid: str) -> JSONResponse:  # noqa: PLR0911
+async def cloud_assistant_install(request: Request, cid: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
         return _private_json({"detail": "not authenticated"}, 401)
-    if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
-        return _private_json({"detail": "forbidden origin"}, 403)
-    if request.headers.get("content-type", "").strip().lower() != "application/json":
-        return _private_json({"detail": "Content-Type must be application/json"}, 415)
-    capsule_id = _canonical_capsule_id(cid)
-    if capsule_id is None:
-        return _private_json({"detail": "bad capsule id"}, 400)
     try:
+        if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
+            raise ClientPayloadError(403, "forbidden origin")
+        if request.headers.get("content-type", "").strip().lower() != "application/json":
+            raise ClientPayloadError(415, "Content-Type must be application/json")
+        capsule_id = _canonical_capsule_id(cid)
+        if capsule_id is None:
+            raise ClientPayloadError(400, "bad capsule id")
         payload = await _read_bounded_json(request, MAX_CAPSULE_INSTALL_BODY_BYTES)
+        if set(payload) != {"assistant"}:
+            raise ClientPayloadError(400, "body must contain only assistant")
+        assistant = _canonical_assistant_id(payload["assistant"])
+        if assistant not in RELEASED_CLOUD_ASSISTANTS:
+            raise ClientPayloadError(404, "Assistant is not released")
     except ClientPayloadError as exc:
         return _private_json({"detail": exc.detail}, exc.status)
-    if set(payload) != {"assistant"}:
-        return _private_json({"detail": "body must contain only assistant"}, 400)
-    assistant = _canonical_assistant_id(payload["assistant"])
-    if assistant not in RELEASED_CLOUD_ASSISTANTS:
-        return _private_json({"detail": "Assistant is not released"}, 404)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
         CAPSULEDRIVER_URL,
@@ -969,22 +959,23 @@ async def cloud_assistant_install(request: Request, cid: str) -> JSONResponse:  
 
 
 @app.delete("/api/capsules/{cid}/assistants/{assistant}")
-async def cloud_assistant_uninstall(  # noqa: PLR0911
-    request: Request, cid: str, assistant: str
-) -> JSONResponse:
+async def cloud_assistant_uninstall(request: Request, cid: str, assistant: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
         return _private_json({"detail": "not authenticated"}, 401)
-    if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
-        return _private_json({"detail": "forbidden origin"}, 403)
-    capsule_id = _canonical_capsule_id(cid)
-    assistant_id = _canonical_assistant_id(assistant)
-    if capsule_id is None:
-        return _private_json({"detail": "bad capsule id"}, 400)
-    if assistant_id is None:
-        return _private_json({"detail": "bad Assistant id"}, 400)
-    if assistant_id not in RELEASED_CLOUD_ASSISTANTS:
-        return _private_json({"detail": "Assistant is not released"}, 404)
+    try:
+        if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
+            raise ClientPayloadError(403, "forbidden origin")
+        capsule_id = _canonical_capsule_id(cid)
+        assistant_id = _canonical_assistant_id(assistant)
+        if capsule_id is None:
+            raise ClientPayloadError(400, "bad capsule id")
+        if assistant_id is None:
+            raise ClientPayloadError(400, "bad Assistant id")
+        if assistant_id not in RELEASED_CLOUD_ASSISTANTS:
+            raise ClientPayloadError(404, "Assistant is not released")
+    except ClientPayloadError as exc:
+        return _private_json({"detail": exc.detail}, exc.status)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
         CAPSULEDRIVER_URL,
