@@ -104,7 +104,8 @@
         createOpen = false;
         await refresh();
       } else {
-        error = (await r.json().catch(() => ({}))).detail ?? "create failed";
+        const result = await r.json().catch(() => ({}));
+        error = result.detail ?? result.error ?? `create failed (${r.status})`;
       }
     } catch (e) {
       error = String(e);
