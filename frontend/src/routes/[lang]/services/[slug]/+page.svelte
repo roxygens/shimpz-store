@@ -4,6 +4,7 @@
   import Seo from "$lib/components/Seo.svelte";
   import ServiceIcon from "$lib/components/ServiceIcon.svelte";
   import CreatorTag from "$lib/components/CreatorTag.svelte";
+  import InstallCommand from "$lib/components/InstallCommand.svelte";
   import PageIntro from "$lib/components/PageIntro.svelte";
 
   let { data } = $props();
@@ -18,7 +19,7 @@
     <ServiceIcon icon={service.icon} size={80} brand={service.brand} />
   {/snippet}
   {#snippet meta()}
-    <CreatorTag handle={creatorOf(service)} {lang} />
+    <CreatorTag handle={creatorOf(service)} {lang} showAvatar={false} />
   {/snippet}
   <PageIntro
     headingId="service-title"
@@ -27,6 +28,14 @@
     description={t(service.summary, lang)}
     {media}
     {meta} />
+
+  <div class="panel mt-8 grid gap-5 lg:grid-cols-[minmax(0,0.7fr)_minmax(0,1fr)] lg:items-center">
+    <div>
+      <h2 class="kicker">{tr("service_quick_install_title", lang)}</h2>
+      <p class="mt-3 text-sm leading-relaxed dim">{tr("service_quick_install_body", lang)}</p>
+    </div>
+    <InstallCommand {lang} />
+  </div>
 
   <div class="mt-10 grid gap-8 lg:grid-cols-[1fr_320px]">
     <div class="space-y-10">

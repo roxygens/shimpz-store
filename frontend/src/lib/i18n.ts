@@ -255,6 +255,11 @@ const D: Dict = {
   view_github: { en: "View on GitHub ↗", pt: "Ver no GitHub ↗" },
   creator_none: { en: "No public Service artifacts.", pt: "Nenhum artefato público de Service." },
   access_boundary: { en: "Access boundary", pt: "Limite de acesso" },
+  service_quick_install_title: { en: "Start Shimpz locally", pt: "Inicie o Shimpz localmente" },
+  service_quick_install_body: {
+    en: "Start the local Shimpz Admin with the verified development image. Services are managed by your Space, not installed from this page.",
+    pt: "Inicie o Admin local do Shimpz com a imagem de desenvolvimento verificada. Services são gerenciados pelo seu Space, não instalados por esta página.",
+  },
   nav_chat: { en: "Chat", pt: "Chat" },
   chat_title: { en: "Capsule chat — Shimpz", pt: "Chat da Cápsula — Shimpz" },
   chat_lead: { en: "Command your Capsule — the brain answers here, Captain.", pt: "Comande sua Cápsula — o cérebro responde aqui, Capitão." },
