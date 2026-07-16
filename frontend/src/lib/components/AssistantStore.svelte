@@ -6,60 +6,122 @@
   import {
     ASSISTANT_INSTALL_ACK_TIMEOUT_MS,
     acceptAssistantStoreContext,
+    acceptAssistantStoreState,
+    assistantStoreActionForState,
     classifyAssistantInstallAck,
+    classifyAssistantUninstallAck,
     createAssistantStoreFrameMessage,
     createAssistantInstallRequest,
+    createAssistantUninstallRequest,
     resolveInstallParentOrigin,
+    shouldReconcileAssistantStoreAction,
   } from "$lib/assistantInstallBridge.js";
   import AssistantIcon from "$lib/components/AssistantIcon.svelte";
   import HudIcon from "$lib/components/HudIcon.svelte";
   import InstallCommand from "$lib/components/InstallCommand.svelte";
   import PageIntro from "$lib/components/PageIntro.svelte";
 
-  type InstallState = "idle" | "pending" | "sent" | "error";
+  type ActionKind = "install" | "uninstall";
+  type ActionState = "idle" | "pending" | "sent" | "error";
   type ContextState = "connecting" | "ready" | "error";
-  type PendingInstall = { parentOrigin: string; timeout: ReturnType<typeof setTimeout> };
+  type InventoryState = "legacy" | "loading" | "ready" | "error";
+  type PendingAction = {
+    action: ActionKind;
+    parentOrigin: string;
+    timeout: ReturnType<typeof setTimeout>;
+  };
 
   let { lang, embedded = false }: { lang: Locale; embedded?: boolean } = $props();
-  let installStates = $state<Record<string, InstallState>>({});
+  let actionStates = $state<Record<string, ActionState>>({});
+  let actionKinds = $state<Record<string, ActionKind>>({});
   let contextState = $state<ContextState>("connecting");
+  let inventoryState = $state<InventoryState>("legacy");
+  let installedAssistantIds = $state<string[]>([]);
   let parentOrigin = $state("");
   let storeElement = $state<HTMLElement>();
-  const pendingInstalls = new Map<string, PendingInstall>();
+  const pendingActions = new Map<string, PendingAction>();
   let contextTimeout: ReturnType<typeof setTimeout> | undefined;
   let frameRequest = 0;
 
-  function installState(assistant: string): InstallState {
-    return installStates[assistant] ?? "idle";
+  function actionState(assistant: string): ActionState {
+    return actionStates[assistant] ?? "idle";
   }
 
-  function setInstallState(assistant: string, state: InstallState) {
-    installStates = { ...installStates, [assistant]: state };
+  function setActionState(assistant: string, action: ActionKind, state: ActionState) {
+    actionKinds = { ...actionKinds, [assistant]: action };
+    actionStates = { ...actionStates, [assistant]: state };
   }
 
-  function finishInstallRequest(assistant: string, state: "sent" | "error") {
-    const pending = pendingInstalls.get(assistant);
+  function finishActionRequest(assistant: string, state: "sent" | "error") {
+    const pending = pendingActions.get(assistant);
     if (pending) clearTimeout(pending.timeout);
-    pendingInstalls.delete(assistant);
-    setInstallState(assistant, state);
+    pendingActions.delete(assistant);
+    if (pending) setActionState(assistant, pending.action, state);
   }
 
-  function requestInstall(assistant: string) {
-    if (pendingInstalls.has(assistant)) return;
+  function assistantInstalled(assistant: string): boolean {
+    return assistantStoreActionForState(inventoryState, installedAssistantIds, assistant) === "uninstall";
+  }
+
+  function inventoryBlocksAction(assistant: string): boolean {
+    return assistantStoreActionForState(inventoryState, installedAssistantIds, assistant) === "blocked";
+  }
+
+  function requestAssistantAction(assistant: string) {
+    if (pendingActions.has(assistant)) return;
+    const resolvedAction = assistantStoreActionForState(inventoryState, installedAssistantIds, assistant);
+    if (resolvedAction === "blocked") return;
+    const action: ActionKind = resolvedAction;
     try {
       if (window.parent === window) throw new Error("not embedded");
       if (!parentOrigin) throw new Error("local Admin context unavailable");
-      const request = createAssistantInstallRequest(assistant);
-      setInstallState(assistant, "pending");
+      const request = action === "uninstall"
+        ? createAssistantUninstallRequest(assistant)
+        : createAssistantInstallRequest(assistant);
+      setActionState(assistant, action, "pending");
       window.parent.postMessage(request, parentOrigin);
       const timeout = setTimeout(
-        () => finishInstallRequest(assistant, "error"),
+        () => finishActionRequest(assistant, "error"),
         ASSISTANT_INSTALL_ACK_TIMEOUT_MS,
       );
-      pendingInstalls.set(assistant, { parentOrigin, timeout });
+      pendingActions.set(assistant, { action, parentOrigin, timeout });
     } catch {
-      finishInstallRequest(assistant, "error");
+      setActionState(assistant, action, "error");
     }
+  }
+
+  function reconcileAuthoritativeState(installed: string[]) {
+    const nextStates = { ...actionStates };
+    const nextKinds = { ...actionKinds };
+    for (const [assistant, action] of Object.entries(actionKinds)) {
+      if (!shouldReconcileAssistantStoreAction(action, actionState(assistant), "ready", installed, assistant)) {
+        continue;
+      }
+      const pending = pendingActions.get(assistant);
+      if (pending) clearTimeout(pending.timeout);
+      pendingActions.delete(assistant);
+      delete nextStates[assistant];
+      delete nextKinds[assistant];
+    }
+    actionStates = nextStates;
+    actionKinds = nextKinds;
+  }
+
+  function actionLabel(assistant: string): string {
+    if (actionState(assistant) === "pending") return tr("assistants_request_waiting", lang);
+    if (contextState !== "ready") return tr("assistants_admin_connecting", lang);
+    if (inventoryState === "loading") return tr("assistants_inventory_loading", lang);
+    if (inventoryState === "error") return tr("assistants_inventory_unavailable", lang);
+    return tr(assistantInstalled(assistant) ? "assistants_uninstall_local" : "assistants_install_local", lang);
+  }
+
+  function actionStatus(assistant: string): string {
+    const uninstall = actionKinds[assistant] === "uninstall";
+    const failed = actionState(assistant) === "error";
+    if (uninstall) {
+      return tr(failed ? "assistants_uninstall_request_failed" : "assistants_uninstall_request_sent", lang);
+    }
+    return tr(failed ? "assistants_request_failed" : "assistants_request_sent", lang);
   }
 
   function measureFrameHeight(): number {
@@ -103,19 +165,32 @@
       return;
     }
 
+    const storeState = parentOrigin
+      ? acceptAssistantStoreState(event, window.parent, parentOrigin)
+      : null;
+    if (storeState) {
+      inventoryState = storeState.status;
+      installedAssistantIds = storeState.installed;
+      if (storeState.status === "ready") reconcileAuthoritativeState(storeState.installed);
+      return;
+    }
+
     const assistant =
       event.data && typeof event.data === "object" && typeof event.data.assistant === "string"
         ? event.data.assistant
         : "";
-    const pending = pendingInstalls.get(assistant);
+    const pending = pendingActions.get(assistant);
     if (!pending) return;
-    const result = classifyAssistantInstallAck(event, {
+    const classifyAck = pending.action === "uninstall"
+      ? classifyAssistantUninstallAck
+      : classifyAssistantInstallAck;
+    const result = classifyAck(event, {
       parentWindow: window.parent,
       parentOrigin: pending.parentOrigin,
       assistant,
     });
-    if (result === "accepted") finishInstallRequest(assistant, "sent");
-    else if (result === "invalid") finishInstallRequest(assistant, "error");
+    if (result === "accepted") finishActionRequest(assistant, "sent");
+    else if (result === "invalid") finishActionRequest(assistant, "error");
   }
 
   onMount(() => {
@@ -148,8 +223,8 @@
       resizeObserver?.disconnect();
       if (frameRequest) cancelAnimationFrame(frameRequest);
       if (contextTimeout) clearTimeout(contextTimeout);
-      for (const pending of pendingInstalls.values()) clearTimeout(pending.timeout);
-      pendingInstalls.clear();
+      for (const pending of pendingActions.values()) clearTimeout(pending.timeout);
+      pendingActions.clear();
     };
   });
 </script>
@@ -179,7 +254,7 @@
 
   <div class="assistant-grid">
     {#each ASSISTANT_CATALOG as assistant (assistant.id)}
-      <article class="assistant-card">
+      <article class:installed={embedded && assistantInstalled(assistant.id)} class="assistant-card">
         <a
           class="assistant-details"
           href={u.assistant(lang, assistant)}
@@ -192,7 +267,11 @@
               <h2>{assistant.name}</h2>
               <p>@{assistant.creator}</p>
             </div>
-            <span class="free-badge">{tr("assistants_free", lang)}</span>
+            {#if embedded && assistantInstalled(assistant.id)}
+              <span class="installed-badge"><HudIcon name="check" size={13} />{tr("assistants_installed_local", lang)}</span>
+            {:else}
+              <span class="free-badge">{tr("assistants_free", lang)}</span>
+            {/if}
           </div>
           <p class="assistant-summary">{t(assistant.summary, lang)}</p>
           <span class="details-label">{tr("assistants_view_details", lang)} <b aria-hidden="true">→</b></span>
@@ -201,19 +280,14 @@
         <div class="assistant-action">
           {#if embedded}
             <button
-              class="btn-primary install-action"
+              class:btn-primary={!assistantInstalled(assistant.id)}
+              class:btn-danger={assistantInstalled(assistant.id)}
+              class="install-action"
               type="button"
-              disabled={contextState !== "ready" || installState(assistant.id) === "pending"}
-              onclick={() => requestInstall(assistant.id)}>
-              <HudIcon name="add" size={17} />
-              {tr(
-                installState(assistant.id) === "pending"
-                  ? "assistants_request_waiting"
-                  : contextState === "ready"
-                    ? "assistants_install_local"
-                    : "assistants_admin_connecting",
-                lang,
-              )}
+              disabled={contextState !== "ready" || inventoryBlocksAction(assistant.id) || actionState(assistant.id) === "pending"}
+              onclick={() => requestAssistantAction(assistant.id)}>
+              <HudIcon name={assistantInstalled(assistant.id) ? "uninstall" : "add"} size={17} />
+              {actionLabel(assistant.id)}
             </button>
           {:else}
             <a
@@ -225,12 +299,12 @@
             </a>
           {/if}
 
-          {#if installState(assistant.id) === "sent" || installState(assistant.id) === "error"}
+          {#if actionState(assistant.id) === "sent" || actionState(assistant.id) === "error"}
             <p
-              class:error={installState(assistant.id) === "error"}
+              class:error={actionState(assistant.id) === "error"}
               class="install-status"
-              role={installState(assistant.id) === "error" ? "alert" : "status"}>
-              {tr(installState(assistant.id) === "sent" ? "assistants_request_sent" : "assistants_request_failed", lang)}
+              role={actionState(assistant.id) === "error" ? "alert" : "status"}>
+              {actionStatus(assistant.id)}
             </p>
           {/if}
         </div>
@@ -275,6 +349,12 @@
     box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-cyan) 52%, var(--color-border));
     transform: translateY(-2px);
   }
+  .assistant-card.installed {
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-green) 52%, var(--color-border));
+  }
+  .assistant-card.installed:hover, .assistant-card.installed:focus-within {
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-green) 75%, var(--color-border));
+  }
   .assistant-details { display: flex; min-width: 0; flex: 1; flex-direction: column; padding: 1rem; }
   .assistant-heading { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.8rem; }
   .assistant-identity { min-width: 0; }
@@ -284,6 +364,21 @@
     align-self: start;
     border: 1px solid color-mix(in oklab, var(--color-green) 38%, var(--color-border));
     padding: 0.22rem 0.4rem;
+    color: var(--color-green);
+    font-family: var(--font-mono);
+    font-size: 0.54rem;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+  }
+  .installed-badge {
+    display: inline-flex;
+    align-items: center;
+    align-self: start;
+    gap: 0.25rem;
+    border: 1px solid color-mix(in oklab, var(--color-green) 58%, var(--color-border));
+    padding: 0.22rem 0.4rem;
+    background: color-mix(in oklab, var(--color-green) 7%, #000);
     color: var(--color-green);
     font-family: var(--font-mono);
     font-size: 0.54rem;

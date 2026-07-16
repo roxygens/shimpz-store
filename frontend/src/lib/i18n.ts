@@ -299,6 +299,8 @@ const D: Dict = {
   assistants_no_permissions: { en: "No Services, secrets or egress", pt: "Sem Services, secrets ou egress" },
   assistants_operation: { en: "Operation", pt: "Operação" },
   assistants_install_local: { en: "Install in local Admin", pt: "Instalar no Admin local" },
+  assistants_installed_local: { en: "Installed", pt: "Instalado" },
+  assistants_uninstall_local: { en: "Uninstall", pt: "Desinstalar" },
   assistants_view_details: { en: "View details", pt: "Ver detalhes" },
   assistants_back_store: { en: "All Assistants", pt: "Todos os Assistants" },
   assistants_detail_about: { en: "About this Assistant", pt: "Sobre este Assistant" },
@@ -311,6 +313,22 @@ const D: Dict = {
   assistants_request_failed: {
     en: "The local Admin did not accept this request. Refresh and try again.",
     pt: "O Admin local não aceitou este pedido. Atualize e tente novamente.",
+  },
+  assistants_uninstall_request_sent: {
+    en: "Continue in the local Admin to confirm uninstall.",
+    pt: "Continue no Admin local para confirmar a desinstalação.",
+  },
+  assistants_uninstall_request_failed: {
+    en: "The local Admin did not accept the uninstall request. Refresh and try again.",
+    pt: "O Admin local não aceitou o pedido de desinstalação. Atualize e tente novamente.",
+  },
+  assistants_inventory_loading: {
+    en: "Checking this Capsule…",
+    pt: "Verificando esta Cápsula…",
+  },
+  assistants_inventory_unavailable: {
+    en: "Local inventory unavailable",
+    pt: "Inventário local indisponível",
   },
   assistants_admin_connecting: {
     en: "Connecting to local Admin…",
