@@ -34,7 +34,7 @@ test("projects a bounded canonical cloud Capsule selector", () => {
   const capsules = parseCloudCapsules({
     capsules: [
       { id: "abc123_workspace", name: "Workspace", status: "running", private: "ignored" },
-      { id: "def456_sales", brain: "codex" },
+      { id: "def456_sales", provider: "openai" },
     ],
     upstreamMetadata: "ignored",
   });

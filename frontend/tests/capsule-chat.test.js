@@ -30,7 +30,7 @@ test("creates only an Assistant-scoped chat turn", () => {
     ["", "hello"],
     ["../escape", "hello"],
     ["hello-pulse", ""],
-    ["hello-pulse", { provider: "codex" }],
+    ["hello-pulse", { provider: "openai" }],
   ]) {
     assert.throws(() => createAssistantChatTurn(assistant, message));
   }

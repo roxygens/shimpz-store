@@ -11,8 +11,8 @@
     selectRunnableAssistant,
   } from "$lib/capsuleChat.js";
   import { tr } from "$lib/i18n";
+  import { MODEL_PROVIDERS, defaultModelFor, normalizeInferenceSelection } from "$lib/modelProviders.js";
   import { u } from "$lib/url";
-  import BrainLoginFlow from "$lib/components/BrainLoginFlow.svelte";
   import HudIcon from "$lib/components/HudIcon.svelte";
   import PageIntro from "$lib/components/PageIntro.svelte";
   import Seo from "$lib/components/Seo.svelte";
@@ -25,7 +25,8 @@
   let phase = $state("checking"); // checking | login | none | ready
   let capsules = $state<any[]>([]);
   let selected = $state("");
-  let brain = $state<any>(null); // {brain, title, configured, authenticated}
+  let inference = $state<any>(null); // {provider, model}
+  let configuredProviders = $state<string[]>([]);
   let crew = $state<any[]>([]);
   let selectedAssistant = $state("");
   let capsuleFiles = $state<any[]>([]);
@@ -45,7 +46,8 @@
   let fileInput = $state<HTMLInputElement | null>(null);
 
   const activeAssistant = $derived(crew.find((assistant) => assistant.id === selectedAssistant) ?? null);
-  const canChat = $derived(Boolean(activeAssistant && brain?.configured));
+  const providerReady = $derived(Boolean(inference?.provider && configuredProviders.includes(inference.provider)));
+  const canChat = $derived(Boolean(activeAssistant && providerReady));
   const storagePercent = $derived(
     storageLimit > 0 ? Math.min(100, Math.max(0, (storageUsed / storageLimit) * 100)) : 0,
   );
@@ -99,11 +101,11 @@
   let ws = $state<WebSocket | null>(null);
   let wsReady = $state(false);
 
-  async function refreshBrainStatus() {
+  async function refreshInference() {
     const cid = selected;
     if (!cid) return;
-    const current = await fetch(`/api/capsules/${cid}/brain`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    if (current && selected === cid) brain = current;
+    const current = await fetch(`/api/capsules/${cid}/inference`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
+    if (current && selected === cid) inference = current;
   }
 
   function chatErrorText(statusCode: unknown, detailValue: unknown) {
@@ -113,7 +115,7 @@
       if (normalized.includes("active chat turn") || normalized.includes("already has an active")) {
         return tr("chat_turn_active", lang);
       }
-      if (normalized.includes("not authenticated") || normalized.includes("configure the brain")) {
+      if (normalized.includes("api key") || normalized.includes("model provider")) {
         return tr("brain_wait", lang);
       }
     }
@@ -164,7 +166,6 @@
         messages.push({ role: "assistant", text: m.reply });
         busy = false;
         status = "";
-        void refreshBrainStatus();
       } else if (m.type === "stopped") {
         busy = false;
         status = "";
@@ -182,49 +183,24 @@
     if (wsReady && ws) ws.send(JSON.stringify({ type: "stop" }));
   }
 
-  let configureBusy = $state(false);
-  let configureErr = $state("");
-  let accountBrainsAvailable = $state(false);
-  let brainChoice = $state("claude-code");
-  let brainModel = $state("claude-sonnet-5");
-  let loadedBrainChoice = $state("claude-code");
-  let loadedBrainModel = $state("claude-sonnet-5");
-  let brainSwapBusy = $state(false);
-  let brainSwapErr = $state("");
-  let brainSwapOk = $state("");
+  let providerChoice = $state("openai");
+  let modelChoice = $state(defaultModelFor("openai"));
+  let loadedProvider = $state("openai");
+  let loadedModel = $state(defaultModelFor("openai"));
+  let inferenceBusy = $state(false);
+  let inferenceError = $state("");
+  let inferenceSaved = $state("");
 
-  const brainHasChanges = $derived(
-    brainChoice !== loadedBrainChoice || brainModel.trim() !== loadedBrainModel,
+  const inferenceHasChanges = $derived(
+    providerChoice !== loadedProvider || modelChoice.trim() !== loadedModel,
   );
-  const runtimeBusy = $derived(busy || brainSwapBusy);
+  const runtimeBusy = $derived(busy || inferenceBusy);
 
-  function defaultBrainModel(provider: string) {
-    return provider === "claude-code" ? "claude-sonnet-5" : "";
-  }
-
-  function chooseBrain(event: Event) {
-    brainChoice = (event.currentTarget as HTMLSelectElement).value;
-    brainModel = defaultBrainModel(brainChoice);
-    brainSwapErr = "";
-    brainSwapOk = "";
-  }
-
-  async function applyAccountBrain() {
-    if (!selected || configureBusy || brainSwapBusy) return;
-    configureBusy = true;
-    configureErr = "";
-    try {
-      const r = await fetch(`/api/capsules/${selected}/brain/configure`, { method: "POST" }).catch(() => null);
-      const d = await r?.json().catch(() => ({}));
-      if (!r?.ok) {
-        configureErr = d?.detail ?? d?.error ?? tr("brain_apply_failed", lang);
-        return;
-      }
-      await loadCapsuleContext();
-      if (!brain?.configured) configureErr = tr("brain_apply_failed", lang);
-    } finally {
-      configureBusy = false;
-    }
+  function chooseProvider(event: Event) {
+    providerChoice = (event.currentTarget as HTMLSelectElement).value;
+    modelChoice = defaultModelFor(providerChoice);
+    inferenceError = "";
+    inferenceSaved = "";
   }
 
   // Auto-follow only when the Captain is already at the bottom; never yank them while reading.
@@ -244,7 +220,7 @@
 
   async function loadCapsuleContext() {
     const cid = selected;
-    brain = null;
+    inference = null;
     crew = [];
     selectedAssistant = "";
     capsuleFiles = [];
@@ -257,13 +233,13 @@
     const name = capsules.find((c) => c.id === cid)?.name ?? cid;
     localStorage.setItem(SEL_KEY + "_name", name);
     storageLoading = true;
-    const [b, a, f] = await Promise.all([
-      fetch(`/api/capsules/${cid}/brain`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    const [currentInference, a, f] = await Promise.all([
+      fetch(`/api/capsules/${cid}/inference`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch(`/api/capsules/${cid}/apps`).then((r) => (r.ok ? r.json() : { apps: [] })).catch(() => ({ apps: [] })),
       fetch(`/api/capsules/${cid}/files`).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, data: {} })),
     ]);
     if (selected !== cid) return;
-    brain = b;
+    inference = currentInference;
     try {
       crew = parseInstalledAssistants(a);
     } catch {
@@ -280,10 +256,10 @@
       storageLoading = false;
     }
     const capsule = capsules.find((item) => item.id === cid);
-    loadedBrainChoice = b?.brain ?? capsule?.brain ?? "claude-code";
-    loadedBrainModel = String(b?.model ?? capsule?.model ?? defaultBrainModel(loadedBrainChoice));
-    brainChoice = loadedBrainChoice;
-    brainModel = loadedBrainModel;
+    loadedProvider = currentInference?.provider ?? capsule?.provider ?? "openai";
+    loadedModel = String(currentInference?.model ?? capsule?.model ?? defaultModelFor(loadedProvider));
+    providerChoice = loadedProvider;
+    modelChoice = loadedModel;
     connectWs(cid);
   }
 
@@ -300,9 +276,8 @@
   }
 
   function resetCapsuleSession() {
-    configureErr = "";
-    brainSwapErr = "";
-    brainSwapOk = "";
+    inferenceError = "";
+    inferenceSaved = "";
     const previous = ws;
     ws = null;
     previous?.close();
@@ -320,7 +295,7 @@
   }
 
   async function changeCapsule(next: string, updateUrl = true) {
-    if (brainSwapBusy || !capsules.some((capsule) => capsule.id === next) || next === selected) return;
+    if (inferenceBusy || !capsules.some((capsule) => capsule.id === next) || next === selected) return;
     resetCapsuleSession();
     selected = next;
     if (updateUrl) {
@@ -329,49 +304,36 @@
     await loadCapsuleContext();
   }
 
-  async function swapBrain() {
-    if (!selected || !brainHasChanges || brainSwapBusy || busy) return;
+  async function saveInference() {
+    if (!selected || !inferenceHasChanges || inferenceBusy || busy) return;
     const cid = selected;
-    const capsule = capsules.find((item) => item.id === cid);
-    if (!capsule) return;
-    const capsuleName = String(capsule.name ?? "").trim();
-    if (!capsuleName) {
-      brainSwapErr = tr("brain_switch_failed", lang);
-      return;
-    }
-    const targetBrain = brainChoice;
-    const targetModel = brainModel.trim();
-    brainSwapBusy = true;
-    brainSwapErr = "";
-    brainSwapOk = "";
-    const payload: Record<string, string> = {
-      name: capsuleName,
-      brain: targetBrain,
-      model: targetModel,
-    };
+    inferenceBusy = true;
+    inferenceError = "";
+    inferenceSaved = "";
     try {
-      const response = await fetch("/api/capsules", {
-        method: "POST",
+      const payload = normalizeInferenceSelection(providerChoice, modelChoice);
+      const response = await fetch(`/api/capsules/${cid}/inference`, {
+        method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       const result = await response.json().catch(() => ({}));
       if (!response.ok) {
-        brainSwapErr = result?.detail ?? result?.error ?? tr("brain_switch_failed", lang);
+        inferenceError = result?.detail ?? result?.error ?? tr("brain_switch_failed", lang);
         return;
       }
       if (selected !== cid) return;
-      resetCapsuleSession();
+      inference = { provider: payload.provider, model: payload.model };
+      loadedProvider = payload.provider;
+      loadedModel = payload.model;
       capsules = capsules.map((item) =>
-        item.id === cid ? { ...item, brain: targetBrain, model: targetModel } : item,
+        item.id === cid ? { ...item, provider: payload.provider, model: payload.model } : item,
       );
-      await loadCapsuleContext();
-      brainSwapOk = tr("brain_switch_ok", lang);
+      inferenceSaved = tr("brain_switch_ok", lang);
     } catch {
-      brainSwapErr = tr("brain_switch_failed", lang);
+      inferenceError = tr("brain_switch_failed", lang);
     } finally {
-      brainSwapBusy = false;
-      syncCapsuleFromUrl();
+      inferenceBusy = false;
     }
   }
 
@@ -395,7 +357,11 @@
       fetch("/api/brains").catch(() => null),
     ]);
     const brainsResult = await brainsResponse?.json().catch(() => null);
-    accountBrainsAvailable = Boolean(brainsResponse?.ok && Array.isArray(brainsResult?.brains));
+    configuredProviders = brainsResponse?.ok && Array.isArray(brainsResult?.brains)
+      ? brainsResult.brains
+          .filter((entry: any) => entry?.status === "configured" && (entry.provider === "openai" || entry.provider === "anthropic"))
+          .map((entry: any) => entry.provider)
+      : [];
     capsules = r.ok ? ((await r.json()).capsules ?? []) : [];
     if (capsules.length === 0) {
       phase = "none";
@@ -443,7 +409,7 @@
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
         messages.push({ role: "assistant", text: d.reply || "…" });
-        await refreshBrainStatus();
+        await refreshInference();
       } else {
         messages.push({ role: "system", tone: "error", text: chatErrorText(r.status, d.detail ?? d.error) });
       }
@@ -458,7 +424,7 @@
 
   async function upload(ev: Event) {
     const file = (ev.target as HTMLInputElement).files?.[0];
-    if (!file || !selected || uploading || brainSwapBusy) return;
+    if (!file || !selected || uploading || inferenceBusy) return;
     uploading = true;
     try {
       const form = new FormData();
@@ -516,7 +482,7 @@
   }
 
   onMount(async () => {
-    // markdown, browser-only: raw brain output is escaped first (marked won't emit HTML from us),
+    // markdown, browser-only: raw model output is escaped first (marked won't emit HTML from us),
     // then DOMPurify strips anything unsafe — so a reply that contains HTML/script can't run.
     try {
       const [{ marked }, dp] = await Promise.all([import("marked"), import("dompurify")]);
@@ -587,69 +553,55 @@
           <code class="capsule-id">{selected}</code>
         </section>
 
-        <section class="panel control-card brain-control" aria-labelledby="brain-control-title" aria-busy={brainSwapBusy}>
+        <section class="panel control-card brain-control" aria-labelledby="brain-control-title" aria-busy={inferenceBusy}>
           <header class="control-heading">
             <span class="control-icon brain-icon" aria-hidden="true"><HudIcon name="brain" size={21} /></span>
             <div><p class="kicker">Runtime</p><h2 id="brain-control-title">{tr("chat_brain_title", lang)}</h2></div>
-            {#if brain}
-              <span class="brain-state" class:ready={brain.authenticated} class:pending={brain.configured && !brain.authenticated}>
+            {#if inference}
+              <span class="brain-state" class:ready={providerReady} class:pending={!providerReady}>
                 <i aria-hidden="true"></i>
-                {brain.authenticated ? tr("brain_authenticated_verified", lang) : brain.configured ? tr("brain_verification_pending", lang) : tr("brain_not_configured", lang)}
+                {providerReady ? tr("brain_authenticated_verified", lang) : tr("brain_not_configured", lang)}
               </span>
             {/if}
           </header>
           <p class="control-help">{tr("chat_brain_help", lang)}</p>
 
-          {#if brain}
+          {#if inference}
             <div class="brain-editor">
               <label class="field-stack">
                 <span>{tr("brain_provider", lang)}</span>
-                <select class="field field-sm" value={brainChoice} disabled={runtimeBusy || configureBusy} onchange={chooseBrain}>
-                  <option value="claude-code">Claude Code</option>
-                  <option value="codex">Codex</option>
+                <select class="field field-sm" value={providerChoice} disabled={runtimeBusy} onchange={chooseProvider}>
+                  {#each MODEL_PROVIDERS as option (option.id)}
+                    <option value={option.id}>{option.title}</option>
+                  {/each}
                 </select>
               </label>
               <label class="field-stack">
                 <span>{tr("model_label", lang)}</span>
-                <input class="field field-sm" bind:value={brainModel} maxlength="128" autocomplete="off" disabled={runtimeBusy || configureBusy} placeholder={tr("model_default", lang)} />
+                <input class="field field-sm" bind:value={modelChoice} maxlength="128" autocomplete="off" disabled={runtimeBusy} placeholder={defaultModelFor(providerChoice)} />
               </label>
-              <button class="btn-primary brain-switch" type="button" disabled={!brainHasChanges || runtimeBusy || configureBusy} onclick={swapBrain}>
+              <button class="btn-primary brain-switch" type="button" disabled={!inferenceHasChanges || runtimeBusy} onclick={saveInference}>
                 <HudIcon name="retry" size={16} />
-                {brainSwapBusy ? tr("brain_switching", lang) : tr("brain_switch", lang)}
+                {inferenceBusy ? tr("brain_switching", lang) : tr("brain_switch", lang)}
               </button>
               <p class="brain-hint"><HudIcon name="shield" size={15} />{tr("brain_switch_hint", lang)}</p>
-              {#if brainSwapErr}<p class="notice notice-error compact-notice" role="alert">{brainSwapErr}</p>{/if}
-              {#if brainSwapOk}<p class="notice notice-success compact-notice" role="status">{brainSwapOk}</p>{/if}
+              {#if inferenceError}<p class="notice notice-error compact-notice" role="alert">{inferenceError}</p>{/if}
+              {#if inferenceSaved}<p class="notice notice-success compact-notice" role="status">{inferenceSaved}</p>{/if}
             </div>
 
             <div class="brain-access">
               <div class="access-heading"><HudIcon name="key" size={16} /><span>{tr("brain_auth_type", lang)}</span></div>
-              {#if brain.configured}
-                {#if brain.authenticated}
-                  <p class="access-state success"><HudIcon name="check" size={16} />{tr("brain_authenticated_verified", lang)}</p>
-                {:else}
-                  <p class="notice compact-notice">{tr("brain_verification_pending", lang)}</p>
-                {/if}
+              {#if providerReady}
+                <p class="access-state success"><HudIcon name="check" size={16} />{tr("brain_authenticated_verified", lang)}</p>
               {:else}
                 <p class="access-copy">{tr("brain_wait", lang)}</p>
                 <div class="access-actions">
                   <a class="btn-primary" href={u.account(lang)}>{tr("brain_account_cta", lang)}</a>
-                  {#if accountBrainsAvailable}
-                    <button class="btn-ghost" type="button" disabled={configureBusy || brainSwapBusy} onclick={applyAccountBrain}>
-                      {configureBusy ? "…" : tr("brain_apply", lang)}
-                    </button>
-                  {/if}
                 </div>
-                {#if configureErr}<p class="notice notice-error compact-notice" role="alert">{configureErr}</p>{/if}
-
-                {#if brain.brain === "claude-code" || brain.brain === "codex"}
-                  <p class="oauth-divider">{tr("brain_interactive_or", lang)}</p>
-                  <BrainLoginFlow {lang} capsuleId={selected} provider={brain.brain} oncomplete={loadCapsuleContext} />
-                {/if}
               {/if}
             </div>
           {:else}
-            <p class="oauth-progress"><span class="loading-pulse" aria-hidden="true"></span>{tr("loading", lang)}</p>
+            <p class="inference-progress"><span class="loading-pulse" aria-hidden="true"></span>{tr("loading", lang)}</p>
           {/if}
         </section>
 
@@ -1011,7 +963,7 @@
 
   .brain-hint,
   .access-copy,
-  .oauth-progress,
+  .inference-progress,
   .empty-crew {
     margin: 0;
     color: var(--color-muted);
@@ -1020,7 +972,7 @@
   }
 
   .brain-hint,
-  .oauth-progress,
+  .inference-progress,
   .access-heading,
   .access-state { display: flex; align-items: flex-start; gap: 0.45rem; }
   .brain-hint { color: var(--color-muted-2); }
@@ -1033,8 +985,7 @@
   .access-actions { display: grid; gap: 0.5rem; }
   .access-actions { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .access-actions > :global(*) { min-width: 0; padding-inline: 0.65rem; font-size: 0.62rem; }
-  .oauth-divider { margin: 0.1rem 0; color: var(--color-muted-2); font-family: var(--font-mono); font-size: 0.59rem; text-align: center; text-transform: uppercase; }
-  .oauth-progress { align-items: center; }
+  .inference-progress { align-items: center; }
 
   .assistant-count {
     min-width: 1.8rem;
