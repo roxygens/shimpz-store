@@ -1,7 +1,14 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { goto } from "$app/navigation";
-  import type { Locale } from "$lib/catalog";
+  import { ASSISTANT_BY_ID, type Locale } from "$lib/catalog";
+  import {
+    createAssistantChatTurn,
+    parseCapsuleStorage,
+    parseCapsuleUpload,
+    parseInstalledAssistants,
+    selectRunnableAssistant,
+  } from "$lib/capsuleChat.js";
   import { tr } from "$lib/i18n";
   import { u } from "$lib/url";
   import BrainLoginFlow from "$lib/components/BrainLoginFlow.svelte";
@@ -19,6 +26,15 @@
   let selected = $state("");
   let brain = $state<any>(null); // {brain, title, configured, authenticated}
   let crew = $state<any[]>([]);
+  let selectedAssistant = $state("");
+  let capsuleFiles = $state<any[]>([]);
+  let storageUsed = $state(0);
+  let storageLimit = $state(100 * 1024 * 1024);
+  let storageRemaining = $state(100 * 1024 * 1024);
+  let storageLoading = $state(false);
+  let storageError = $state("");
+  let deletingFile = $state("");
+  let attachedFileIds = $state<string[]>([]);
   let messages = $state<any[]>([]);
   let draft = $state("");
   let busy = $state(false);
@@ -26,6 +42,53 @@
   let uploading = $state(false);
   let thread = $state<HTMLElement | null>(null);
   let fileInput = $state<HTMLInputElement | null>(null);
+
+  const activeAssistant = $derived(crew.find((assistant) => assistant.id === selectedAssistant) ?? null);
+  const canChat = $derived(Boolean(activeAssistant && brain?.configured));
+  const storagePercent = $derived(
+    storageLimit > 0 ? Math.min(100, Math.max(0, (storageUsed / storageLimit) * 100)) : 0,
+  );
+  const attachedFiles = $derived(capsuleFiles.filter((file) => attachedFileIds.includes(file.id)));
+
+  function assistantName(id: string) {
+    return ASSISTANT_BY_ID.get(id)?.name ?? id;
+  }
+
+  function assistantSelectionKey(cid: string) {
+    return `${SEL_KEY}_assistant_${cid}`;
+  }
+
+  function formatBytes(value: number) {
+    if (value < 1024) return `${value} B`;
+    if (value < 1024 * 1024) return `${(value / 1024).toFixed(value < 10 * 1024 ? 1 : 0)} KB`;
+    return `${(value / (1024 * 1024)).toFixed(value < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+  }
+
+  function applyStorage(payload: any) {
+    const parsed = parseCapsuleStorage(payload);
+    capsuleFiles = parsed.files;
+    attachedFileIds = attachedFileIds.filter((fileId) => parsed.files.some((file) => file.id === fileId));
+    storageUsed = parsed.used_bytes;
+    storageLimit = parsed.limit_bytes;
+    storageRemaining = parsed.remaining_bytes;
+  }
+
+  async function refreshStorage(cid = selected) {
+    if (!cid) return;
+    storageLoading = true;
+    storageError = "";
+    try {
+      const response = await fetch(`/api/capsules/${cid}/files`);
+      const payload = await response.json().catch(() => ({}));
+      if (selected !== cid) return;
+      if (!response.ok) throw new Error(payload?.detail ?? payload?.error ?? "storage unavailable");
+      applyStorage(payload);
+    } catch (error) {
+      if (selected === cid) storageError = error instanceof Error ? error.message : "storage unavailable";
+    } finally {
+      if (selected === cid) storageLoading = false;
+    }
+  }
 
   // markdown renderer — loaded client-side only (marked + DOMPurify), so SSR/prerender never touches
   // the browser build. Until it loads, replies render as safe escaped text.
@@ -221,23 +284,57 @@
     const cid = selected;
     brain = null;
     crew = [];
+    selectedAssistant = "";
+    capsuleFiles = [];
+    attachedFileIds = [];
+    storageUsed = 0;
+    storageRemaining = storageLimit;
+    storageError = "";
     if (!cid) return;
     localStorage.setItem(SEL_KEY, cid);
     const name = capsules.find((c) => c.id === cid)?.name ?? cid;
     localStorage.setItem(SEL_KEY + "_name", name);
-    const [b, a] = await Promise.all([
+    storageLoading = true;
+    const [b, a, f] = await Promise.all([
       fetch(`/api/capsules/${cid}/brain`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch(`/api/capsules/${cid}/apps`).then((r) => (r.ok ? r.json() : { apps: [] })).catch(() => ({ apps: [] })),
+      fetch(`/api/capsules/${cid}/files`).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, data: {} })),
     ]);
     if (selected !== cid) return;
     brain = b;
-    crew = a.apps ?? [];
+    try {
+      crew = parseInstalledAssistants(a);
+    } catch {
+      crew = [];
+    }
+    selectedAssistant = selectRunnableAssistant(crew, localStorage.getItem(assistantSelectionKey(cid)) ?? "");
+    if (selectedAssistant) localStorage.setItem(assistantSelectionKey(cid), selectedAssistant);
+    try {
+      if (!f.ok) throw new Error(f.data?.detail ?? f.data?.error ?? "storage unavailable");
+      applyStorage(f.data);
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "storage unavailable";
+    } finally {
+      storageLoading = false;
+    }
     const capsule = capsules.find((item) => item.id === cid);
     loadedBrainChoice = b?.brain ?? capsule?.brain ?? "claude-code";
     loadedBrainModel = String(b?.model ?? capsule?.model ?? defaultBrainModel(loadedBrainChoice));
     brainChoice = loadedBrainChoice;
     brainModel = loadedBrainModel;
     connectWs(cid);
+  }
+
+  function chooseAssistant(event: Event) {
+    if (runtimeBusy) return;
+    const assistant = (event.currentTarget as HTMLInputElement).value;
+    if (!crew.some((item) => item.id === assistant && item.status === "running")) return;
+    selectedAssistant = assistant;
+    localStorage.setItem(assistantSelectionKey(selected), assistant);
+    messages = [];
+    draft = "";
+    status = "";
+    attachedFileIds = [];
   }
 
   function resetCapsuleSession() {
@@ -252,6 +349,12 @@
     status = "";
     messages = [];
     draft = "";
+    selectedAssistant = "";
+    capsuleFiles = [];
+    attachedFileIds = [];
+    storageUsed = 0;
+    storageError = "";
+    deletingFile = "";
   }
 
   async function changeCapsule(next: string, updateUrl = true) {
@@ -350,15 +453,22 @@
 
   async function send() {
     const text = draft.trim();
-    if (!text || runtimeBusy || !selected || !brain?.configured) return;
+    if (!text || runtimeBusy || !selected || !canChat) return;
+    let turn: { assistant: string; message: string; files?: string[] };
+    try {
+      turn = createAssistantChatTurn(selectedAssistant, text, attachedFileIds);
+    } catch {
+      return;
+    }
     draft = "";
     busy = true;
     status = tr("chat_thinking", lang);
-    messages.push({ role: "captain", text });
+    messages.push({ role: "captain", text, files: attachedFiles.map((file) => file.name) });
+    attachedFileIds = [];
     stick = true; // sending re-engages auto-follow
     scrollDown(true);
     if (wsReady && ws) {
-      ws.send(JSON.stringify({ type: "chat", message: text })); // reply STREAMS back as pushes
+      ws.send(JSON.stringify({ type: "chat", ...turn })); // reply STREAMS back as pushes
       return;
     }
     // fallback: socket down → the non-streaming POST
@@ -366,7 +476,7 @@
       const r = await fetch(`/api/capsules/${selected}/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: text }),
+        body: JSON.stringify(turn),
       });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
@@ -386,24 +496,61 @@
 
   async function upload(ev: Event) {
     const file = (ev.target as HTMLInputElement).files?.[0];
-    if (!file || !selected || uploading || brainSwapBusy || !brain?.configured) return;
+    if (!file || !selected || uploading || brainSwapBusy) return;
     uploading = true;
     try {
       const form = new FormData();
       form.append("file", file);
       const r = await fetch(`/api/capsules/${selected}/files`, { method: "POST", body: form });
       const d = await r.json().catch(() => ({}));
-      messages.push(
-        r.ok
-          ? { role: "system", tone: "success", text: `${tr("chat_file_ok", lang)} ${d.path}` }
-          : { role: "system", tone: "error", text: "✗ " + (d.error ?? d.detail ?? "upload error") },
-      );
+      if (r.ok) {
+        const uploaded = parseCapsuleUpload(d);
+        capsuleFiles = [...capsuleFiles, uploaded.file];
+        storageUsed = uploaded.used_bytes;
+        storageLimit = uploaded.limit_bytes;
+        storageRemaining = uploaded.remaining_bytes;
+        messages.push({
+          role: "system",
+          tone: "success",
+          text: `${tr("chat_file_ok", lang)} ${uploaded.file.name}. ${tr("chat_file_boundary", lang)}`,
+        });
+      } else {
+        messages.push({ role: "system", tone: "error", text: "✗ " + (d.error ?? d.detail ?? "upload error") });
+      }
+    } catch {
+      messages.push({ role: "system", tone: "error", text: "✗ upload error" });
     } finally {
       uploading = false;
       if (fileInput) fileInput.value = "";
       stick = true;
       scrollDown(true);
     }
+  }
+
+  async function deleteFile(fileId: string) {
+    if (!selected || deletingFile || uploading || runtimeBusy) return;
+    deletingFile = fileId;
+    storageError = "";
+    try {
+      const response = await fetch(`/api/capsules/${selected}/files/${fileId}`, { method: "DELETE" });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.detail ?? payload?.error ?? "delete failed");
+      await refreshStorage(selected);
+    } catch (error) {
+      storageError = error instanceof Error ? error.message : "delete failed";
+    } finally {
+      deletingFile = "";
+    }
+  }
+
+  function toggleFile(fileId: string) {
+    if (runtimeBusy || uploading || deletingFile) return;
+    if (attachedFileIds.includes(fileId)) {
+      attachedFileIds = attachedFileIds.filter((value) => value !== fileId);
+      return;
+    }
+    if (attachedFileIds.length >= 8 || !capsuleFiles.some((file) => file.id === fileId)) return;
+    attachedFileIds = [...attachedFileIds, fileId];
   }
 
   onMount(async () => {
@@ -553,8 +700,26 @@
           <p class="control-help">{tr("chat_assistants_help", lang)}</p>
           {#if crew.length}
             <ul class="crew-list">
-              {#each crew as assistant (assistant.app)}
-                <li><HudIcon name="assistants" size={16} /><span>{assistant.app}</span><small>{assistant.status}</small></li>
+              {#each crew as assistant (assistant.id)}
+                <li class:selected={assistant.id === selectedAssistant} class:unavailable={assistant.status !== "running"}>
+                  <label>
+                    <input
+                      type="radio"
+                      name="chat-assistant"
+                      value={assistant.id}
+                      checked={assistant.id === selectedAssistant}
+                      disabled={runtimeBusy || assistant.status !== "running"}
+                      onchange={chooseAssistant} />
+                    <span class="assistant-selector-icon" aria-hidden="true"><HudIcon name="assistants" size={16} /></span>
+                    <span class="assistant-identity">
+                      <strong>{assistantName(assistant.id)}</strong>
+                      <small>{assistant.status}</small>
+                    </span>
+                  </label>
+                  <div class="power-list" aria-label={tr("chat_powers", lang)}>
+                    {#each assistant.powers as power (power)}<code>{power}</code>{/each}
+                  </div>
+                </li>
               {/each}
             </ul>
           {:else}
@@ -567,17 +732,72 @@
             </a>
           </div>
         </section>
+
+        <section class="panel control-card storage-control" aria-labelledby="storage-context-title">
+          <header class="control-heading">
+            <span class="control-icon storage-icon" aria-hidden="true"><HudIcon name="attach" size={20} /></span>
+            <div><p class="kicker">Capsule</p><h2 id="storage-context-title">{tr("chat_storage_title", lang)}</h2></div>
+            <span class="assistant-count storage-count">{capsuleFiles.length}</span>
+          </header>
+          <p class="control-help">{tr("chat_storage_help", lang)}</p>
+          <div class="storage-meter" aria-label={`${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}`}>
+            <span style={`width:${storagePercent}%`}></span>
+          </div>
+          <p class="storage-usage">
+            <span>{formatBytes(storageUsed)} / {formatBytes(storageLimit)}</span>
+            <span>{formatBytes(storageRemaining)} {tr("chat_storage_free", lang)}</span>
+          </p>
+          {#if storageLoading}
+            <p class="storage-state"><span class="loading-pulse" aria-hidden="true"></span>{tr("loading", lang)}</p>
+          {:else if storageError}
+            <div class="storage-error" role="alert">
+              <p>{storageError}</p>
+              <button class="btn-ghost" type="button" onclick={() => refreshStorage()}>{tr("retry", lang)}</button>
+            </div>
+          {:else if capsuleFiles.length}
+            <ul class="file-list">
+              {#each capsuleFiles as file (file.id)}
+                <li class:attached={attachedFileIds.includes(file.id)}>
+                  <label class="file-select" title={tr("chat_file_select", lang)}>
+                    <input
+                      type="checkbox"
+                      checked={attachedFileIds.includes(file.id)}
+                      disabled={runtimeBusy || uploading || Boolean(deletingFile) || (attachedFileIds.length >= 8 && !attachedFileIds.includes(file.id))}
+                      aria-label={`${tr("chat_file_select", lang)} ${file.name}`}
+                      onchange={() => toggleFile(file.id)} />
+                    <span class="file-icon" aria-hidden="true"><HudIcon name="attach" size={14} /></span>
+                  </label>
+                  <span class="file-metadata">
+                    <strong>{file.name}</strong>
+                    <small>{file.media_type} · {formatBytes(file.size)}</small>
+                  </span>
+                  <button
+                    class="file-delete"
+                    type="button"
+                    title={tr("chat_file_delete", lang)}
+                    aria-label={`${tr("chat_file_delete", lang)} ${file.name}`}
+                    disabled={Boolean(deletingFile) || uploading || runtimeBusy}
+                    onclick={() => deleteFile(file.id)}>
+                    {#if deletingFile === file.id}…{:else}<HudIcon name="uninstall" size={14} />{/if}
+                  </button>
+                </li>
+              {/each}
+            </ul>
+          {:else}
+            <p class="storage-state">{tr("chat_storage_empty", lang)}</p>
+          {/if}
+        </section>
       </aside>
 
       <main class="conversation-shell" aria-labelledby="conversation-title">
         <header class="conversation-header">
-          <span class="conversation-avatar" aria-hidden="true"><HudIcon name="brain" size={24} /></span>
+          <span class="conversation-avatar" aria-hidden="true"><HudIcon name="assistants" size={24} /></span>
           <div>
-            <p class="kicker">{tr("chat_brain_target", lang)}</p>
-            <h2 id="conversation-title">{brain?.title || tr("brain_label", lang)}</h2>
+            <p class="kicker">{tr("chat_assistant_target", lang)}</p>
+            <h2 id="conversation-title">{activeAssistant ? assistantName(activeAssistant.id) : tr("chat_choose_assistant", lang)}</h2>
           </div>
-          <span class="conversation-status" class:online={wsReady && brain?.configured}>
-            <i aria-hidden="true"></i>{brain?.configured ? tr("chat_ready", lang) : tr("chat_setup_required", lang)}
+          <span class="conversation-status" class:online={wsReady && canChat}>
+            <i aria-hidden="true"></i>{canChat ? tr("chat_ready", lang) : !activeAssistant ? tr("chat_choose_assistant", lang) : tr("chat_setup_required", lang)}
           </span>
         </header>
         <div
@@ -592,7 +812,14 @@
           class="conversation-thread">
           {#each messages as m, i (i)}
             {#if m.role === "captain"}
-              <div class="message captain-message">{m.text}</div>
+              <div class="message captain-message">
+                <span>{m.text}</span>
+                {#if m.files?.length}
+                  <span class="message-files">
+                    {#each m.files as filename (filename)}<code>{filename}</code>{/each}
+                  </span>
+                {/if}
+              </div>
             {:else if m.role === "brain"}
               <div class="md message brain-message" class:caret={m.streaming} class:whitespace-pre-wrap={m.streaming}>{@html m.streaming ? escapeHtml(m.text) : renderMd(m.text || "")}</div>
             {:else if m.role === "ask"}
@@ -631,11 +858,21 @@
             {/if}
           {/each}
           {#if busy && status}<p class="turn-status"><span class="loading-pulse" aria-hidden="true"></span>{status}</p>{/if}
-          {#if messages.length === 0 && !busy}<div class="conversation-empty"><HudIcon name="chat" size={30} /><p>{tr("chat_empty", lang)}</p></div>{/if}
+          {#if messages.length === 0 && !busy}<div class="conversation-empty"><HudIcon name="chat" size={30} /><p>{activeAssistant ? tr("chat_empty", lang) : tr("chat_choose_assistant_help", lang)}</p></div>{/if}
         </div>
         <div class="composer">
+          {#if attachedFiles.length}
+            <div class="attachment-tray" aria-label={tr("chat_files_selected", lang)}>
+              <span>{attachedFiles.length}/8</span>
+              {#each attachedFiles as file (file.id)}
+                <button type="button" onclick={() => toggleFile(file.id)} aria-label={`${tr("chat_file_unselect", lang)} ${file.name}`}>
+                  <HudIcon name="attach" size={12} />{file.name}<span aria-hidden="true">×</span>
+                </button>
+              {/each}
+            </div>
+          {/if}
           <input bind:this={fileInput} type="file" class="hidden" onchange={upload} />
-          <button class="btn-ghost composer-icon" type="button" title={tr("chat_attach", lang)} aria-label={tr("chat_attach", lang)} disabled={uploading || runtimeBusy || !brain?.configured} onclick={() => fileInput?.click()}>
+          <button class="btn-ghost composer-icon" type="button" title={tr("chat_attach", lang)} aria-label={tr("chat_attach", lang)} disabled={uploading || runtimeBusy || !selected} onclick={() => fileInput?.click()}>
             {#if uploading}
               …
             {:else}
@@ -644,16 +881,16 @@
           </button>
           <textarea
             class="field field-area composer-input"
-            placeholder={tr("chat_placeholder", lang)}
+            placeholder={activeAssistant ? tr("chat_placeholder", lang) : tr("chat_choose_assistant", lang)}
             aria-label={tr("chat_placeholder", lang)}
             rows="2"
-            disabled={runtimeBusy || !brain?.configured}
+            disabled={runtimeBusy || !canChat}
             bind:value={draft}
             onkeydown={(event) => event.key === "Enter" && !event.shiftKey && !event.isComposing && (event.preventDefault(), send())}></textarea>
           {#if busy}
             <button class="btn-danger composer-action" type="button" onclick={stopTurn}><HudIcon name="stop" size={17} />{tr("chat_stop", lang)}</button>
           {:else}
-            <button class="btn-primary composer-action" type="button" disabled={!draft.trim() || runtimeBusy || !brain?.configured} onclick={send}><HudIcon name="send" size={17} />{tr("chat_send", lang)}</button>
+            <button class="btn-primary composer-action" type="button" disabled={!draft.trim() || runtimeBusy || !canChat} onclick={send}><HudIcon name="send" size={17} />{tr("chat_send", lang)}</button>
           {/if}
         </div>
       </main>
@@ -872,23 +1109,80 @@
     text-align: center;
   }
 
-  .crew-list { display: grid; margin: 0; padding: 0; list-style: none; }
+  .crew-list { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
   .crew-list li {
     display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
+    gap: 0.45rem;
+    border: 1px solid var(--color-border);
+    padding: 0.6rem;
+    background: #030303;
+  }
+  .crew-list li.selected {
+    border-color: color-mix(in oklab, var(--color-yellow) 48%, var(--color-border));
+    background: color-mix(in oklab, var(--color-yellow) 5%, #030303);
+    box-shadow: inset 2px 0 0 var(--color-yellow);
+  }
+  .crew-list li.unavailable { opacity: 0.58; }
+  .crew-list label {
+    display: grid;
+    grid-template-columns: auto auto minmax(0, 1fr);
     align-items: center;
     gap: 0.45rem;
-    border-top: 1px solid var(--color-border);
-    padding: 0.55rem 0;
+    cursor: pointer;
+  }
+  .crew-list input { width: 0.8rem; height: 0.8rem; margin: 0; accent-color: var(--color-yellow); }
+  .assistant-selector-icon { color: var(--color-yellow); }
+  .assistant-identity {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+  .assistant-identity strong {
+    overflow: hidden;
     color: var(--color-fg);
     font-family: var(--font-mono);
     font-size: 0.68rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .crew-list li > :global(svg) { color: var(--color-yellow); }
-  .crew-list small { color: var(--color-muted-2); font-size: 0.56rem; text-transform: uppercase; }
+  .assistant-identity small { color: var(--color-muted-2); font-size: 0.54rem; text-transform: uppercase; }
+  .power-list { display: flex; flex-wrap: wrap; gap: 0.3rem; padding-left: 3rem; }
+  .power-list code {
+    padding: 0.14rem 0.3rem;
+    color: var(--color-cyan);
+    background: color-mix(in oklab, var(--color-cyan) 6%, #000);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-cyan) 25%, var(--color-border));
+    font-size: 0.54rem;
+  }
   .assistant-boundary { margin-top: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 0.7rem; }
   .assistant-boundary p { margin: 0; color: var(--color-muted); font-size: 0.68rem; line-height: 1.45; }
   .assistant-boundary a { display: inline-block; margin-top: 0.45rem; color: var(--color-cyan); font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600; text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 0.22em; }
+
+  .storage-icon { color: var(--color-green); }
+  .storage-count { color: var(--color-green); background: color-mix(in oklab, var(--color-green) 7%, #000); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-green) 35%, var(--color-border)); }
+  .storage-meter { height: 0.32rem; overflow: hidden; background: var(--color-border); }
+  .storage-meter span { display: block; height: 100%; min-width: 1px; background: var(--color-green); box-shadow: 0 0 8px color-mix(in oklab, var(--color-green) 55%, transparent); }
+  .storage-usage { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.35rem 0 0; color: var(--color-muted-2); font-family: var(--font-mono); font-size: 0.54rem; }
+  .storage-state { display: flex; align-items: center; gap: 0.5rem; margin: 0.75rem 0 0; color: var(--color-muted); font-size: 0.68rem; }
+  .storage-error { display: grid; gap: 0.45rem; margin-top: 0.7rem; }
+  .storage-error p { margin: 0; color: var(--color-danger); font-size: 0.65rem; line-height: 1.4; overflow-wrap: anywhere; }
+  .storage-error button { width: fit-content; min-height: 2rem; padding: 0.35rem 0.55rem; font-size: 0.58rem; }
+  .file-list { display: grid; gap: 0.35rem; margin: 0.75rem 0 0; padding: 0; list-style: none; }
+  .file-list li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 0.45rem; border-top: 1px solid var(--color-border); padding-top: 0.45rem; }
+  .file-list li.attached { color: var(--color-cyan); }
+  .file-select { display: grid; grid-template-columns: auto auto; align-items: center; gap: 0.3rem; cursor: pointer; }
+  .file-select input { width: 0.75rem; height: 0.75rem; margin: 0; accent-color: var(--color-cyan); }
+  .file-icon { color: var(--color-green); }
+  .file-list li.attached .file-icon { color: var(--color-cyan); }
+  .file-metadata { display: grid; min-width: 0; }
+  .file-metadata strong { overflow: hidden; font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+  .file-metadata small { overflow: hidden; color: var(--color-muted-2); font-size: 0.51rem; text-overflow: ellipsis; white-space: nowrap; }
+  .file-delete { display: grid; width: 1.8rem; height: 1.8rem; place-items: center; border: 0; padding: 0; color: var(--color-muted); background: transparent; cursor: pointer; }
+  .file-delete:hover:not(:disabled) { color: var(--color-danger); background: color-mix(in oklab, var(--color-danger) 8%, transparent); }
+  .file-delete:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
+  .file-delete:disabled { cursor: not-allowed; opacity: 0.45; }
 
   .conversation-shell {
     display: flex;
@@ -942,12 +1236,17 @@
   }
 
   .captain-message {
+    display: grid;
+    gap: 0.55rem;
     align-self: flex-end;
     color: #dffcff;
     background: color-mix(in oklab, var(--color-cyan) 11%, #050505);
     box-shadow: inset 2px 0 0 var(--color-cyan), inset 0 0 0 1px color-mix(in oklab, var(--color-cyan) 26%, var(--color-border));
     clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px);
   }
+
+  .message-files { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 0.3rem; }
+  .message-files code { max-width: 12rem; overflow: hidden; padding: 0.18rem 0.35rem; color: var(--color-cyan); background: #000; font-size: 0.56rem; text-overflow: ellipsis; white-space: nowrap; }
 
   .brain-message,
   .ask-message {
@@ -991,6 +1290,14 @@
     padding: 0.85rem;
     background: #050505;
   }
+
+  .attachment-tray { display: flex; grid-column: 1 / -1; align-items: center; gap: 0.35rem; overflow-x: auto; padding-bottom: 0.2rem; color: var(--color-muted-2); font-family: var(--font-mono); font-size: 0.55rem; scrollbar-width: thin; }
+  .attachment-tray > span { flex: none; color: var(--color-cyan); }
+  .attachment-tray button { display: inline-flex; min-width: 0; flex: none; align-items: center; gap: 0.3rem; border: 1px solid color-mix(in oklab, var(--color-cyan) 30%, var(--color-border)); padding: 0.25rem 0.4rem; color: var(--color-fg); background: color-mix(in oklab, var(--color-cyan) 5%, #000); font: inherit; cursor: pointer; }
+  .attachment-tray button > :global(svg) { color: var(--color-cyan); }
+  .attachment-tray button span { color: var(--color-muted); font-size: 0.75rem; }
+  .attachment-tray button:hover { border-color: var(--color-cyan); }
+  .attachment-tray button:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
 
   .composer-input { max-height: 12rem; min-height: 3rem; resize: vertical; line-height: 1.45; }
   .composer-icon { width: 2.9rem; min-height: 3rem; padding: 0; }

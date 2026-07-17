@@ -339,6 +339,7 @@ CAPSULE_FILE_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 RELEASED_CLOUD_ASSISTANTS = frozenset({"hello-pulse"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
 MAX_CHAT_MESSAGE_CHARS = 16_000
+MAX_CHAT_FILES = 8
 MAX_CAPSULE_FILES = 256
 
 
@@ -370,10 +371,10 @@ def _canonical_capsule_file_id(value: object) -> str | None:
     return value if isinstance(value, str) and CAPSULE_FILE_ID_RE.fullmatch(value) is not None else None
 
 
-def _chat_turn_payload(payload: dict) -> dict[str, str]:
+def _chat_turn_payload(payload: dict) -> dict[str, object]:
     """Project one browser turn onto the controller's closed Assistant chat contract."""
-    if set(payload) != {"assistant", "message"}:
-        raise ClientPayloadError(400, "body must contain only assistant and message")
+    if set(payload) not in ({"assistant", "message"}, {"assistant", "message", "files"}):
+        raise ClientPayloadError(400, "body must contain assistant, message, and optional files")
     assistant = _canonical_assistant_id(payload["assistant"])
     if assistant is None:
         raise ClientPayloadError(400, "select a valid installed Assistant")
@@ -385,7 +386,16 @@ def _chat_turn_payload(payload: dict) -> dict[str, str]:
         raise ClientPayloadError(400, "message must be non-empty")
     if len(message) > MAX_CHAT_MESSAGE_CHARS:
         raise ClientPayloadError(400, f"message too long (> {MAX_CHAT_MESSAGE_CHARS} chars)")
-    return {"assistant": assistant, "message": message}
+    files = payload.get("files", [])
+    if not isinstance(files, list) or len(files) > MAX_CHAT_FILES:
+        raise ClientPayloadError(400, f"files must contain at most {MAX_CHAT_FILES} opaque ids")
+    opaque_ids = [_canonical_capsule_file_id(file_id) for file_id in files]
+    if any(file_id is None for file_id in opaque_ids) or len(opaque_ids) != len(set(opaque_ids)):
+        raise ClientPayloadError(400, "files must contain unique opaque ids")
+    turn: dict[str, object] = {"assistant": assistant, "message": message}
+    if opaque_ids:
+        turn["files"] = opaque_ids
+    return turn
 
 
 def _public_file_metadata(value: object) -> dict | None:
@@ -1568,6 +1578,7 @@ class _StreamRelay:
     queue: asyncio.Queue
     loop: asyncio.AbstractEventLoop
     started: asyncio.Event
+    files: tuple[str, ...] = ()
 
 
 @dataclass
@@ -1613,10 +1624,10 @@ def _stream_lines(relay: _StreamRelay) -> None:
     parsed = urlparse(CAPSULEDRIVER_URL)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=200)
     try:
-        body = jsonlib.dumps(
-            {"assistant": relay.assistant, "message": relay.text},
-            ensure_ascii=False,
-        ).encode()
+        payload: dict[str, object] = {"assistant": relay.assistant, "message": relay.text}
+        if relay.files:
+            payload["files"] = list(relay.files)
+        body = jsonlib.dumps(payload, ensure_ascii=False).encode()
         conn.request(
             "POST",
             f"/v1/capsules/{relay.cid}/chat/stream",
@@ -1675,6 +1686,7 @@ class _WsTurn:
     text: str
     started: asyncio.Event
     dispatched: asyncio.Event
+    files: tuple[str, ...] = ()
 
 
 def _relay_capacity_event() -> dict:
@@ -1739,6 +1751,7 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
                     queue,
                     loop,
                     turn.started,
+                    turn.files,
                 ),
             )
             turn.dispatched.set()
@@ -1753,7 +1766,7 @@ async def _ws_run_turn(
     ws: WebSocket,
     cid: str,
     hdr: dict,
-    payload: dict[str, str],
+    payload: dict[str, object],
     started: asyncio.Event,
 ) -> None:
     """Relay a LIVE streaming turn: text/tool/done/error events pushed as the brain produces them."""
@@ -1772,6 +1785,7 @@ async def _ws_run_turn(
             text=payload["message"],
             started=started,
             dispatched=dispatched,
+            files=tuple(payload.get("files", [])),
         ),
         admitted,
     )
@@ -1796,6 +1810,7 @@ def _start_ws_turn(
                 text=msg["message"],
                 started=started,
                 dispatched=dispatched,
+                files=tuple(msg.get("files", [])),
             ),
             lease,
         )
@@ -1859,11 +1874,15 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
     leases = state.setdefault("leases", {})
     if msg.get("type") == "chat":
         try:
-            if set(msg) != {"type", "assistant", "message"}:
-                raise ClientPayloadError(400, "chat frame must contain only type, assistant, and message")
-            turn_payload = _chat_turn_payload(
-                {"assistant": msg.get("assistant"), "message": msg.get("message")}
-            )
+            if set(msg) not in (
+                {"type", "assistant", "message"},
+                {"type", "assistant", "message", "files"},
+            ):
+                raise ClientPayloadError(
+                    400,
+                    "chat frame must contain type, assistant, message, and optional files",
+                )
+            turn_payload = _chat_turn_payload({key: value for key, value in msg.items() if key != "type"})
         except ClientPayloadError as exc:
             await ws.send_json({"type": "error", "status": exc.status, "detail": exc.detail})
             return

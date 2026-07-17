@@ -582,14 +582,28 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         loop = asyncio.get_running_loop()
         started = asyncio.Event()
         prompt = "ação e camarão 🦐"
+        opaque_file = "a" * 32
         with _real_stream_driver(encoded_reply) as requests:
             await asyncio.to_thread(
                 main._stream_lines,
-                main._StreamRelay("cap-utf8", "hello-pulse", prompt, {}, queue, loop, started),
+                main._StreamRelay(
+                    "cap-utf8",
+                    "hello-pulse",
+                    prompt,
+                    {},
+                    queue,
+                    loop,
+                    started,
+                    (opaque_file,),
+                ),
             )
         assert started.is_set()
         assert len(requests) == 1
-        assert json.loads(requests[0]) == {"assistant": "hello-pulse", "message": prompt}
+        assert json.loads(requests[0]) == {
+            "assistant": "hello-pulse",
+            "message": prompt,
+            "files": [opaque_file],
+        }
         assert prompt.encode() in requests[0]
         assert b"\\u" not in requests[0]
         assert await queue.get() == {"type": "done", "reply": reply}

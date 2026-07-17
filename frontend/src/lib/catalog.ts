@@ -90,7 +90,7 @@ export const DRIVERS: Driver[] = [
     ],
     boundaries: [
       { en: "Workspace Apps publish only to their own <name>.* topics", pt: "Apps de workspace publicam apenas nos próprios tópicos <name>.*" },
-      { en: "Capsule Assistants have no bus principal or operation grant today", pt: "Assistants de Cápsula ainda não têm principal no bus nem grant de operação" },
+      { en: "Capsule Assistants have no bus principal or Service operation grant today", pt: "Assistants de Cápsula ainda não têm principal no bus nem grant de operação de Service" },
     ],
   },
   {
@@ -162,7 +162,7 @@ export const SERVICE_BY_ID = DRIVER_BY_ID;
 // The Store intentionally exposes product facts only. Image references, digests, ports and runtime
 // privileges never enter browser code; the Capsule controller resolves an ID against its own trusted
 // registry. This keeps the public and embedded Store on one codebase without making it an authority.
-export interface AssistantOperation {
+export interface AssistantPower {
   id: string;
   name: I18n;
   summary: I18n;
@@ -177,7 +177,7 @@ export interface AssistantListing {
   description: I18n;
   price: "free";
   archs: Arch[];
-  operations: AssistantOperation[];
+  powers: AssistantPower[];
   permissions: string[];
 }
 
@@ -188,8 +188,8 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
     version: "0.1.0",
     creator: "julianoamg",
     summary: {
-      en: "Validate a Capsule with one safe hello operation.",
-      pt: "Valide uma Cápsula com uma operação hello segura.",
+      en: "Validate a Capsule with one safe hello Power.",
+      pt: "Valide uma Cápsula com um Power hello seguro.",
     },
     description: {
       en: "Use Hello Pulse to validate a complete contextual install, invoke and uninstall flow without credentials, Services or internet access.",
@@ -197,7 +197,7 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
     },
     price: "free",
     archs: ["amd64", "arm64"],
-    operations: [
+    powers: [
       {
         id: "hello",
         name: { en: "Say hello", pt: "Dizer olá" },

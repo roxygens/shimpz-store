@@ -125,7 +125,7 @@ def test_chat_requires_and_forwards_one_selected_assistant():
     with _control_plane() as calls, _authenticated_client() as client:
         response = client.post(
             "/api/capsules/cap_one/chat",
-            json={"assistant": "hello-pulse", "message": "  say hello  "},
+            json={"assistant": "hello-pulse", "message": "  say hello  ", "files": [FILE_ID]},
         )
         invalid = [
             client.post("/api/capsules/cap_one/chat", json={"message": "hello"}),
@@ -137,13 +137,25 @@ def test_chat_requires_and_forwards_one_selected_assistant():
                 "/api/capsules/cap_one/chat",
                 json={"assistant": "hello-pulse", "message": "hello", "provider": "codex"},
             ),
+            client.post(
+                "/api/capsules/cap_one/chat",
+                json={"assistant": "hello-pulse", "message": "hello", "files": ["../escape"]},
+            ),
+            client.post(
+                "/api/capsules/cap_one/chat",
+                json={"assistant": "hello-pulse", "message": "hello", "files": [FILE_ID, FILE_ID]},
+            ),
         ]
 
     assert response.status_code == 200
     assert response.json() == {"reply": "hello"}
-    assert [item.status_code for item in invalid] == [400, 400, 400]
+    assert [item.status_code for item in invalid] == [400, 400, 400, 400, 400]
     assert [call for call in calls if call[1].endswith("/chat")] == [
-        ("POST", "/v1/capsules/cap_one/chat", {"assistant": "hello-pulse", "message": "say hello"})
+        (
+            "POST",
+            "/v1/capsules/cap_one/chat",
+            {"assistant": "hello-pulse", "message": "say hello", "files": [FILE_ID]},
+        )
     ]
 
 

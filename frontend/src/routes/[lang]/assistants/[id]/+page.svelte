@@ -38,17 +38,17 @@
         <p class="about-copy">{t(assistant.description, lang)}</p>
       </section>
 
-      <section class="operations" aria-labelledby="assistant-operations-title">
-        <p class="kicker">{tr("assistants_detail_operations", lang)}</p>
-        <h2 id="assistant-operations-title">{assistant.operations.length} {tr("assistants_operation", lang)}</h2>
+      <section class="powers" aria-labelledby="assistant-powers-title">
+        <p class="kicker">{tr("assistants_detail_powers", lang)}</p>
+        <h2 id="assistant-powers-title">{assistant.powers.length} {tr("assistants_power", lang)}</h2>
         <ul>
-          {#each assistant.operations as operation (operation.id)}
+          {#each assistant.powers as power (power.id)}
             <li>
-              <span class="operation-icon" aria-hidden="true"><HudIcon name="retry" size={18} /></span>
+              <span class="power-icon" aria-hidden="true"><HudIcon name="retry" size={18} /></span>
               <div>
-                <code>{operation.id}</code>
-                <strong>{t(operation.name, lang)}</strong>
-                <p>{t(operation.summary, lang)}</p>
+                <code>{power.id}</code>
+                <strong>{t(power.name, lang)}</strong>
+                <p>{t(power.summary, lang)}</p>
               </div>
             </li>
           {/each}
@@ -85,13 +85,13 @@
   .detail-grid main { display: grid; gap: 2.5rem; }
   .detail-grid main h2 { margin: 0.45rem 0 0; font-size: clamp(1.35rem, 2.5vw, 1.8rem); }
   .about-copy { max-width: 48rem; margin: 0.75rem 0 0; color: var(--color-muted); font-size: clamp(1rem, 1.8vw, 1.15rem); line-height: 1.7; }
-  .operations h2 { margin: 0.45rem 0 0; font-size: 1.35rem; }
-  .operations ul { display: grid; gap: 0.7rem; margin: 1rem 0 0; padding: 0; list-style: none; }
-  .operations li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.8rem; border: 1px solid var(--color-border); padding: 0.9rem; background: var(--color-card); }
-  .operation-icon { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; color: var(--color-yellow); background: #000; }
-  .operations code { color: var(--color-cyan); font-size: 0.62rem; }
-  .operations strong { display: block; margin-top: 0.2rem; font-family: var(--font-mono); font-size: 0.9rem; }
-  .operations li p { margin: 0.25rem 0 0; color: var(--color-muted); font-size: 0.8rem; line-height: 1.55; }
+  .powers h2 { margin: 0.45rem 0 0; font-size: 1.35rem; }
+  .powers ul { display: grid; gap: 0.7rem; margin: 1rem 0 0; padding: 0; list-style: none; }
+  .powers li { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.8rem; border: 1px solid var(--color-border); padding: 0.9rem; background: var(--color-card); }
+  .power-icon { display: grid; width: 2.5rem; height: 2.5rem; place-items: center; color: var(--color-yellow); background: #000; }
+  .powers code { color: var(--color-cyan); font-size: 0.62rem; }
+  .powers strong { display: block; margin-top: 0.2rem; font-family: var(--font-mono); font-size: 0.9rem; }
+  .powers li p { margin: 0.25rem 0 0; color: var(--color-muted); font-size: 0.8rem; line-height: 1.55; }
   .detail-grid aside { align-self: start; background: var(--color-card); box-shadow: inset 0 0 0 1px var(--color-border); }
   .facts { margin: 0; }
   .facts div { padding: 0.9rem 1rem; border-bottom: 1px solid var(--color-border); }
