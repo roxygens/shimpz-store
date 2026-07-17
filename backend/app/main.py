@@ -334,8 +334,12 @@ WS_ALLOWED_ORIGINS = frozenset(
 ASSISTANT_MUTATION_ALLOWED_ORIGINS = WS_ALLOWED_ORIGINS
 CAPSULE_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
+CAPSULE_FILE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+CAPSULE_FILE_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 RELEASED_CLOUD_ASSISTANTS = frozenset({"hello-pulse"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
+MAX_CHAT_MESSAGE_CHARS = 16_000
+MAX_CAPSULE_FILES = 256
 
 
 def _ws_origin_allowed(origin: str | None) -> bool:
@@ -360,6 +364,117 @@ def _canonical_assistant_id(value: object) -> str | None:
     if not isinstance(value, str) or len(value) > 80 or ASSISTANT_ID_RE.fullmatch(value) is None:
         return None
     return value
+
+
+def _canonical_capsule_file_id(value: object) -> str | None:
+    return value if isinstance(value, str) and CAPSULE_FILE_ID_RE.fullmatch(value) is not None else None
+
+
+def _chat_turn_payload(payload: dict) -> dict[str, str]:
+    """Project one browser turn onto the controller's closed Assistant chat contract."""
+    if set(payload) != {"assistant", "message"}:
+        raise ClientPayloadError(400, "body must contain only assistant and message")
+    assistant = _canonical_assistant_id(payload["assistant"])
+    if assistant is None:
+        raise ClientPayloadError(400, "select a valid installed Assistant")
+    message = payload["message"]
+    if not isinstance(message, str):
+        raise ClientPayloadError(400, "message must be a string")
+    message = message.strip()
+    if not message:
+        raise ClientPayloadError(400, "message must be non-empty")
+    if len(message) > MAX_CHAT_MESSAGE_CHARS:
+        raise ClientPayloadError(400, f"message too long (> {MAX_CHAT_MESSAGE_CHARS} chars)")
+    return {"assistant": assistant, "message": message}
+
+
+def _public_file_metadata(value: object) -> dict | None:
+    """Copy only opaque, non-path file metadata from the trusted controller response."""
+    if not isinstance(value, dict):
+        return None
+    file_id = _canonical_capsule_file_id(value.get("id"))
+    name = value.get("name")
+    media_type = value.get("media_type")
+    size = value.get("size")
+    sha256 = value.get("sha256")
+    if (
+        file_id is None
+        or not isinstance(name, str)
+        or not name
+        or name.strip() != name
+        or len(name.encode()) > 255
+        or name in {".", ".."}
+        or "/" in name
+        or "\\" in name
+        or any(ord(character) < 32 or ord(character) == 127 for character in name)
+        or not isinstance(media_type, str)
+        or not media_type
+        or len(media_type) > 127
+        or isinstance(size, bool)
+        or not isinstance(size, int)
+        or size < 0
+        or not isinstance(sha256, str)
+        or CAPSULE_FILE_SHA256_RE.fullmatch(sha256) is None
+    ):
+        return None
+    metadata = {
+        "id": file_id,
+        "name": name,
+        "media_type": media_type,
+        "size": size,
+        "sha256": sha256,
+    }
+    if "created_at" in value:
+        created_at = value["created_at"]
+        if isinstance(created_at, bool) or not isinstance(created_at, int) or created_at < 0:
+            return None
+        metadata["created_at"] = created_at
+    return metadata
+
+
+def _public_storage_usage(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    usage = {}
+    for key in ("used_bytes", "limit_bytes", "remaining_bytes"):
+        amount = value.get(key)
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
+            return None
+        usage[key] = amount
+    if usage["used_bytes"] + usage["remaining_bytes"] != usage["limit_bytes"]:
+        return None
+    return usage
+
+
+def _public_file_upload(value: object) -> dict | None:
+    if not isinstance(value, dict):
+        return None
+    metadata = _public_file_metadata(value.get("file"))
+    usage = _public_storage_usage(value.get("file"))
+    return {"file": metadata, **usage} if metadata is not None and usage is not None else None
+
+
+def _public_file_inventory(value: object) -> dict | None:
+    if not isinstance(value, dict) or not isinstance(value.get("files"), list):
+        return None
+    values = value["files"]
+    if len(values) > MAX_CAPSULE_FILES:
+        return None
+    files = [_public_file_metadata(item) for item in values]
+    if any(item is None for item in files):
+        return None
+    opaque_ids = [item["id"] for item in files if item is not None]
+    usage = _public_storage_usage(value)
+    if usage is None or len(opaque_ids) != len(set(opaque_ids)):
+        return None
+    return {"files": files, **usage}
+
+
+def _public_file_deletion(value: object, expected_id: str) -> dict | None:
+    if not isinstance(value, dict) or value.get("id") != expected_id or value.get("deleted") is not True:
+        return None
+    usage = _public_storage_usage(value)
+    return {"id": expected_id, "deleted": True, **usage} if usage is not None else None
 
 
 def _released_assistant_inventory(data: object) -> list[str] | None:
@@ -1080,18 +1195,25 @@ async def capsule_chat(request: Request, cid: str) -> JSONResponse:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     try:
         payload = await _read_bounded_json(request, MAX_CHAT_BODY_BYTES)
+        body = _chat_turn_payload(payload)
     except ClientPayloadError as exc:
         return JSONResponse({"detail": exc.detail}, status_code=exc.status)
-    message = str((payload or {}).get("message", ""))
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
         CAPSULEDRIVER_URL,
         "POST",
         f"/v1/capsules/{cid}/chat",
-        {"message": message},
+        body,
         {"X-Shimpz-Account": token},
     )
-    log.info("chat", account=account_id, capsule=cid, status=status, chars=len(message))
+    log.info(
+        "chat",
+        account=account_id,
+        capsule=cid,
+        assistant=body["assistant"],
+        status=status,
+        chars=len(body["message"]),
+    )
     return JSONResponse(data, status_code=status)
 
 
@@ -1138,32 +1260,111 @@ async def capsule_chat_answer(request: Request, cid: str) -> JSONResponse:
     return JSONResponse(data, status_code=status)
 
 
-@app.post("/api/capsules/{cid}/files")
-async def capsule_file(request: Request, cid: str, file: UploadFile) -> JSONResponse:
-    """Upload one file to the Capsule's workspace inbox (the chat references it by path)."""
-    token, account_id, _ = await _authed_account_bounded(request)
+@app.get("/api/capsules/{cid}/files")
+async def capsule_files(request: Request, cid: str) -> JSONResponse:
+    """List opaque file metadata; file bytes and host paths remain controller-private."""
+    token, _, _ = await _authed_account_bounded(request)
     if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+        return _private_json({"detail": "not authenticated"}, 401)
+    capsule_id = _canonical_capsule_id(cid)
+    if capsule_id is None:
+        return _private_json({"detail": "bad capsule id"}, 400)
+    status, body = await _bounded_call(
+        _CONTROL_EXECUTOR,
+        CAPSULEDRIVER_URL,
+        "GET",
+        f"/v1/capsules/{capsule_id}/files",
+        extra={"X-Shimpz-Account": token},
+    )
+    if status != 200:
+        return _private_json(body, status)
+    inventory = _public_file_inventory(body)
+    if inventory is None:
+        log.warning("capsule_file_inventory_invalid", capsule=capsule_id)
+        return _private_json({"detail": "invalid Capsule storage inventory"}, 502)
+    return _private_json(inventory)
+
+
+@app.post("/api/capsules/{cid}/files")
+async def capsule_file_upload(request: Request, cid: str, file: UploadFile) -> JSONResponse:
+    """Upload one opaque Capsule object without granting a Brain or Assistant filesystem access."""
+    token, account_id, _ = await _authed_account_bounded(request)
+    try:
+        if not token:
+            raise ClientPayloadError(401, "not authenticated")
+        if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
+            raise ClientPayloadError(403, "forbidden origin")
+        capsule_id = _canonical_capsule_id(cid)
+        if capsule_id is None:
+            raise ClientPayloadError(400, "bad capsule id")
+    except ClientPayloadError as exc:
+        return _private_json({"detail": exc.detail}, exc.status)
     data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
-        return JSONResponse(
+        return _private_json(
             {"detail": f"file too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"},
-            status_code=413,
+            413,
         )
     payload = {
         "filename": file.filename or "upload.bin",
+        "media_type": file.content_type or "application/octet-stream",
         "content_b64": base64.b64encode(data).decode(),
     }
     status, body = await _bounded_call(
         _CONTROL_EXECUTOR,
         CAPSULEDRIVER_URL,
         "POST",
-        f"/v1/capsules/{cid}/files",
+        f"/v1/capsules/{capsule_id}/files",
         payload,
         extra={"X-Shimpz-Account": token},
     )
-    log.info("inbox_file", account=account_id, capsule=cid, bytes=len(data), status=status)
-    return JSONResponse(body, status_code=status)
+    log.info("capsule_file_upload", account=account_id, capsule=capsule_id, bytes=len(data), status=status)
+    if status != 200:
+        return _private_json(body, status)
+    uploaded = _public_file_upload(body)
+    if uploaded is None:
+        log.warning("capsule_file_upload_invalid", capsule=capsule_id)
+        return _private_json({"detail": "invalid Capsule storage response"}, 502)
+    return _private_json(uploaded)
+
+
+@app.delete("/api/capsules/{cid}/files/{file_id}")
+async def capsule_file_delete(request: Request, cid: str, file_id: str) -> JSONResponse:
+    token, account_id, _ = await _authed_account_bounded(request)
+    try:
+        if not token:
+            raise ClientPayloadError(401, "not authenticated")
+        if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
+            raise ClientPayloadError(403, "forbidden origin")
+        capsule_id = _canonical_capsule_id(cid)
+        opaque_id = _canonical_capsule_file_id(file_id)
+        if capsule_id is None:
+            raise ClientPayloadError(400, "bad capsule id")
+        if opaque_id is None:
+            raise ClientPayloadError(404, "file not found")
+    except ClientPayloadError as exc:
+        return _private_json({"detail": exc.detail}, exc.status)
+    status, body = await _bounded_call(
+        _CONTROL_EXECUTOR,
+        CAPSULEDRIVER_URL,
+        "DELETE",
+        f"/v1/capsules/{capsule_id}/files/{opaque_id}",
+        extra={"X-Shimpz-Account": token},
+    )
+    log.info(
+        "capsule_file_delete",
+        account=account_id,
+        capsule=capsule_id,
+        file_id=opaque_id,
+        status=status,
+    )
+    if status != 200:
+        return _private_json(body, status)
+    deleted = _public_file_deletion(body, opaque_id)
+    if deleted is None:
+        log.warning("capsule_file_delete_invalid", capsule=capsule_id, file_id=opaque_id)
+        return _private_json({"detail": "invalid Capsule storage response"}, 502)
+    return _private_json(deleted)
 
 
 # ── the Captain's LIVE bridge: WebSocket chat (push, not poll) ───────────────────
@@ -1255,7 +1456,7 @@ def _stream_queue_put(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, ite
     try:
         pending = asyncio.run_coroutine_threadsafe(queue.put(item), loop)
         pending.result(timeout=STREAM_QUEUE_PUT_TIMEOUT)
-    except TimeoutError, concurrent.futures.CancelledError, RuntimeError:
+    except (TimeoutError, concurrent.futures.CancelledError, RuntimeError):
         if pending is not None:
             pending.cancel()
         return False
@@ -1361,6 +1562,7 @@ def _relay_upstream_events(
 @dataclass(frozen=True)
 class _StreamRelay:
     cid: str
+    assistant: str
     text: str
     headers: dict
     queue: asyncio.Queue
@@ -1411,7 +1613,10 @@ def _stream_lines(relay: _StreamRelay) -> None:
     parsed = urlparse(CAPSULEDRIVER_URL)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=200)
     try:
-        body = jsonlib.dumps({"message": relay.text}, ensure_ascii=False).encode()
+        body = jsonlib.dumps(
+            {"assistant": relay.assistant, "message": relay.text},
+            ensure_ascii=False,
+        ).encode()
         conn.request(
             "POST",
             f"/v1/capsules/{relay.cid}/chat/stream",
@@ -1466,6 +1671,7 @@ class _WsTurn:
     ws: WebSocket
     cid: str
     headers: dict
+    assistant: str
     text: str
     started: asyncio.Event
     dispatched: asyncio.Event
@@ -1507,7 +1713,7 @@ async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Fut
                     "detail": "brain stream relay ended before a terminal event",
                 }
             )
-    except WebSocketDisconnect, OSError, RuntimeError, asyncio.CancelledError:
+    except (WebSocketDisconnect, OSError, RuntimeError, asyncio.CancelledError):
         await _stop_delivery_once(turn.cid, turn.headers, delivery)
         raise
     finally:
@@ -1527,6 +1733,7 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
                 _stream_lines,
                 _StreamRelay(
                     turn.cid,
+                    turn.assistant,
                     turn.text,
                     turn.headers,
                     queue,
@@ -1546,7 +1753,7 @@ async def _ws_run_turn(
     ws: WebSocket,
     cid: str,
     hdr: dict,
-    text: str,
+    payload: dict[str, str],
     started: asyncio.Event,
 ) -> None:
     """Relay a LIVE streaming turn: text/tool/done/error events pushed as the brain produces them."""
@@ -1561,7 +1768,8 @@ async def _ws_run_turn(
             ws=ws,
             cid=cid,
             headers=hdr,
-            text=text,
+            assistant=payload["assistant"],
+            text=payload["message"],
             started=started,
             dispatched=dispatched,
         ),
@@ -1584,7 +1792,8 @@ def _start_ws_turn(
                 ws=ws,
                 cid=cid,
                 headers=hdr,
-                text=str(msg.get("message", "")),
+                assistant=msg["assistant"],
+                text=msg["message"],
                 started=started,
                 dispatched=dispatched,
             ),
@@ -1649,6 +1858,16 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
     dispatches = state.setdefault("dispatches", {})
     leases = state.setdefault("leases", {})
     if msg.get("type") == "chat":
+        try:
+            if set(msg) != {"type", "assistant", "message"}:
+                raise ClientPayloadError(400, "chat frame must contain only type, assistant, and message")
+            turn_payload = _chat_turn_payload(
+                {"assistant": msg.get("assistant"), "message": msg.get("message")}
+            )
+        except ClientPayloadError as exc:
+            await ws.send_json({"type": "error", "status": exc.status, "detail": exc.detail})
+            return
+        msg = {"type": "chat", **turn_payload}
         turns.difference_update({turn for turn in turns if turn.done()})
         if turns:
             await ws.send_json(

@@ -158,7 +158,7 @@ def test_websocket_allows_only_one_local_turn_task():
                 websocket,
                 "test-capsule",
                 {},
-                {"type": "chat", "message": "second"},
+                {"type": "chat", "assistant": "hello-pulse", "message": "second"},
                 state,
             )
         finally:
@@ -188,7 +188,7 @@ def test_websocket_returns_typed_429_when_global_turn_queue_is_full():
                 websocket,
                 "test-capsule",
                 {},
-                {"type": "chat", "message": "beyond the bound"},
+                {"type": "chat", "assistant": "hello-pulse", "message": "beyond the bound"},
                 {"seen": set(), "turns": set()},
             )
             assert json.loads(sent[-1]["text"]) == {
@@ -279,7 +279,7 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
                 websocket,
                 "cap-queued",
                 {},
-                {"type": "chat", "message": "must never execute"},
+                {"type": "chat", "assistant": "hello-pulse", "message": "must never execute"},
                 state,
             )
             await asyncio.sleep(0)
@@ -585,11 +585,11 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         with _real_stream_driver(encoded_reply) as requests:
             await asyncio.to_thread(
                 main._stream_lines,
-                main._StreamRelay("cap-utf8", prompt, {}, queue, loop, started),
+                main._StreamRelay("cap-utf8", "hello-pulse", prompt, {}, queue, loop, started),
             )
         assert started.is_set()
         assert len(requests) == 1
-        assert json.loads(requests[0]) == {"message": prompt}
+        assert json.loads(requests[0]) == {"assistant": "hello-pulse", "message": prompt}
         assert prompt.encode() in requests[0]
         assert b"\\u" not in requests[0]
         assert await queue.get() == {"type": "done", "reply": reply}
@@ -630,7 +630,13 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
         started = asyncio.Event()
         response = json.dumps(terminal, separators=(",", ":")).encode() + b"\n"
         with _real_stream_driver(response) as requests:
-            await main._ws_run_turn(websocket, "cap-terminal", {}, "hello", started)
+            await main._ws_run_turn(
+                websocket,
+                "cap-terminal",
+                {},
+                {"assistant": "hello-pulse", "message": "hello"},
+                started,
+            )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert started.is_set()
         assert len(requests) == 1
@@ -655,7 +661,13 @@ def test_real_upstream_non_2xx_reaches_websocket_unchanged(status: int, payload:
         started = asyncio.Event()
         body = json.dumps(payload, separators=(",", ":")).encode()
         with _real_stream_driver(body, status=status) as requests:
-            await main._ws_run_turn(websocket, "cap-upstream-error", {}, "hello", started)
+            await main._ws_run_turn(
+                websocket,
+                "cap-upstream-error",
+                {},
+                {"assistant": "hello-pulse", "message": "hello"},
+                started,
+            )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert started.is_set()
         assert len(requests) == 1
@@ -732,7 +744,7 @@ def test_stream_workers_cannot_starve_the_default_control_pool():
                 worker = loop.run_in_executor(
                     main._STREAM_EXECUTOR,
                     main._stream_lines,
-                    main._StreamRelay("cap-pool", "hello", {}, queue, loop, started),
+                    main._StreamRelay("cap-pool", "hello-pulse", "hello", {}, queue, loop, started),
                 )
                 await asyncio.wait_for(started.wait(), timeout=1)
                 await asyncio.wait_for(worker, timeout=2)
@@ -793,7 +805,13 @@ def test_local_relay_eof_stops_provider_before_browser_error():
         await websocket.accept()
         started = asyncio.Event()
         with _real_relay_abort_driver() as calls:
-            await main._ws_run_turn(websocket, "cap-abort", {}, "hello", started)
+            await main._ws_run_turn(
+                websocket,
+                "cap-abort",
+                {},
+                {"assistant": "hello-pulse", "message": "hello"},
+                started,
+            )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert events == [
             {"type": "text", "text": "partial"},
@@ -835,6 +853,7 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
                     websocket,
                     "cap-disconnect",
                     {},
+                    "hello-pulse",
                     "hello",
                     asyncio.Event(),
                     asyncio.Event(),
