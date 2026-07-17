@@ -3,6 +3,7 @@
   import { goto } from "$app/navigation";
   import type { Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
+  import { MODEL_PROVIDERS, defaultModelFor, normalizeInferenceSelection } from "$lib/modelProviders.js";
   import { u } from "$lib/url";
   import { resolveClosedAssistantReturn } from "$lib/cloudAssistantLifecycle.js";
   import HudIcon from "$lib/components/HudIcon.svelte";
@@ -14,13 +15,12 @@
 
   let phase = $state("checking"); // checking | ready (unauthed → redirected to /login)
   let capName = $state("");
-  let brain = $state("claude-code");
-  let model = $state("claude-sonnet-5");
+  let provider = $state("openai");
+  let model = $state(defaultModelFor("openai"));
   let capsules = $state<any[]>([]);
   let selected = $state("");
   let error = $state("");
   let busy = $state(false);
-  let modelSelectionAvailable = $state(false);
 
   let createOpen = $state(false); // the "Create Capsule" modal (creation is no longer inline on the page)
   let destroyTarget = $state<any>(null);
@@ -37,13 +37,9 @@
 
   const SEL_KEY = "shimpz_current_capsule";
 
-  function defaultModel(provider: string) {
-    return provider === "claude-code" ? "claude-sonnet-5" : "";
-  }
-
-  function chooseBrain(event: Event) {
-    brain = (event.currentTarget as HTMLSelectElement).value;
-    model = defaultModel(brain);
+  function chooseProvider(event: Event) {
+    provider = (event.currentTarget as HTMLSelectElement).value;
+    model = defaultModelFor(provider);
   }
 
   async function loadApps(id: string) {
@@ -98,9 +94,6 @@
         goto(u.login(lang)); // auth is centralized on /login
         return;
       }
-      const brainsResponse = await fetch("/api/brains").catch(() => null);
-      const brainsResult = await brainsResponse?.json().catch(() => null);
-      modelSelectionAvailable = Boolean(brainsResponse?.ok && Array.isArray(brainsResult?.brains));
       selected = localStorage.getItem(SEL_KEY) ?? "";
       try {
         await refresh();
@@ -118,8 +111,8 @@
     busy = true;
     error = "";
     try {
-      const payload: Record<string, string> = { name: capName.trim(), brain };
-      if (modelSelectionAvailable) payload.model = model.trim();
+      const inference = normalizeInferenceSelection(provider, model);
+      const payload = { name: capName.trim(), ...inference };
       const r = await fetch("/api/capsules", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -250,8 +243,8 @@
               <span class="capsule-id mono">{c.id}</span>
               <span class="capsule-facts mono">
                 <span><span class="status-signal" aria-hidden="true"></span>{c.status}</span>
-                <span>{tr("brain_label", lang)}: {c.brain ?? "claude-code"}</span>
-                {#if modelSelectionAvailable}<span>{tr("model_label", lang)}: {c.model || tr("model_default", lang)}</span>{/if}
+                <span>{tr("brain_label", lang)}: {c.provider ?? "openai"}</span>
+                <span>{tr("model_label", lang)}: {c.model || defaultModelFor(c.provider ?? "openai")}</span>
               </span>
             </span>
             {#if selected === c.id}<span class="badge">{tr("current", lang)}</span>{/if}
@@ -334,18 +327,17 @@
       </div>
       <label class="flex items-center gap-3 text-sm dim">
         <span class="kicker !text-[10px]">{tr("brain_label", lang)}</span>
-        <select class="field field-sm w-auto" value={brain} onchange={chooseBrain}>
-          <option value="claude-code">Claude Code</option>
-          <option value="codex">Codex</option>
+        <select class="field field-sm w-auto" value={provider} onchange={chooseProvider}>
+          {#each MODEL_PROVIDERS as option (option.id)}
+            <option value={option.id}>{option.title}</option>
+          {/each}
         </select>
       </label>
-      {#if modelSelectionAvailable}
-        <label class="block text-sm dim">
-          <span class="kicker !text-[10px]">{tr("model_label", lang)}</span>
-          <input class="field mt-2" bind:value={model} placeholder={tr("model_default", lang)} maxlength="128" autocomplete="off" />
-          <span class="mt-1 block text-xs dim">{tr("model_hint", lang)}</span>
-        </label>
-      {/if}
+      <label class="block text-sm dim">
+        <span class="kicker !text-[10px]">{tr("model_label", lang)}</span>
+        <input class="field mt-2" bind:value={model} placeholder={defaultModelFor(provider)} maxlength="128" autocomplete="off" />
+        <span class="mt-1 block text-xs dim">{tr("model_hint", lang)}</span>
+      </label>
       {#if error}<p class="text-sm" style="color:var(--color-magenta)">{error}</p>{/if}
       <button class="btn-primary w-full justify-center" disabled={busy || !capName.trim()} onclick={createCapsule}>{tr("capsule_submit", lang)}</button>
     </div>
