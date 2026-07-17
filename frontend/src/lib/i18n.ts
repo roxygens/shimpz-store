@@ -274,12 +274,12 @@ const D: Dict = {
   what_it_does: { en: "What it does", pt: "O que faz" },
   features_title: { en: "Everything it does", pt: "Tudo que faz" },
   capabilities: { en: "capabilities", pt: "funcionalidades" },
-  // Assistants area — one free hybrid evaluation listing plus the v1 creator contract.
+  // Assistants area — one free hybrid evaluation listing plus the v2 creator contract.
   assistants_title: { en: "Assistants", pt: "Assistants" },
   assistants_preview: { en: "Assistant Store // one catalog", pt: "Loja de Assistants // um catálogo" },
   assistants_lead: {
-    en: "Capsule-native software that acts through declared Powers, follows opt-in routines, and collaborates through explicit capabilities.",
-    pt: "Software nativo de Cápsula que atua por Powers declarados, segue rotinas opt-in e colabora por capabilities explícitas.",
+    en: "Capsule-native software that acts through declared Powers, follows opt-in routines, and collaborates through explicit permissions.",
+    pt: "Software nativo de Cápsula que atua por Powers declarados, segue rotinas opt-in e colabora por permissões explícitas.",
   },
   assistants_preview_notice: {
     en: "Hello Pulse is free. Install it in your hosted Capsule here or through the Store embedded in a local Admin. Checkout and paid listings are not part of this evaluation release.",
@@ -384,7 +384,7 @@ const D: Dict = {
     en: "Install Shimpz, create your Admin password and return to Assistants. The Admin will ask which Capsule should receive Hello Pulse.",
     pt: "Instale o Shimpz, crie sua senha do Admin e volte para Assistants. O Admin perguntará qual Cápsula deve receber o Hello Pulse.",
   },
-  assistants_model_kicker: { en: "Assistant model // v1", pt: "Modelo de Assistant // v1" },
+  assistants_model_kicker: { en: "Assistant model // v2", pt: "Modelo de Assistant // v2" },
   assistants_model_title: { en: "Useful by design. Bounded by contract.", pt: "Útil por design. Limitado por contrato." },
   assistants_model_lead: {
     en: "Every Assistant lives inside one Capsule. Its manifest declares its Powers, which Service operations it may request, and which other Assistants it may call.",
@@ -395,7 +395,7 @@ const D: Dict = {
     en: "Assistants share only the resource budget and collaboration boundary of the Capsule that owns them.",
     pt: "Assistants compartilham apenas o orçamento de recursos e o limite de colaboração da Cápsula que os possui.",
   },
-  assistants_capabilities_title: { en: "Declared capabilities", pt: "Capabilities declaradas" },
+  assistants_capabilities_title: { en: "Explicit Powers", pt: "Powers explícitos" },
   assistants_capabilities_body: {
     en: "Collaboration uses named Powers. Installing one Assistant never grants open access to another.",
     pt: "A colaboração usa Powers nomeados. Instalar um Assistant nunca concede acesso aberto a outro.",
@@ -413,12 +413,12 @@ const D: Dict = {
   assistants_creator_kicker: { en: "For creators", pt: "Para creators" },
   assistants_creator_title: { en: "A small contract. A clear path to ship.", pt: "Um contrato pequeno. Um caminho claro para publicar." },
   assistants_creator_lead: {
-    en: "The preview workflow starts with one Power, declares only the capabilities it needs, validates the manifest, and prepares an immutable artifact for the Capsule runtime.",
-    pt: "O fluxo em preview começa com um Power, declara apenas as capabilities necessárias, valida o manifesto e prepara um artefato imutável para o runtime da Cápsula.",
+    en: "The preview workflow starts with one Power, requests only the permissions it needs, validates the manifest, and prepares an immutable artifact for the Capsule runtime.",
+    pt: "O fluxo em preview começa com um Power, solicita apenas as permissões necessárias, valida o manifesto e prepara um artefato imutável para o runtime da Cápsula.",
   },
   assistants_step_manifest: { en: "Describe identity and immutable artifact", pt: "Descreva identidade e artefato imutável" },
   assistants_step_powers: { en: "Expose typed, named Powers", pt: "Exponha Powers nomeados e tipados" },
-  assistants_step_permissions: { en: "Request least-privilege capabilities", pt: "Solicite capabilities de menor privilégio" },
+  assistants_step_permissions: { en: "Request least-privilege permissions", pt: "Solicite permissões de menor privilégio" },
   assistants_step_routines: { en: "Keep every routine opt-in", pt: "Mantenha toda rotina opt-in" },
   assistants_read_spec: { en: "Read the Assistant development preview", pt: "Ler o preview de desenvolvimento de Assistants" },
   assistants_example_kicker: { en: "Future reference // not available yet", pt: "Referência futura // ainda indisponível" },

@@ -57,8 +57,8 @@ export const DRIVERS: Driver[] = [
     id: "postgres", name: "Postgres", category: "Data", icon: "database", brand: "#336791",
     summary: { en: "Provision an isolated database for one admitted workload.", pt: "Provisiona um banco isolado para um workload admitido." },
     blurb: {
-      en: "The current internal lifecycle can provision one least-privilege Postgres database (proj_<name>) per admitted workload. Assistant Spec v1 does not claim this binding until its Capsule controller enforces it.",
-      pt: "O lifecycle interno atual pode provisionar um banco Postgres de menor privilégio (proj_<name>) por workload admitido. A Assistant Spec v1 não declara esse binding até o controller da Cápsula aplicá-lo.",
+      en: "The current internal lifecycle can provision one least-privilege Postgres database (proj_<name>) per admitted workload. Assistant Spec v2 can request the Service operation, but the generic runtime binding is not released yet.",
+      pt: "O lifecycle interno atual pode provisionar um banco Postgres de menor privilégio (proj_<name>) por workload admitido. A Assistant Spec v2 pode solicitar a operação do Service, mas o binding genérico de runtime ainda não foi lançado.",
     },
     features: [
       { en: "A dedicated database (proj_<name>), provisioned on install", pt: "Um banco dedicado (proj_<name>), provisionado na instalação" },
