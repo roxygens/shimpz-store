@@ -13,10 +13,6 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
-from fastapi import Request, WebSocket
-from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
-
 from app import main
 from app.main import (
     ACCOUNT_COOKIE,
@@ -37,6 +33,9 @@ from app.main import (
     _ws_receive_bounded_json,
     app,
 )
+from fastapi import Request, WebSocket
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
 
 
 def _done(reply: str = "hello", *, team: str = "Marketing") -> dict:
