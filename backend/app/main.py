@@ -21,7 +21,7 @@ import os
 import re
 import threading
 from collections import deque
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -1514,12 +1514,12 @@ async def _stop_delivery_once(
     cid: str,
     hdr: dict,
     delivery: _RelayDelivery,
-) -> None:
+) -> tuple[int, dict] | None:
     """Request provider cancellation at most once for one admitted relay."""
     if delivery.stop_attempted:
-        return
+        return None
     delivery.stop_attempted = True
-    await _driver_stop(cid, hdr)
+    return await _driver_stop(cid, hdr)
 
 
 async def _send_relay_event(
@@ -1609,6 +1609,7 @@ class _WsTurn:
     started: asyncio.Event
     dispatched: asyncio.Event
     files: tuple[str, ...] = ()
+    delivery: _RelayDelivery = field(default_factory=_RelayDelivery)
 
 
 def _relay_capacity_event() -> dict:
@@ -1620,7 +1621,7 @@ def _relay_capacity_event() -> dict:
 
 
 async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future) -> None:
-    delivery = _RelayDelivery()
+    delivery = turn.delivery
     try:
         while True:
             pending = asyncio.create_task(queue.get())
@@ -1717,9 +1718,10 @@ def _start_ws_turn(
     hdr: dict,
     msg: dict,
     lease: _TurnLease,
-) -> tuple[asyncio.Task, asyncio.Event, asyncio.Event]:
+) -> tuple[asyncio.Task, asyncio.Event, asyncio.Event, _RelayDelivery]:
     started = asyncio.Event()
     dispatched = asyncio.Event()
+    delivery = _RelayDelivery()
     turn = asyncio.create_task(
         _ws_run_admitted_turn(
             _WsTurn(
@@ -1730,29 +1732,39 @@ def _start_ws_turn(
                 started=started,
                 dispatched=dispatched,
                 files=tuple(msg.get("files", [])),
+                delivery=delivery,
             ),
             lease,
         )
     )
-    return turn, started, dispatched
+    return turn, started, dispatched, delivery
 
 
 async def _ws_stop_turn(ws: WebSocket, cid: str, hdr: dict, state: dict) -> None:
+    if state.get("stop_requested", False):
+        return
     turns = state["turns"]
     active = next((turn for turn in turns if not turn.done()), None)
     if active is None:
         await ws.send_json({"type": "error", "status": 409, "detail": "no active chat turn"})
         return
+    state["stop_requested"] = True
     lease = state["leases"][active]
+    delivery = state["deliveries"][active]
+    dispatched = state["dispatches"][active]
+    started = state["starts"][active]
     queued = lease.cancel_if_queued()
-    if queued or not state["dispatches"][active].is_set():
+    if queued or not dispatched.is_set():
         active.cancel()
         await asyncio.gather(active, return_exceptions=True)
         await ws.send_json({"type": "stopped"})
         return
     with contextlib.suppress(TimeoutError):
-        await asyncio.wait_for(state["starts"][active].wait(), timeout=10)
-    status, data = await _driver_stop(cid, hdr)
+        await asyncio.wait_for(started.wait(), timeout=10)
+    result = await _stop_delivery_once(cid, hdr, delivery)
+    if result is None:
+        return
+    status, data = result
     if status != 200 or not data.get("requested"):
         error_status = status if status != 200 else 409
         detail = data.get("detail") or data.get("error")
@@ -1771,6 +1783,7 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
     starts = state.setdefault("starts", {})
     dispatches = state.setdefault("dispatches", {})
     leases = state.setdefault("leases", {})
+    deliveries = state.setdefault("deliveries", {})
     if msg.get("type") == "chat":
         try:
             if set(msg) not in (
@@ -1809,14 +1822,16 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
         # The background task keeps the socket responsive to Stop. The set is capped at one;
         # the controller independently enforces the same invariant across sockets.
         try:
-            turn, started, dispatched = _start_ws_turn(ws, cid, hdr, msg, lease)
+            turn, started, dispatched, delivery = _start_ws_turn(ws, cid, hdr, msg, lease)
         except BaseException:
             lease.release()
             raise
+        state["stop_requested"] = False
         turns.add(turn)
         starts[turn] = started
         dispatches[turn] = dispatched
         leases[turn] = lease
+        deliveries[turn] = delivery
 
         def turn_done(completed: asyncio.Task) -> None:
             lease.release()
@@ -1824,6 +1839,7 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
             starts.pop(completed, None)
             dispatches.pop(completed, None)
             leases.pop(completed, None)
+            deliveries.pop(completed, None)
 
         turn.add_done_callback(turn_done)
     elif msg.get("type") == "stop" and set(msg) == {"type"}:
@@ -1885,6 +1901,8 @@ async def capsule_chat_ws(ws: WebSocket, cid: str) -> None:
             "starts": {},
             "dispatches": {},
             "leases": {},
+            "deliveries": {},
+            "stop_requested": False,
         }
         try:
             while True:

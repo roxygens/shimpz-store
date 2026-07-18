@@ -45,6 +45,7 @@
   let messages = $state<any[]>([]);
   let draft = $state("");
   let busy = $state(false);
+  let stopping = $state(false);
   let status = $state("");
   let uploading = $state(false);
   let thread = $state<HTMLElement | null>(null);
@@ -149,6 +150,7 @@
       ws = null;
       if (busy) {
         busy = false;
+        stopping = false;
         status = "";
         messages.push({ role: "system", tone: "error", text: tr("chat_disconnected", lang) });
         scrollDown(true);
@@ -169,6 +171,7 @@
         m = parseChatTerminalEvent(JSON.parse(ev.data), teamName);
       } catch {
         busy = false;
+        stopping = false;
         status = "";
         messages.push({ role: "system", tone: "error", text: tr("chat_protocol_error", lang) });
         wsReady = false;
@@ -177,6 +180,7 @@
         scrollDown(true);
         return;
       }
+      stopping = false;
       if (m.type === "done") {
         messages.push({ role: "assistant", team: m.team, text: m.reply });
         busy = false;
@@ -195,7 +199,13 @@
   }
 
   function stopTurn() {
-    if (wsReady && ws) ws.send(JSON.stringify({ type: "stop" }));
+    if (!wsReady || !ws || stopping) return;
+    stopping = true;
+    try {
+      ws.send(JSON.stringify({ type: "stop" }));
+    } catch {
+      stopping = false;
+    }
   }
 
   let providerChoice = $state("openai");
@@ -281,6 +291,7 @@
     reconnectAttempt = 0;
     wsReady = false;
     busy = false;
+    stopping = false;
     status = "";
     messages = [];
     draft = "";
@@ -387,6 +398,7 @@
     }
     draft = "";
     busy = true;
+    stopping = false;
     status = tr("chat_thinking", lang);
     messages.push({ role: "captain", text, files: attachedFiles.map((file) => file.name) });
     attachedFileIds = [];
@@ -720,7 +732,7 @@
             bind:value={draft}
             onkeydown={(event) => event.key === "Enter" && !event.shiftKey && !event.isComposing && (event.preventDefault(), send())}></textarea>
           {#if busy}
-            <button class="btn-danger composer-action" type="button" onclick={stopTurn}><HudIcon name="stop" size={17} />{tr("chat_stop", lang)}</button>
+            <button class="btn-danger composer-action" type="button" disabled={stopping} onclick={stopTurn}><HudIcon name="stop" size={17} />{tr("chat_stop", lang)}</button>
           {:else}
             <button class="btn-primary composer-action" type="button" disabled={!draft.trim() || runtimeBusy || !canSend} onclick={send}><HudIcon name="send" size={17} />{tr("chat_send", lang)}</button>
           {/if}

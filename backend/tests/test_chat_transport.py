@@ -358,9 +358,11 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
             assert admission.snapshot() == (1, 1)
 
             await _ws_dispatch(websocket, "cap-queued", {}, {"type": "stop"}, state)
+            await _ws_dispatch(websocket, "cap-queued", {}, {"type": "stop"}, state)
             assert admission.snapshot() == (1, 0)
             assert not state["turns"]
-            assert json.loads(sent[-1]["text"]) == {"type": "stopped"}
+            events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
+            assert events == [{"type": "stopped"}]
 
             occupied.release()
             await asyncio.sleep(0)
@@ -372,6 +374,61 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
                 turn.cancel()
             await asyncio.gather(*state["turns"], return_exceptions=True)
             main._TURN_ADMISSION = previous
+
+    asyncio.run(scenario())
+
+
+def test_duplicate_stop_then_disconnect_requests_provider_stop_once(monkeypatch):
+    async def scenario() -> None:
+        calls = []
+
+        async def stop(cid: str, headers: dict) -> tuple[int, dict]:
+            calls.append((cid, headers))
+            return 200, {"requested": True}
+
+        class RunningLease:
+            @staticmethod
+            def cancel_if_queued() -> bool:
+                return False
+
+        monkeypatch.setattr(main, "_driver_stop", stop)
+        websocket, _ = _websocket("{}")
+        await websocket.accept()
+        started = asyncio.Event()
+        dispatched = asyncio.Event()
+        started.set()
+        dispatched.set()
+        delivery = main._RelayDelivery()
+        turn = main._WsTurn(
+            websocket,
+            "cap-stop-once",
+            {"X-Shimpz-Account": "token"},
+            "hello",
+            started,
+            dispatched,
+            delivery=delivery,
+        )
+        queue: asyncio.Queue = asyncio.Queue()
+        worker = asyncio.get_running_loop().create_future()
+        active = asyncio.create_task(main._deliver_turn(turn, queue, worker))
+        await asyncio.sleep(0)
+        state = {
+            "turns": {active},
+            "starts": {active: started},
+            "dispatches": {active: dispatched},
+            "leases": {active: RunningLease()},
+            "deliveries": {active: delivery},
+            "stop_requested": False,
+        }
+
+        await main._ws_stop_turn(websocket, turn.cid, turn.headers, state)
+        await main._ws_stop_turn(websocket, turn.cid, turn.headers, state)
+        active.cancel()  # The endpoint cancels the relay after a browser disconnect.
+        worker.set_result(None)
+        await asyncio.gather(active, return_exceptions=True)
+
+        assert calls == [("cap-stop-once", {"X-Shimpz-Account": "token"})]
+        assert delivery.stop_attempted
 
     asyncio.run(scenario())
 
