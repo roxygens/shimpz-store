@@ -517,7 +517,8 @@
 <section
   bind:this={storeElement}
   class:embedded
-  class="wrap assistants-page"
+  class:wrap={!embedded}
+  class="assistants-page"
   aria-label={embedded ? tr("assistants_title", lang) : undefined}
   aria-labelledby={embedded ? undefined : "assistants-title"}>
   {#if !embedded}
@@ -668,7 +669,7 @@
 
 <style>
   .assistants-page { padding-top: 2.5rem; }
-  .assistants-page.embedded { padding-top: 0; }
+  .assistants-page.embedded { width: 100%; padding-top: 2px; }
   .assistants-page.embedded .assistant-grid { margin-top: 0; }
 
   .assistant-grid {
