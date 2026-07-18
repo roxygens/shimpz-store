@@ -1363,6 +1363,23 @@ def _validated_done_event(value: dict) -> dict | None:
     return {"type": "done", "reply": reply, "team": team}
 
 
+def _public_chat_error_event(status: int) -> dict:
+    safe_status = (
+        status
+        if isinstance(status, int) and not isinstance(status, bool) and 400 <= status <= 599
+        else 502
+    )
+    if safe_status == 429:
+        detail = "chat service is busy; try again shortly"
+    elif safe_status == 504:
+        detail = "chat service timed out"
+    elif safe_status < 500:
+        detail = "chat request was rejected"
+    else:
+        detail = "chat service is temporarily unavailable"
+    return {"type": "error", "status": safe_status, "detail": detail}
+
+
 def _validated_error_event(value: dict) -> dict | None:
     if set(value) != {"type", "status", "detail"}:
         return None
@@ -1379,7 +1396,7 @@ def _validated_error_event(value: dict) -> dict | None:
         or re.search(r"[\x00-\x1f\x7f]", detail) is not None
     ):
         return None
-    return {"type": "error", "status": status, "detail": detail}
+    return _public_chat_error_event(status)
 
 
 def _validated_terminal_event(value: object) -> dict | None:
@@ -1405,18 +1422,8 @@ def _parsed_stream_event(line: bytes) -> dict | None:
     return _validated_terminal_event(event)
 
 
-def _upstream_error_event(status: int, raw: bytes) -> dict:
-    safe_status = status if isinstance(status, int) and not isinstance(status, bool) and 400 <= status <= 599 else 502
-    detail = f"capsule-driver returned HTTP {safe_status}"
-    with contextlib.suppress(jsonlib.JSONDecodeError, UnicodeDecodeError):
-        payload = jsonlib.loads(raw)
-        if isinstance(payload, dict):
-            candidate = payload.get("detail") or payload.get("error")
-            if isinstance(candidate, str):
-                candidate = re.sub(r"[\x00-\x1f\x7f]", " ", candidate).strip()
-                if candidate:
-                    detail = candidate[:MAX_CHAT_ERROR_DETAIL_CHARS]
-    return {"type": "error", "status": safe_status, "detail": detail}
+def _upstream_error_event(status: int, _raw: bytes) -> dict:
+    return _public_chat_error_event(status)
 
 
 class _StreamLimitError(ValueError):

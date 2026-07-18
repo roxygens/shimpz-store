@@ -580,30 +580,38 @@ def test_retired_public_marketplace_routes_are_absent():
     assert [response.status_code for response in responses] == [405, 405]
 
 
-def test_upstream_http_errors_and_unterminated_terminal_lines_remain_typed():
-    raw = json.dumps({"error": "already chatting"}).encode()
-    assert _upstream_error_event(409, raw) == {
+def test_upstream_http_errors_and_unterminated_terminal_lines_are_redacted():
+    leak_marker = "upstream-private-marker-7e9b"
+    http_error = _upstream_error_event(409, json.dumps({"error": leak_marker}).encode())
+    stream_error = _parsed_stream_event(
+        json.dumps({"type": "error", "status": 502, "detail": leak_marker}).encode()
+    )
+    assert http_error == {
         "type": "error",
         "status": 409,
-        "detail": "already chatting",
+        "detail": "chat request was rejected",
     }
-    assert _parsed_stream_event(b'{"type":"error","status":502,"detail":"upstream failed"}') == {
+    assert stream_error == {
         "type": "error",
         "status": 502,
-        "detail": "upstream failed",
+        "detail": "chat service is temporarily unavailable",
     }
+    assert leak_marker not in json.dumps([http_error, stream_error])
 
 
 @pytest.mark.parametrize(
-    "event",
+    ("event", "expected"),
     [
-        _done("complete", team="Marketing"),
-        {"type": "error", "status": 504, "detail": "provider timed out"},
-        {"type": "stopped"},
+        (_done("complete", team="Marketing"), _done("complete", team="Marketing")),
+        (
+            {"type": "error", "status": 504, "detail": "provider timed out"},
+            {"type": "error", "status": 504, "detail": "chat service timed out"},
+        ),
+        ({"type": "stopped"}, {"type": "stopped"}),
     ],
 )
-def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict):
-    assert _validated_terminal_event(event) == event
+def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict, expected: dict):
+    assert _validated_terminal_event(event) == expected
 
 
 @pytest.mark.parametrize(
@@ -849,7 +857,18 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert started.is_set()
         assert len(requests) == 1
-        assert events == [terminal]
+        expected_detail = (
+            "chat service timed out"
+            if terminal["status"] == 504
+            else "chat service is temporarily unavailable"
+        )
+        assert events == [
+            {
+                "type": "error",
+                "status": terminal["status"],
+                "detail": expected_detail,
+            }
+        ]
         assert all(event.get("type") == "error" for event in events)
         assert not any(event.get("type") == "done" for event in events)
 
@@ -863,7 +882,7 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
         (429, {"detail": "chat rate limit exceeded"}),
     ],
 )
-def test_real_upstream_non_2xx_reaches_websocket_unchanged(status: int, payload: dict):
+def test_real_upstream_non_2xx_reaches_websocket_redacted(status: int, payload: dict):
     async def scenario() -> None:
         websocket, sent = _websocket("{}")
         await websocket.accept()
@@ -884,7 +903,11 @@ def test_real_upstream_non_2xx_reaches_websocket_unchanged(status: int, payload:
             {
                 "type": "error",
                 "status": status,
-                "detail": payload.get("detail") or payload["error"],
+                "detail": (
+                    "chat service is busy; try again shortly"
+                    if status == 429
+                    else "chat request was rejected"
+                ),
             }
         ]
 
@@ -1012,7 +1035,7 @@ def test_local_relay_eof_stops_provider_before_browser_error():
             {
                 "type": "error",
                 "status": 502,
-                "detail": "capsule-driver stream violated the terminal event contract",
+                "detail": "chat service is temporarily unavailable",
             },
         ]
         assert calls == [
