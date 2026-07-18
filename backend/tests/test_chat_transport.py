@@ -16,6 +16,7 @@ import pytest
 from app import main
 from app.main import (
     ACCOUNT_COOKIE,
+    CHAT_WS_SUBPROTOCOL,
     MAX_UPSTREAM_STREAM_LINE_BYTES,
     MAX_WS_FRAME_BYTES,
     WS_ALLOWED_ORIGINS,
@@ -45,11 +46,19 @@ def _done(reply: str = "hello", *, team: str = "Marketing") -> dict:
     }
 
 
-def _websocket_disconnect_code(client: TestClient, origin: str | None) -> int:
+def _websocket_disconnect_code(
+    client: TestClient,
+    origin: str | None,
+    subprotocols: tuple[str, ...] = (CHAT_WS_SUBPROTOCOL,),
+) -> int:
     headers = {"origin": origin} if origin is not None else {}
     with (
         pytest.raises(WebSocketDisconnect) as raised,
-        client.websocket_connect("/api/capsules/test-capsule/ws", headers=headers),
+        client.websocket_connect(
+            "/api/capsules/test_capsule/chat/ws",
+            headers=headers,
+            subprotocols=list(subprotocols),
+        ),
     ):
         pass
     return raised.value.code
@@ -76,6 +85,25 @@ def test_websocket_origin_is_exact_and_checked_before_authentication():
         # An exact first-party Origin advances to the cookie check; no account service call is made
         # because this handshake deliberately has no account cookie.
         assert _websocket_disconnect_code(client, allowed) == 4401
+
+
+def test_websocket_requires_and_negotiates_the_v1_chat_subprotocol(monkeypatch):
+    allowed = next(iter(WS_ALLOWED_ORIGINS))
+    with TestClient(app) as client:
+        assert _websocket_disconnect_code(client, allowed, ()) == 4406
+        assert _websocket_disconnect_code(client, allowed, ("shimpz.chat.v2",)) == 4406
+
+    async def verified(_ws: WebSocket) -> tuple[str, str]:
+        return "account-token", "account-one"
+
+    monkeypatch.setattr(main, "_ws_verify", verified)
+    with TestClient(app) as client:
+        with client.websocket_connect(
+            "/api/capsules/test_capsule/chat/ws",
+            headers={"origin": allowed},
+            subprotocols=[CHAT_WS_SUBPROTOCOL],
+        ) as websocket:
+            assert websocket.accepted_subprotocol == CHAT_WS_SUBPROTOCOL
 
 
 @pytest.mark.parametrize(
@@ -151,6 +179,19 @@ def test_websocket_frame_limit_is_enforced_before_json_parsing():
             await _ws_receive_bounded_json(websocket)
         assert raised.value.status == 413
         assert raised.value.close_code == 1009
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize("frame", ("not-json", "[]", '{"type":"stop","type":"chat"}'))
+def test_websocket_rejects_ambiguous_or_non_object_json_frames(frame: str):
+    async def scenario() -> None:
+        websocket, _ = _websocket(frame)
+        await websocket.accept()
+        with pytest.raises(WebSocketPayloadError) as raised:
+            await _ws_receive_bounded_json(websocket)
+        assert raised.value.status == 400
+        assert raised.value.close_code == 1007
 
     asyncio.run(scenario())
 

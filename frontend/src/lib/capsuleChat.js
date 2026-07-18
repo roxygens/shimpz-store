@@ -6,6 +6,15 @@ const MAX_FILES_PER_TURN = 8;
 const MAX_MESSAGE_CHARS = 16_000;
 const MAX_REPLY_CHARS = 60_000;
 const MAX_ERROR_DETAIL_CHARS = 800;
+export const CHAT_WS_SUBPROTOCOL = "shimpz.chat.v1";
+
+/** @param {any} capsuleId @returns {string} */
+export function teamChatWebSocketPath(capsuleId) {
+  if (typeof capsuleId !== "string" || !CAPSULE_ID.test(capsuleId)) {
+    throw new TypeError("invalid Capsule id");
+  }
+  return `/api/capsules/${capsuleId}/chat/ws`;
+}
 
 /** @typedef {{ used_bytes: number, limit_bytes: number, remaining_bytes: number }} StorageUsage */
 /** @typedef {{ id: string, name: string, media_type: string, size: number, sha256: string, created_at?: number }} StoredFile */
@@ -155,24 +164,6 @@ export function parseChatTerminalEvent(value, expectedTeam) {
     return { type: "stopped" };
   }
   throw new TypeError("invalid chat terminal event");
-}
-
-/** @param {any} value @param {any} expectedCapsule @param {any} expectedTeam */
-export function parseTeamChatResponse(value, expectedCapsule, expectedTeam) {
-  const source = record(value);
-  if (!source || !hasExactKeys(source, ["capsule", "team", "reply"])) {
-    throw new TypeError("invalid Team chat response");
-  }
-  if (
-    typeof expectedCapsule !== "string" ||
-    !CAPSULE_ID.test(expectedCapsule) ||
-    source.capsule !== expectedCapsule
-  ) {
-    throw new TypeError("Capsule identity mismatch");
-  }
-  const team = canonicalTeamName(source.team);
-  if (team !== canonicalTeamName(expectedTeam)) throw new TypeError("Team identity mismatch");
-  return { capsule: source.capsule, team, reply: chatReply(source.reply) };
 }
 
 /** @param {any} value @returns {{ files: StoredFile[] } & StorageUsage} */

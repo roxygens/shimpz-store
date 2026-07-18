@@ -59,8 +59,6 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         self.calls.append(("POST", self.path, body))
         if self.path == "/v1/verify":
             self._json(200, {"account_id": "account-one", "username": "captain"})
-        elif self.path == "/v1/capsules/cap_one/chat":
-            self._json(200, {"capsule": "cap_one", "team": "Marketing", "reply": "hello"})
         elif self.path == "/v1/capsules/cap_one/files":
             self._json(
                 200,
@@ -121,55 +119,19 @@ def _authenticated_client() -> TestClient:
     return client
 
 
-def test_chat_forwards_only_the_message_and_opaque_files_to_the_owned_team():
+def test_public_http_chat_endpoint_is_absent():
     with _control_plane() as calls, _authenticated_client() as client:
         response = client.post(
             "/api/capsules/cap_one/chat",
-            json={"message": "  say hello  ", "files": [FILE_ID]},
+            json={"message": "say hello", "files": [FILE_ID]},
         )
-        invalid = [
-            client.post("/api/capsules/cap_one/chat", json={}),
-            client.post(
-                "/api/capsules/cap_one/chat",
-                json={"assistant": "hello-pulse", "message": "hello"},
-            ),
-            client.post(
-                "/api/capsules/cap_one/chat",
-                json={"message": "hello", "provider": "openai"},
-            ),
-            client.post(
-                "/api/capsules/cap_one/chat",
-                json={"message": "hello", "files": ["../escape"]},
-            ),
-            client.post(
-                "/api/capsules/cap_one/chat",
-                json={"message": "hello", "files": [FILE_ID, FILE_ID]},
-            ),
-        ]
 
-    assert response.status_code == 200
-    assert response.json() == {"capsule": "cap_one", "team": "Marketing", "reply": "hello"}
-    assert [item.status_code for item in invalid] == [400, 400, 400, 400, 400]
-    assert [call for call in calls if call[1].endswith("/chat")] == [
-        (
-            "POST",
-            "/v1/capsules/cap_one/chat",
-            {"message": "say hello", "files": [FILE_ID]},
-        )
-    ]
-
-
-def test_chat_success_projection_rejects_private_or_mismatched_controller_fields():
-    assert main._validated_chat_response(
-        {"capsule": "cap_one", "team": "Marketing", "reply": "Ready."},
-        "cap_one",
-    ) == {"capsule": "cap_one", "team": "Marketing", "reply": "Ready."}
-    for value in (
-        {"capsule": "cap_other", "team": "Marketing", "reply": "Ready."},
-        {"capsule": "cap_one", "team": " Marketing ", "reply": "Ready."},
-        {"capsule": "cap_one", "team": "Marketing", "reply": "Ready.", "trace": []},
-    ):
-        assert main._validated_chat_response(value, "cap_one") is None
+    assert response.status_code == 405
+    routes = {getattr(route, "path", None) for route in main.app.routes}
+    assert "/api/capsules/{cid}/chat" not in routes
+    assert "/api/capsules/{cid}/ws" not in routes
+    assert "/api/capsules/{cid}/chat/ws" in routes
+    assert not any(path.endswith("/chat") for _method, path, _body in calls)
 
 
 def test_capsule_files_are_opaque_typed_and_deletable_without_paths():

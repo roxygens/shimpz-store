@@ -46,7 +46,6 @@ BRAIN_FINALIZE_TOKEN_FILE = Path(
 )
 ACCOUNT_COOKIE = "shimpz_account"
 COOKIE_MAX_AGE = 7 * 24 * 3600
-MAX_CHAT_BODY_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_CHAT_BODY_BYTES", str(128 * 1024))))
 MAX_CAPSULE_CREATE_BODY_BYTES = max(
     1024,
     int(os.environ.get("SHIMPZ_STORE_MAX_CAPSULE_CREATE_BODY_BYTES", str(16 * 1024))),
@@ -343,6 +342,7 @@ MAX_CAPSULE_FILES = 256
 MAX_CHAT_REPLY_CHARS = 60_000
 MAX_CHAT_ERROR_DETAIL_CHARS = 800
 TERMINAL_CONTRACT_ERROR = "capsule-driver stream violated the terminal event contract"
+CHAT_WS_SUBPROTOCOL = "shimpz.chat.v1"
 
 
 def _ws_origin_allowed(origin: str | None) -> bool:
@@ -393,18 +393,6 @@ def _canonical_chat_reply(value: object) -> str | None:
     ):
         return None
     return value
-
-
-def _validated_chat_response(value: object, capsule_id: str) -> dict | None:
-    """Expose only the controller-authenticated Team identity and natural reply."""
-    if not isinstance(value, dict) or set(value) != {"capsule", "team", "reply"}:
-        return None
-    capsule = _canonical_capsule_id(value["capsule"])
-    team = _canonical_team_name(value["team"])
-    reply = _canonical_chat_reply(value["reply"])
-    if capsule != capsule_id or team is None or reply is None:
-        return None
-    return {"capsule": capsule, "team": team, "reply": reply}
 
 
 def _chat_turn_payload(payload: dict) -> dict[str, object]:
@@ -1192,48 +1180,6 @@ async def capsule_inference_configure(request: Request, cid: str) -> JSONRespons
     return JSONResponse(data, status_code=status)
 
 
-@app.post("/api/capsules/{cid}/chat")
-async def capsule_chat(request: Request, cid: str) -> JSONResponse:
-    token, account_id, _ = await _authed_account_bounded(request)
-    if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    try:
-        payload = await _read_bounded_json(request, MAX_CHAT_BODY_BYTES)
-        body = _chat_turn_payload(payload)
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
-    status, data = await _bounded_call(
-        _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
-        "POST",
-        f"/v1/capsules/{cid}/chat",
-        body,
-        {"X-Shimpz-Account": token},
-    )
-    log.info(
-        "chat",
-        account=account_id,
-        capsule=cid,
-        status=status,
-        chars=len(body["message"]),
-    )
-    if 200 <= status < 300:
-        projected = _validated_chat_response(data, cid)
-        if projected is None:
-            return _private_json({"detail": TERMINAL_CONTRACT_ERROR}, 502)
-        return _private_json(projected, status)
-    detail = data.get("detail") or data.get("error")
-    if (
-        not isinstance(detail, str)
-        or not detail
-        or detail != detail.strip()
-        or len(detail) > MAX_CHAT_ERROR_DETAIL_CHARS
-        or re.search(r"[\x00-\x1f\x7f]", detail) is not None
-    ):
-        detail = "chat request failed"
-    return _private_json({"detail": detail}, status)
-
-
 @app.get("/api/capsules/{cid}/files")
 async def capsule_files(request: Request, cid: str) -> JSONResponse:
     """List opaque file metadata; file bytes and host paths remain controller-private."""
@@ -1368,8 +1314,8 @@ async def _ws_receive_bounded_json(ws: WebSocket) -> dict:
     elif len(raw.encode()) > MAX_WS_FRAME_BYTES:
         raise WebSocketPayloadError(413, "WebSocket frame too large", 1009)
     try:
-        payload = jsonlib.loads(raw)
-    except jsonlib.JSONDecodeError as exc:
+        payload = jsonlib.loads(raw, object_pairs_hook=_unique_json_object)
+    except (jsonlib.JSONDecodeError, ValueError) as exc:
         raise WebSocketPayloadError(400, "WebSocket frame must be valid JSON", 1007) from exc
     if not isinstance(payload, dict):
         raise WebSocketPayloadError(400, "WebSocket JSON must be an object", 1007)
@@ -1886,12 +1832,22 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
         await ws.send_json({"type": "error", "status": 400, "detail": "unsupported chat frame"})
 
 
-@app.websocket("/api/capsules/{cid}/ws")
-async def capsule_ws(ws: WebSocket, cid: str) -> None:
+async def _ws_validate_opening(ws: WebSocket) -> bool:
     origin = ws.headers.get("origin")
     if not _ws_origin_allowed(origin):
         log.warning("ws_origin_denied", origin=origin or "<missing>")
         await ws.close(code=4403)
+        return False
+    if tuple(ws.scope.get("subprotocols", ())) != (CHAT_WS_SUBPROTOCOL,):
+        log.warning("ws_subprotocol_denied")
+        await ws.close(code=4406)
+        return False
+    return True
+
+
+@app.websocket("/api/capsules/{cid}/chat/ws")
+async def capsule_chat_ws(ws: WebSocket, cid: str) -> None:
+    if not await _ws_validate_opening(ws):
         return
     try:
         token, account_id = await _ws_verify(ws)
@@ -1922,7 +1878,7 @@ async def capsule_ws(ws: WebSocket, cid: str) -> None:
         )
         return
     try:
-        await ws.accept()
+        await ws.accept(subprotocol=CHAT_WS_SUBPROTOCOL)
         hdr = {"X-Shimpz-Account": token}
         state: dict = {
             "turns": set(),

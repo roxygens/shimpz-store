@@ -3,11 +3,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import {
+  CHAT_WS_SUBPROTOCOL,
   createTeamChatTurn,
   parseCapsuleStorage,
   parseCapsuleUpload,
   parseChatTerminalEvent,
-  parseTeamChatResponse,
+  teamChatWebSocketPath,
 } from "../src/lib/capsuleChat.js";
 
 const file = {
@@ -64,21 +65,11 @@ test("accepts only exact bounded terminal events from the authoritative Team", (
   }
 });
 
-test("projects only the expected Team HTTP completion", () => {
-  assert.deepEqual(
-    parseTeamChatResponse(
-      { capsule: "cap_one", team: "Marketing", reply: "Ready." },
-      "cap_one",
-      "Marketing",
-    ),
-    { capsule: "cap_one", team: "Marketing", reply: "Ready." },
-  );
-  for (const response of [
-    { capsule: "cap_two", team: "Marketing", reply: "Ready." },
-    { capsule: "cap_one", team: "Sales", reply: "Ready." },
-    { capsule: "cap_one", team: "Marketing", reply: "Ready.", trace: [] },
-  ]) {
-    assert.throws(() => parseTeamChatResponse(response, "cap_one", "Marketing"));
+test("uses the single versioned Team chat WebSocket contract", () => {
+  assert.equal(CHAT_WS_SUBPROTOCOL, "shimpz.chat.v1");
+  assert.equal(teamChatWebSocketPath("cap_one"), "/api/capsules/cap_one/chat/ws");
+  for (const capsuleId of ["", "../escape", "cap-one", "A"]) {
+    assert.throws(() => teamChatWebSocketPath(capsuleId));
   }
 });
 

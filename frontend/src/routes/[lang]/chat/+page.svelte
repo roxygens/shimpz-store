@@ -3,11 +3,12 @@
   import { goto } from "$app/navigation";
   import type { Locale } from "$lib/catalog";
   import {
+    CHAT_WS_SUBPROTOCOL,
     createTeamChatTurn,
     parseCapsuleStorage,
     parseCapsuleUpload,
     parseChatTerminalEvent,
-    parseTeamChatResponse,
+    teamChatWebSocketPath,
   } from "$lib/capsuleChat.js";
   import { tr } from "$lib/i18n";
   import {
@@ -96,13 +97,7 @@
   // One WebSocket per Capsule releases one closed terminal event for each admitted turn.
   let ws = $state<WebSocket | null>(null);
   let wsReady = $state(false);
-
-  async function refreshInference() {
-    const cid = selected;
-    if (!cid) return;
-    const current = await fetch(`/api/capsules/${cid}/inference`).then((r) => (r.ok ? r.json() : null)).catch(() => null);
-    if (current && selected === cid) inference = current;
-  }
+  const canSend = $derived(canChat && wsReady);
 
   function chatErrorText(statusCode: unknown, detailValue: unknown) {
     const detail = typeof detailValue === "string" ? detailValue.trim() : "";
@@ -125,7 +120,10 @@
     wsReady = false;
     if (!cid || selected !== cid) return;
     const proto = location.protocol === "https:" ? "wss://" : "ws://";
-    const sock = new WebSocket(`${proto}${location.host}/api/capsules/${cid}/ws`);
+    const sock = new WebSocket(
+      `${proto}${location.host}${teamChatWebSocketPath(cid)}`,
+      CHAT_WS_SUBPROTOCOL,
+    );
     sock.onopen = () => {
       if (ws === sock && selected === cid) wsReady = true;
     };
@@ -351,7 +349,7 @@
 
   async function send() {
     const text = draft.trim();
-    if (!text || runtimeBusy || !selected || !canChat) return;
+    if (!text || runtimeBusy || !selected || !canSend || !ws) return;
     let turn: { message: string; files?: string[] };
     try {
       turn = createTeamChatTurn(text, attachedFileIds);
@@ -365,36 +363,7 @@
     attachedFileIds = [];
     stick = true; // sending re-engages auto-follow
     scrollDown(true);
-    if (wsReady && ws) {
-      ws.send(JSON.stringify({ type: "chat", ...turn }));
-      return;
-    }
-    // fallback: socket down → the non-streaming POST
-    try {
-      const r = await fetch(`/api/capsules/${selected}/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(turn),
-      });
-      const d = await r.json().catch(() => ({}));
-      if (r.ok) {
-        try {
-          const completion = parseTeamChatResponse(d, selected, teamName);
-          messages.push({ role: "assistant", team: completion.team, text: completion.reply });
-        } catch {
-          messages.push({ role: "system", tone: "error", text: tr("chat_protocol_error", lang) });
-        }
-        await refreshInference();
-      } else {
-        messages.push({ role: "system", tone: "error", text: chatErrorText(r.status, d.detail ?? d.error) });
-      }
-    } catch {
-      messages.push({ role: "system", tone: "error", text: "✗ network error" });
-    } finally {
-      busy = false;
-      status = "";
-      scrollDown(true);
-    }
+    ws.send(JSON.stringify({ type: "chat", ...turn }));
   }
 
   async function upload(ev: Event) {
@@ -714,13 +683,13 @@
             placeholder={tr("chat_placeholder", lang)}
             aria-label={tr("chat_placeholder", lang)}
             rows="2"
-            disabled={runtimeBusy || !canChat}
+            disabled={runtimeBusy || !canSend}
             bind:value={draft}
             onkeydown={(event) => event.key === "Enter" && !event.shiftKey && !event.isComposing && (event.preventDefault(), send())}></textarea>
           {#if busy}
             <button class="btn-danger composer-action" type="button" onclick={stopTurn}><HudIcon name="stop" size={17} />{tr("chat_stop", lang)}</button>
           {:else}
-            <button class="btn-primary composer-action" type="button" disabled={!draft.trim() || runtimeBusy || !canChat} onclick={send}><HudIcon name="send" size={17} />{tr("chat_send", lang)}</button>
+            <button class="btn-primary composer-action" type="button" disabled={!draft.trim() || runtimeBusy || !canSend} onclick={send}><HudIcon name="send" size={17} />{tr("chat_send", lang)}</button>
           {/if}
         </div>
       </main>
