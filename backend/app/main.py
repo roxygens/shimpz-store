@@ -331,7 +331,10 @@ CAPSULE_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
 CAPSULE_FILE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
 CAPSULE_FILE_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
-MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
+MODEL_CATALOG = {
+    "openai": frozenset({"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}),
+    "anthropic": frozenset({"claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"}),
+}
 RELEASED_CLOUD_ASSISTANTS = frozenset({"hello-pulse"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
 MAX_CHAT_MESSAGE_CHARS = 16_000
@@ -433,14 +436,14 @@ def _capsule_create_payload(payload: dict, account_id: str) -> tuple[str, dict[s
         raise ClientPayloadError(400, "Capsule requires name, provider, and model")
     name = str(payload.get("name", "")).strip()
     provider = _brain_provider(payload.get("provider"))
-    model = str(payload.get("model") or "").strip()
+    model = _brain_model(provider, payload.get("model")) if provider is not None else None
     cid = _cid_for(account_id, name)
     if not name or not cid.strip("_"):
         raise ClientPayloadError(400, "bad capsule name")
     if provider is None:
         raise ClientPayloadError(400, "unsupported model provider")
-    if MODEL_ID_RE.fullmatch(model) is None:
-        raise ClientPayloadError(400, "invalid model identifier")
+    if model is None:
+        raise ClientPayloadError(400, "unsupported model for provider")
     return cid, {"name": name, "provider": provider, "model": model}
 
 
@@ -766,13 +769,18 @@ async def me(request: Request) -> JSONResponse:
 
 
 # ── Account model credentials (one encrypted-at-rest API key per provider) ────
-BRAIN_PROVIDERS = frozenset({"anthropic", "openai"})
+BRAIN_PROVIDERS = frozenset(MODEL_CATALOG)
 MAX_BRAIN_CREDENTIAL_BODY_BYTES = 72 * 1024
 
 
 def _brain_provider(value: str) -> str | None:
     provider = str(value or "").strip().lower()
     return provider if provider in BRAIN_PROVIDERS else None
+
+
+def _brain_model(provider: str, value: object) -> str | None:
+    model = str(value or "").strip()
+    return model if model in MODEL_CATALOG[provider] else None
 
 
 @app.get("/api/brains")
@@ -1168,11 +1176,11 @@ async def capsule_inference_configure(request: Request, cid: str) -> JSONRespons
     if set(payload) != {"provider", "model"}:
         return JSONResponse({"detail": "inference requires provider and model"}, status_code=400)
     provider = _brain_provider(payload.get("provider"))
-    model = str(payload.get("model") or "").strip()
+    model = _brain_model(provider, payload.get("model")) if provider is not None else None
     if provider is None:
         return JSONResponse({"detail": "unsupported model provider"}, status_code=400)
-    if MODEL_ID_RE.fullmatch(model) is None:
-        return JSONResponse({"detail": "invalid model identifier"}, status_code=400)
+    if model is None:
+        return JSONResponse({"detail": "unsupported model for provider"}, status_code=400)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
         CAPSULEDRIVER_URL,

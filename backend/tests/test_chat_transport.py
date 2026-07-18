@@ -1194,6 +1194,25 @@ def test_capsule_inference_is_read_and_updated_without_recreating_capsule():
     assert not any(call[1].endswith("/create") for call in calls)
 
 
+def test_capsule_models_must_match_the_closed_provider_catalog_before_forwarding():
+    with _brain_control_plane() as calls, TestClient(app) as client:
+        client.cookies.set(ACCOUNT_COOKIE, "valid-token")
+        create = client.post(
+            "/api/capsules",
+            json={"name": "Unknown", "provider": "openai", "model": "gpt-unknown"},
+        )
+        switch = client.put(
+            "/api/capsules/cap-openai/inference",
+            json={"provider": "anthropic", "model": "gpt-5.5"},
+        )
+
+    assert create.status_code == switch.status_code == 400
+    assert create.json() == switch.json() == {"detail": "unsupported model for provider"}
+    assert not any(
+        path.endswith("/create") or (method == "PUT" and path.endswith("/inference")) for method, path, _body in calls
+    )
+
+
 def test_capsule_ids_bind_the_complete_account_and_normalized_name():
     first = main._cid_for("account-prefix-one", "A very long shared capsule name alpha")
     same = main._cid_for("account-prefix-one", "A very long shared capsule name alpha")

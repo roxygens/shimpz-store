@@ -10,7 +10,13 @@
     parseTeamChatResponse,
   } from "$lib/capsuleChat.js";
   import { tr } from "$lib/i18n";
-  import { MODEL_PROVIDERS, defaultModelFor, normalizeInferenceSelection } from "$lib/modelProviders.js";
+  import {
+    MODEL_PROVIDERS,
+    defaultModelFor,
+    modelOptionLabel,
+    modelsForProvider,
+    normalizeInferenceSelection,
+  } from "$lib/modelProviders.js";
   import { u } from "$lib/url";
   import HudIcon from "$lib/components/HudIcon.svelte";
   import PageIntro from "$lib/components/PageIntro.svelte";
@@ -546,13 +552,18 @@
               </label>
               <label class="field-stack">
                 <span>{tr("model_label", lang)}</span>
-                <input class="field field-sm" bind:value={modelChoice} maxlength="128" autocomplete="off" disabled={runtimeBusy} placeholder={defaultModelFor(providerChoice)} />
+                <select class="field field-sm" bind:value={modelChoice} disabled={runtimeBusy}>
+                  {#each modelsForProvider(providerChoice) as option (option.id)}
+                    <option value={option.id}>{modelOptionLabel(option, lang)}</option>
+                  {/each}
+                </select>
               </label>
               <button class="btn-primary brain-switch" type="button" disabled={!inferenceHasChanges || runtimeBusy} onclick={saveInference}>
                 <HudIcon name="retry" size={16} />
                 {inferenceBusy ? tr("brain_switching", lang) : tr("brain_switch", lang)}
               </button>
               <p class="brain-hint"><HudIcon name="shield" size={15} />{tr("brain_switch_hint", lang)}</p>
+              <p class="brain-hint"><HudIcon name="brain" size={15} />{tr("model_price_note", lang)}</p>
               {#if inferenceError}<p class="notice notice-error compact-notice" role="alert">{inferenceError}</p>{/if}
               {#if inferenceSaved}<p class="notice notice-success compact-notice" role="status">{inferenceSaved}</p>{/if}
             </div>

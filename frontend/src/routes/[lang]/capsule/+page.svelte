@@ -3,7 +3,13 @@
   import { goto } from "$app/navigation";
   import type { Locale } from "$lib/catalog";
   import { tr } from "$lib/i18n";
-  import { MODEL_PROVIDERS, defaultModelFor, normalizeInferenceSelection } from "$lib/modelProviders.js";
+  import {
+    MODEL_PROVIDERS,
+    defaultModelFor,
+    modelOptionLabel,
+    modelsForProvider,
+    normalizeInferenceSelection,
+  } from "$lib/modelProviders.js";
   import { u } from "$lib/url";
   import { resolveClosedAssistantReturn } from "$lib/cloudAssistantLifecycle.js";
   import HudIcon from "$lib/components/HudIcon.svelte";
@@ -335,8 +341,12 @@
       </label>
       <label class="block text-sm dim">
         <span class="kicker !text-[10px]">{tr("model_label", lang)}</span>
-        <input class="field mt-2" bind:value={model} placeholder={defaultModelFor(provider)} maxlength="128" autocomplete="off" />
-        <span class="mt-1 block text-xs dim">{tr("model_hint", lang)}</span>
+        <select class="field mt-2" bind:value={model}>
+          {#each modelsForProvider(provider) as option (option.id)}
+            <option value={option.id}>{modelOptionLabel(option, lang)}</option>
+          {/each}
+        </select>
+        <span class="mt-1 block text-xs dim">{tr("model_price_note", lang)}</span>
       </label>
       {#if error}<p class="text-sm" style="color:var(--color-magenta)">{error}</p>{/if}
       <button class="btn-primary w-full justify-center" disabled={busy || !capName.trim()} onclick={createCapsule}>{tr("capsule_submit", lang)}</button>

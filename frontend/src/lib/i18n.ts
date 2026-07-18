@@ -479,6 +479,10 @@ const D: Dict = {
     en: "Stored as Team configuration; it does not recreate or restart the Team.",
     pt: "Salvo como configuração do Time; não recria nem reinicia o Time.",
   },
+  model_price_note: {
+    en: "Base rates in USD per 1M input/output tokens. Cache, Batch, promotions and long-context rates are not included.",
+    pt: "Preços-base em USD por 1 milhão de tokens de entrada/saída. Cache, Batch, promoções e contexto longo não estão incluídos.",
+  },
   brain_wait: {
     en: "Save this provider's API key under your account before chatting.",
     pt: "Salve a chave de API deste provedor na sua conta antes de conversar.",
