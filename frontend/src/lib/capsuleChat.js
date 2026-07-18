@@ -1,10 +1,6 @@
-const ASSISTANT_ID = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
-const POWER_ID = /^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$/;
 const FILE_ID = /^[a-f0-9]{32}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
 const CAPSULE_ID = /^[a-z0-9_]{1,40}$/;
-const MAX_ASSISTANTS = 64;
-const MAX_POWERS = 64;
 const MAX_FILES = 256;
 const MAX_FILES_PER_TURN = 8;
 const MAX_MESSAGE_CHARS = 16_000;
@@ -13,7 +9,6 @@ const MAX_ERROR_DETAIL_CHARS = 800;
 
 /** @typedef {{ used_bytes: number, limit_bytes: number, remaining_bytes: number }} StorageUsage */
 /** @typedef {{ id: string, name: string, media_type: string, size: number, sha256: string, created_at?: number }} StoredFile */
-/** @typedef {{ id: string, status: string, powers: string[] }} InstalledAssistant */
 
 /** @param {any} value @returns {Record<string, any> | null} */
 function record(value) {
@@ -24,14 +19,6 @@ function record(value) {
 function hasExactKeys(value, keys) {
   const actual = Object.keys(value);
   return actual.length === keys.length && keys.every((key) => Object.hasOwn(value, key));
-}
-
-/** @param {any} value @returns {string} */
-function canonicalAssistant(value) {
-  if (typeof value !== "string" || value.length > 80 || !ASSISTANT_ID.test(value)) {
-    throw new TypeError("invalid Assistant id");
-  }
-  return value;
 }
 
 /** @param {any} value @returns {string} */
@@ -112,40 +99,6 @@ function fileMetadata(value, createdAtRequired) {
     metadata.created_at = createdAt;
   }
   return metadata;
-}
-
-/** @param {any} value @returns {InstalledAssistant[]} */
-export function parseInstalledAssistants(value) {
-  const source = record(value);
-  if (!source || !Array.isArray(source.apps) || source.apps.length > MAX_ASSISTANTS) {
-    throw new TypeError("invalid installed Assistant inventory");
-  }
-  const assistants = source.apps.map((/** @type {any} */ entry) => {
-    const item = record(entry);
-    if (!item) throw new TypeError("invalid installed Assistant");
-    const id = canonicalAssistant(item.app);
-    if (typeof item.status !== "string" || !item.status || item.status.length > 32) {
-      throw new TypeError("invalid installed Assistant status");
-    }
-    if (!Array.isArray(item.powers) || item.powers.length > MAX_POWERS) {
-      throw new TypeError("invalid installed Assistant Powers");
-    }
-    const powers = item.powers.map((/** @type {any} */ power) => {
-      if (typeof power !== "string" || power.length > 80 || !POWER_ID.test(power)) {
-        throw new TypeError("invalid installed Assistant Power");
-      }
-      return power;
-    });
-    if (powers.length !== new Set(powers).size) throw new TypeError("duplicate installed Assistant Power");
-    return { id, status: item.status, powers };
-  });
-  if (
-    assistants.map(({ id }) => id).length !==
-    new Set(assistants.map(({ id }) => id)).size
-  ) {
-    throw new TypeError("duplicate installed Assistant");
-  }
-  return assistants;
 }
 
 /** @param {any} message @param {any} [files] @returns {{ message: string, files?: string[] }} */

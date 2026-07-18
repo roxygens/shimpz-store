@@ -1,13 +1,12 @@
 <script lang="ts">
   import { onDestroy, onMount, tick } from "svelte";
   import { goto } from "$app/navigation";
-  import { ASSISTANT_BY_ID, type Locale } from "$lib/catalog";
+  import type { Locale } from "$lib/catalog";
   import {
     createTeamChatTurn,
     parseCapsuleStorage,
     parseCapsuleUpload,
     parseChatTerminalEvent,
-    parseInstalledAssistants,
     parseTeamChatResponse,
   } from "$lib/capsuleChat.js";
   import { tr } from "$lib/i18n";
@@ -27,7 +26,6 @@
   let selected = $state("");
   let inference = $state<any>(null); // {provider, model}
   let configuredProviders = $state<string[]>([]);
-  let crew = $state<any[]>([]);
   let capsuleFiles = $state<any[]>([]);
   let storageUsed = $state(0);
   let storageLimit = $state(100 * 1024 * 1024);
@@ -52,10 +50,6 @@
     storageLimit > 0 ? Math.min(100, Math.max(0, (storageUsed / storageLimit) * 100)) : 0,
   );
   const attachedFiles = $derived(capsuleFiles.filter((file) => attachedFileIds.includes(file.id)));
-
-  function assistantName(id: string) {
-    return ASSISTANT_BY_ID.get(id)?.name ?? id;
-  }
 
   function formatBytes(value: number) {
     if (value < 1024) return `${value} B`;
@@ -214,7 +208,6 @@
   async function loadCapsuleContext() {
     const cid = selected;
     inference = null;
-    crew = [];
     capsuleFiles = [];
     attachedFileIds = [];
     storageUsed = 0;
@@ -225,18 +218,12 @@
     const name = capsules.find((c) => c.id === cid)?.name ?? cid;
     localStorage.setItem(SEL_KEY + "_name", name);
     storageLoading = true;
-    const [currentInference, a, f] = await Promise.all([
+    const [currentInference, f] = await Promise.all([
       fetch(`/api/capsules/${cid}/inference`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`/api/capsules/${cid}/apps`).then((r) => (r.ok ? r.json() : { apps: [] })).catch(() => ({ apps: [] })),
       fetch(`/api/capsules/${cid}/files`).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, data: {} })),
     ]);
     if (selected !== cid) return;
     inference = currentInference;
-    try {
-      crew = parseInstalledAssistants(a);
-    } catch {
-      crew = [];
-    }
     try {
       if (!f.ok) throw new Error(f.data?.detail ?? f.data?.error ?? "storage unavailable");
       applyStorage(f.data);
@@ -493,7 +480,6 @@
         <i aria-hidden="true"></i>
         {wsReady ? tr("chat_connection_live", lang) : tr("chat_connection_offline", lang)}
       </span>
-      <span class="badge">{crew.length} {tr("chat_hosted_crew_count", lang)}</span>
     {/if}
   {/snippet}
 
@@ -587,46 +573,11 @@
           {/if}
         </section>
 
-        <section class="panel control-card" aria-labelledby="assistants-context-title">
-          <header class="control-heading">
-            <span class="control-icon assistant-icon" aria-hidden="true"><HudIcon name="assistants" size={21} /></span>
-            <div><p class="kicker">Team</p><h2 id="assistants-context-title">{tr("crew_title", lang)}</h2></div>
-            <span class="assistant-count">{crew.length}</span>
-          </header>
-          <p class="control-help">{tr("chat_assistants_help", lang)}</p>
-          {#if crew.length}
-            <ul class="crew-list">
-              {#each crew as assistant (assistant.id)}
-                <li class:unavailable={assistant.status !== "running"}>
-                  <div class="capability-info">
-                    <span class="assistant-selector-icon" aria-hidden="true"><HudIcon name="assistants" size={16} /></span>
-                    <span class="assistant-identity">
-                      <strong>{assistantName(assistant.id)}</strong>
-                      <small>{assistant.status}</small>
-                    </span>
-                  </div>
-                  <div class="power-list" aria-label={tr("chat_powers", lang)}>
-                    {#each assistant.powers as power (power)}<code>{power}</code>{/each}
-                  </div>
-                </li>
-              {/each}
-            </ul>
-          {:else}
-            <p class="empty-crew">{tr("crew_empty", lang)}</p>
-          {/if}
-          <div class="assistant-boundary">
-            <p>{tr("chat_local_assistant_boundary", lang)}</p>
-            <a href={u.assistants(lang)}>
-              {tr("chat_open_local_admin", lang)} <span aria-hidden="true">→</span>
-            </a>
-          </div>
-        </section>
-
         <section class="panel control-card storage-control" aria-labelledby="storage-context-title">
           <header class="control-heading">
             <span class="control-icon storage-icon" aria-hidden="true"><HudIcon name="attach" size={20} /></span>
             <div><p class="kicker">Team</p><h2 id="storage-context-title">{tr("chat_storage_title", lang)}</h2></div>
-            <span class="assistant-count storage-count">{capsuleFiles.length}</span>
+            <span class="storage-count">{capsuleFiles.length}</span>
           </header>
           <p class="control-help">{tr("chat_storage_help", lang)}</p>
           <div class="storage-meter" aria-label={`${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}`}>
@@ -680,7 +631,7 @@
 
       <main class="conversation-shell" aria-labelledby="conversation-title">
         <header class="conversation-header">
-          <span class="conversation-avatar" aria-hidden="true"><HudIcon name="assistants" size={24} /></span>
+          <span class="conversation-avatar" aria-hidden="true"><HudIcon name="capsule" size={24} /></span>
           <div>
             <p class="kicker">{tr("chat_team_target", lang)}</p>
             <h2 id="conversation-title">{teamName}</h2>
@@ -890,8 +841,6 @@
   }
 
   .brain-icon { color: var(--color-magenta); }
-  .assistant-icon { color: var(--color-yellow); }
-
   .control-heading .kicker,
   .conversation-header .kicker { margin: 0 0 0.08rem; font-size: 0.55rem; }
 
@@ -941,8 +890,7 @@
 
   .brain-hint,
   .access-copy,
-  .inference-progress,
-  .empty-crew {
+  .inference-progress {
     margin: 0;
     color: var(--color-muted);
     font-size: 0.7rem;
@@ -965,63 +913,18 @@
   .access-actions > :global(*) { min-width: 0; padding-inline: 0.65rem; font-size: 0.62rem; }
   .inference-progress { align-items: center; }
 
-  .assistant-count {
+  .storage-count {
     min-width: 1.8rem;
     padding: 0.15rem 0.4rem;
-    color: var(--color-yellow);
-    background: color-mix(in oklab, var(--color-yellow) 7%, #000);
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-yellow) 35%, var(--color-border));
+    color: var(--color-green);
+    background: color-mix(in oklab, var(--color-green) 7%, #000);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-green) 35%, var(--color-border));
     font-family: var(--font-mono);
     font-size: 0.64rem;
     text-align: center;
   }
 
-  .crew-list { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
-  .crew-list li {
-    display: grid;
-    gap: 0.45rem;
-    border: 1px solid var(--color-border);
-    padding: 0.6rem;
-    background: #030303;
-  }
-  .crew-list li.unavailable { opacity: 0.58; }
-  .capability-info {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr);
-    align-items: center;
-    gap: 0.45rem;
-  }
-  .assistant-selector-icon { color: var(--color-yellow); }
-  .assistant-identity {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.4rem;
-    min-width: 0;
-  }
-  .assistant-identity strong {
-    overflow: hidden;
-    color: var(--color-fg);
-    font-family: var(--font-mono);
-    font-size: 0.68rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .assistant-identity small { color: var(--color-muted-2); font-size: 0.54rem; text-transform: uppercase; }
-  .power-list { display: flex; flex-wrap: wrap; gap: 0.3rem; padding-left: 1.45rem; }
-  .power-list code {
-    padding: 0.14rem 0.3rem;
-    color: var(--color-cyan);
-    background: color-mix(in oklab, var(--color-cyan) 6%, #000);
-    box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-cyan) 25%, var(--color-border));
-    font-size: 0.54rem;
-  }
-  .assistant-boundary { margin-top: 0.75rem; border-top: 1px solid var(--color-border); padding-top: 0.7rem; }
-  .assistant-boundary p { margin: 0; color: var(--color-muted); font-size: 0.68rem; line-height: 1.45; }
-  .assistant-boundary a { display: inline-block; margin-top: 0.45rem; color: var(--color-cyan); font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600; text-decoration: underline; text-decoration-style: dashed; text-underline-offset: 0.22em; }
-
   .storage-icon { color: var(--color-green); }
-  .storage-count { color: var(--color-green); background: color-mix(in oklab, var(--color-green) 7%, #000); box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--color-green) 35%, var(--color-border)); }
   .storage-meter { height: 0.32rem; overflow: hidden; background: var(--color-border); }
   .storage-meter span { display: block; height: 100%; min-width: 1px; background: var(--color-green); box-shadow: 0 0 8px color-mix(in oklab, var(--color-green) 55%, transparent); }
   .storage-usage { display: flex; justify-content: space-between; gap: 0.5rem; margin: 0.35rem 0 0; color: var(--color-muted-2); font-family: var(--font-mono); font-size: 0.54rem; }

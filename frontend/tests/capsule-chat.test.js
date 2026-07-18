@@ -7,7 +7,6 @@ import {
   parseCapsuleStorage,
   parseCapsuleUpload,
   parseChatTerminalEvent,
-  parseInstalledAssistants,
   parseTeamChatResponse,
 } from "../src/lib/capsuleChat.js";
 
@@ -81,22 +80,6 @@ test("projects only the expected Team HTTP completion", () => {
   ]) {
     assert.throws(() => parseTeamChatResponse(response, "cap_one", "Marketing"));
   }
-});
-
-test("projects every installed Assistant as an informational Team capability", () => {
-  const assistants = parseInstalledAssistants({
-    apps: [
-      { app: "hello-pulse", status: "running", powers: ["hello"], container: "private" },
-      { app: "salesnator", status: "exited", powers: ["campaigns.read"] },
-      { app: "legacy-app", status: "running", powers: [] },
-    ],
-    capsule: "private",
-  });
-  assert.deepEqual(assistants, [
-    { id: "hello-pulse", status: "running", powers: ["hello"] },
-    { id: "salesnator", status: "exited", powers: ["campaigns.read"] },
-    { id: "legacy-app", status: "running", powers: [] },
-  ]);
 });
 
 test("keeps Capsule files opaque and drops every path-like upstream field", () => {
