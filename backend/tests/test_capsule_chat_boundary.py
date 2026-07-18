@@ -60,7 +60,7 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         if self.path == "/v1/verify":
             self._json(200, {"account_id": "account-one", "username": "captain"})
         elif self.path == "/v1/capsules/cap_one/chat":
-            self._json(200, {"reply": "hello"})
+            self._json(200, {"capsule": "cap_one", "team": "Marketing", "reply": "hello"})
         elif self.path == "/v1/capsules/cap_one/files":
             self._json(
                 200,
@@ -121,42 +121,55 @@ def _authenticated_client() -> TestClient:
     return client
 
 
-def test_chat_requires_and_forwards_one_selected_assistant():
+def test_chat_forwards_only_the_message_and_opaque_files_to_the_owned_team():
     with _control_plane() as calls, _authenticated_client() as client:
         response = client.post(
             "/api/capsules/cap_one/chat",
-            json={"assistant": "hello-pulse", "message": "  say hello  ", "files": [FILE_ID]},
+            json={"message": "  say hello  ", "files": [FILE_ID]},
         )
         invalid = [
-            client.post("/api/capsules/cap_one/chat", json={"message": "hello"}),
+            client.post("/api/capsules/cap_one/chat", json={}),
             client.post(
                 "/api/capsules/cap_one/chat",
-                json={"assistant": "../escape", "message": "hello"},
+                json={"assistant": "hello-pulse", "message": "hello"},
             ),
             client.post(
                 "/api/capsules/cap_one/chat",
-                json={"assistant": "hello-pulse", "message": "hello", "provider": "openai"},
+                json={"message": "hello", "provider": "openai"},
             ),
             client.post(
                 "/api/capsules/cap_one/chat",
-                json={"assistant": "hello-pulse", "message": "hello", "files": ["../escape"]},
+                json={"message": "hello", "files": ["../escape"]},
             ),
             client.post(
                 "/api/capsules/cap_one/chat",
-                json={"assistant": "hello-pulse", "message": "hello", "files": [FILE_ID, FILE_ID]},
+                json={"message": "hello", "files": [FILE_ID, FILE_ID]},
             ),
         ]
 
     assert response.status_code == 200
-    assert response.json() == {"reply": "hello"}
+    assert response.json() == {"capsule": "cap_one", "team": "Marketing", "reply": "hello"}
     assert [item.status_code for item in invalid] == [400, 400, 400, 400, 400]
     assert [call for call in calls if call[1].endswith("/chat")] == [
         (
             "POST",
             "/v1/capsules/cap_one/chat",
-            {"assistant": "hello-pulse", "message": "say hello", "files": [FILE_ID]},
+            {"message": "say hello", "files": [FILE_ID]},
         )
     ]
+
+
+def test_chat_success_projection_rejects_private_or_mismatched_controller_fields():
+    assert main._validated_chat_response(
+        {"capsule": "cap_one", "team": "Marketing", "reply": "Ready."},
+        "cap_one",
+    ) == {"capsule": "cap_one", "team": "Marketing", "reply": "Ready."}
+    for value in (
+        {"capsule": "cap_other", "team": "Marketing", "reply": "Ready."},
+        {"capsule": "cap_one", "team": " Marketing ", "reply": "Ready."},
+        {"capsule": "cap_one", "team": "Marketing", "reply": "Ready.", "trace": []},
+    ):
+        assert main._validated_chat_response(value, "cap_one") is None
 
 
 def test_capsule_files_are_opaque_typed_and_deletable_without_paths():

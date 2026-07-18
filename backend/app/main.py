@@ -329,7 +329,6 @@ WS_ALLOWED_ORIGINS = frozenset(
 ASSISTANT_MUTATION_ALLOWED_ORIGINS = WS_ALLOWED_ORIGINS
 CAPSULE_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-ASSISTANT_POWER_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:[._-][a-z0-9]+)*$")
 CAPSULE_FILE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
 CAPSULE_FILE_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 MODEL_ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}$")
@@ -367,17 +366,48 @@ def _canonical_assistant_id(value: object) -> str | None:
     return value
 
 
+def _canonical_team_name(value: object) -> str | None:
+    if (
+        not isinstance(value, str)
+        or not 1 <= len(value) <= 80
+        or value.strip() != value
+        or any(ord(character) < 32 or ord(character) == 127 for character in value)
+    ):
+        return None
+    return value
+
+
 def _canonical_capsule_file_id(value: object) -> str | None:
     return value if isinstance(value, str) and CAPSULE_FILE_ID_RE.fullmatch(value) is not None else None
 
 
+def _canonical_chat_reply(value: object) -> str | None:
+    if (
+        not isinstance(value, str)
+        or not value.strip()
+        or len(value) > MAX_CHAT_REPLY_CHARS
+        or re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", value) is not None
+    ):
+        return None
+    return value
+
+
+def _validated_chat_response(value: object, capsule_id: str) -> dict | None:
+    """Expose only the controller-authenticated Team identity and natural reply."""
+    if not isinstance(value, dict) or set(value) != {"capsule", "team", "reply"}:
+        return None
+    capsule = _canonical_capsule_id(value["capsule"])
+    team = _canonical_team_name(value["team"])
+    reply = _canonical_chat_reply(value["reply"])
+    if capsule != capsule_id or team is None or reply is None:
+        return None
+    return {"capsule": capsule, "team": team, "reply": reply}
+
+
 def _chat_turn_payload(payload: dict) -> dict[str, object]:
-    """Project one browser turn onto the controller's closed Assistant chat contract."""
-    if set(payload) not in ({"assistant", "message"}, {"assistant", "message", "files"}):
-        raise ClientPayloadError(400, "body must contain assistant, message, and optional files")
-    assistant = _canonical_assistant_id(payload["assistant"])
-    if assistant is None:
-        raise ClientPayloadError(400, "select a valid installed Assistant")
+    """Project one browser turn onto the controller's closed Team chat contract."""
+    if set(payload) not in ({"message"}, {"message", "files"}):
+        raise ClientPayloadError(400, "body must contain message and optional files")
     message = payload["message"]
     if not isinstance(message, str):
         raise ClientPayloadError(400, "message must be a string")
@@ -392,7 +422,7 @@ def _chat_turn_payload(payload: dict) -> dict[str, object]:
     opaque_ids = [_canonical_capsule_file_id(file_id) for file_id in files]
     if any(file_id is None for file_id in opaque_ids) or len(opaque_ids) != len(set(opaque_ids)):
         raise ClientPayloadError(400, "files must contain unique opaque ids")
-    turn: dict[str, object] = {"assistant": assistant, "message": message}
+    turn: dict[str, object] = {"message": message}
     if opaque_ids:
         turn["files"] = opaque_ids
     return turn
@@ -1176,11 +1206,24 @@ async def capsule_chat(request: Request, cid: str) -> JSONResponse:
         "chat",
         account=account_id,
         capsule=cid,
-        assistant=body["assistant"],
         status=status,
         chars=len(body["message"]),
     )
-    return JSONResponse(data, status_code=status)
+    if 200 <= status < 300:
+        projected = _validated_chat_response(data, cid)
+        if projected is None:
+            return _private_json({"detail": TERMINAL_CONTRACT_ERROR}, 502)
+        return _private_json(projected, status)
+    detail = data.get("detail") or data.get("error")
+    if (
+        not isinstance(detail, str)
+        or not detail
+        or detail != detail.strip()
+        or len(detail) > MAX_CHAT_ERROR_DETAIL_CHARS
+        or re.search(r"[\x00-\x1f\x7f]", detail) is not None
+    ):
+        detail = "chat request failed"
+    return _private_json({"detail": detail}, status)
 
 
 @app.get("/api/capsules/{cid}/files")
@@ -1357,24 +1400,13 @@ def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
 
 
 def _validated_done_event(value: dict) -> dict | None:
-    if set(value) != {"type", "reply", "assistant", "power"}:
+    if set(value) != {"type", "reply", "team"}:
         return None
-    reply = value["reply"]
-    assistant = _canonical_assistant_id(value["assistant"])
-    power = value["power"]
-    if (
-        not isinstance(reply, str)
-        or not reply.strip()
-        or len(reply) > MAX_CHAT_REPLY_CHARS
-        or re.search(r"[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]", reply) is not None
-        or assistant is None
-        or (
-            power is not None
-            and (not isinstance(power, str) or len(power) > 80 or ASSISTANT_POWER_ID_RE.fullmatch(power) is None)
-        )
-    ):
+    reply = _canonical_chat_reply(value["reply"])
+    team = _canonical_team_name(value["team"])
+    if reply is None or team is None:
         return None
-    return {"type": "done", "reply": reply, "assistant": assistant, "power": power}
+    return {"type": "done", "reply": reply, "team": team}
 
 
 def _validated_error_event(value: dict) -> dict | None:
@@ -1509,7 +1541,6 @@ def _relay_upstream_events(
 @dataclass(frozen=True)
 class _StreamRelay:
     cid: str
-    assistant: str
     text: str
     headers: dict
     queue: asyncio.Queue
@@ -1545,7 +1576,7 @@ async def _send_relay_event(
     projected = dict(event)
     relay_abort = bool(projected.pop("_relay_abort", False))
     terminal = _validated_terminal_event(projected)
-    if terminal is None or (terminal["type"] == "done" and terminal["assistant"] != turn.assistant):
+    if terminal is None:
         terminal = {"type": "error", "status": 502, "detail": TERMINAL_CONTRACT_ERROR}
         relay_abort = True
     if relay_abort:
@@ -1561,7 +1592,7 @@ def _stream_lines(relay: _StreamRelay) -> None:
     parsed = urlparse(CAPSULEDRIVER_URL)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=200)
     try:
-        payload: dict[str, object] = {"assistant": relay.assistant, "message": relay.text}
+        payload: dict[str, object] = {"message": relay.text}
         if relay.files:
             payload["files"] = list(relay.files)
         body = jsonlib.dumps(payload, ensure_ascii=False).encode()
@@ -1620,7 +1651,6 @@ class _WsTurn:
     ws: WebSocket
     cid: str
     headers: dict
-    assistant: str
     text: str
     started: asyncio.Event
     dispatched: asyncio.Event
@@ -1683,7 +1713,6 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
                 _stream_lines,
                 _StreamRelay(
                     turn.cid,
-                    turn.assistant,
                     turn.text,
                     turn.headers,
                     queue,
@@ -1719,7 +1748,6 @@ async def _ws_run_turn(
             ws=ws,
             cid=cid,
             headers=hdr,
-            assistant=payload["assistant"],
             text=payload["message"],
             started=started,
             dispatched=dispatched,
@@ -1744,7 +1772,6 @@ def _start_ws_turn(
                 ws=ws,
                 cid=cid,
                 headers=hdr,
-                assistant=msg["assistant"],
                 text=msg["message"],
                 started=started,
                 dispatched=dispatched,
@@ -1793,12 +1820,12 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
     if msg.get("type") == "chat":
         try:
             if set(msg) not in (
-                {"type", "assistant", "message"},
-                {"type", "assistant", "message", "files"},
+                {"type", "message"},
+                {"type", "message", "files"},
             ):
                 raise ClientPayloadError(
                     400,
-                    "chat frame must contain type, assistant, message, and optional files",
+                    "chat frame must contain type, message, and optional files",
                 )
             turn_payload = _chat_turn_payload({key: value for key, value in msg.items() if key != "type"})
         except ClientPayloadError as exc:

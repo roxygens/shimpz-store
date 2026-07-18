@@ -37,12 +37,11 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 
-def _done(reply: str = "hello", *, assistant: str = "hello-pulse", power: str | None = None) -> dict:
+def _done(reply: str = "hello", *, team: str = "Marketing") -> dict:
     return {
         "type": "done",
         "reply": reply,
-        "assistant": assistant,
-        "power": power,
+        "team": team,
     }
 
 
@@ -168,7 +167,7 @@ def test_websocket_allows_only_one_local_turn_task():
                 websocket,
                 "test-capsule",
                 {},
-                {"type": "chat", "assistant": "hello-pulse", "message": "second"},
+                {"type": "chat", "message": "second"},
                 state,
             )
         finally:
@@ -218,7 +217,7 @@ def test_websocket_returns_typed_429_when_global_turn_queue_is_full():
                 websocket,
                 "test-capsule",
                 {},
-                {"type": "chat", "assistant": "hello-pulse", "message": "beyond the bound"},
+                {"type": "chat", "message": "beyond the bound"},
                 {"turns": set()},
             )
             assert json.loads(sent[-1]["text"]) == {
@@ -311,7 +310,7 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
                 websocket,
                 "cap-queued",
                 {},
-                {"type": "chat", "assistant": "hello-pulse", "message": "must never execute"},
+                {"type": "chat", "message": "must never execute"},
                 state,
             )
             await asyncio.sleep(0)
@@ -340,10 +339,10 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
     "event",
     [
         {"type": "text", "text": "legacy"},
-        _done("wrong Assistant", assistant="salesnator"),
+        _done("invalid Team identity", team=" Marketing "),
     ],
 )
-def test_final_websocket_gate_converts_invalid_or_mismatched_events(event: dict, monkeypatch):
+def test_final_websocket_gate_converts_invalid_events(event: dict, monkeypatch):
     async def scenario() -> None:
         stops = []
 
@@ -358,7 +357,6 @@ def test_final_websocket_gate_converts_invalid_or_mismatched_events(event: dict,
             websocket,
             "cap-terminal-gate",
             {"X-Shimpz-Account": "token"},
-            "hello-pulse",
             "hello",
             asyncio.Event(),
             asyncio.Event(),
@@ -501,7 +499,7 @@ def test_upstream_http_errors_and_unterminated_terminal_lines_remain_typed():
 @pytest.mark.parametrize(
     "event",
     [
-        _done("complete", power="reports.read"),
+        _done("complete", team="Marketing"),
         {"type": "error", "status": 504, "detail": "provider timed out"},
         {"type": "stopped"},
     ],
@@ -518,9 +516,9 @@ def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict)
         {"type": "ask", "text": "approve?"},
         {"type": "answered", "answered": True},
         {**_done(), "extra": True},
-        {"type": "done", "reply": "hello", "assistant": "hello-pulse"},
-        _done("hello", assistant="../escape"),
-        _done("hello", power="../escape"),
+        {"type": "done", "reply": "hello"},
+        _done("hello", team=" Marketing "),
+        _done("hello", team="Marketing\x00"),
         _done("x" * (main.MAX_CHAT_REPLY_CHARS + 1)),
         {"type": "error", "status": True, "detail": "failed"},
         {"type": "error", "status": 200, "detail": "not an error"},
@@ -619,7 +617,7 @@ def test_upstream_relay_releases_nothing_before_one_complete_terminal_event():
         queue: asyncio.Queue = asyncio.Queue(maxsize=4)
         loop = asyncio.get_running_loop()
         first = b'{"type":"done","reply":"first",'
-        rest = b'"assistant":"hello-pulse","power":null}\n'
+        rest = b'"team":"Marketing"}\n'
         with _real_delayed_upstream(first, rest) as (
             response,
             first_flushed,
@@ -689,7 +687,6 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
                 main._stream_lines,
                 main._StreamRelay(
                     "cap-utf8",
-                    "hello-pulse",
                     prompt,
                     {},
                     queue,
@@ -701,7 +698,6 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         assert started.is_set()
         assert len(requests) == 1
         assert json.loads(requests[0]) == {
-            "assistant": "hello-pulse",
             "message": prompt,
             "files": [opaque_file],
         }
@@ -749,7 +745,7 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
                 websocket,
                 "cap-terminal",
                 {},
-                {"assistant": "hello-pulse", "message": "hello"},
+                {"message": "hello"},
                 started,
             )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
@@ -780,7 +776,7 @@ def test_real_upstream_non_2xx_reaches_websocket_unchanged(status: int, payload:
                 websocket,
                 "cap-upstream-error",
                 {},
-                {"assistant": "hello-pulse", "message": "hello"},
+                {"message": "hello"},
                 started,
             )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
@@ -845,7 +841,7 @@ def test_stream_workers_cannot_starve_the_default_control_pool():
                 worker = loop.run_in_executor(
                     main._STREAM_EXECUTOR,
                     main._stream_lines,
-                    main._StreamRelay("cap-pool", "hello-pulse", "hello", {}, queue, loop, started),
+                    main._StreamRelay("cap-pool", "hello", {}, queue, loop, started),
                 )
                 await asyncio.wait_for(started.wait(), timeout=1)
                 await asyncio.wait_for(worker, timeout=2)
@@ -910,7 +906,7 @@ def test_local_relay_eof_stops_provider_before_browser_error():
                 websocket,
                 "cap-abort",
                 {},
-                {"assistant": "hello-pulse", "message": "hello"},
+                {"message": "hello"},
                 started,
             )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
@@ -953,7 +949,6 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
                     websocket,
                     "cap-disconnect",
                     {},
-                    "hello-pulse",
                     "hello",
                     asyncio.Event(),
                     asyncio.Event(),
