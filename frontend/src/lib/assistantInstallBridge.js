@@ -108,7 +108,7 @@ export function acceptAssistantStoreContext(event, parentWindow) {
 
 /**
  * Accept only bounded Assistant IDs from the exact loopback parent. This intentionally reveals no
- * Capsule identity, runtime details, tokens, or credentials to the public Store document.
+ * Team identity, runtime details, tokens, or credentials to the public Store document.
  * @param {{ source?: unknown, origin?: unknown, data?: unknown } | null | undefined} event
  * @param {unknown} parentWindow
  * @param {string} parentOrigin

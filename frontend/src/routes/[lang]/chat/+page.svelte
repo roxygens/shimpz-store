@@ -5,12 +5,12 @@
   import {
     CHAT_WS_SUBPROTOCOL,
     createTeamChatTurn,
-    parseCapsuleStorage,
-    parseCapsuleUpload,
+    parseTeamStorage,
+    parseTeamUpload,
     parseChatTerminalEvent,
     teamChatReconnectDelay,
     teamChatWebSocketPath,
-  } from "$lib/capsuleChat.js";
+  } from "$lib/teamChat.js";
   import { tr } from "$lib/i18n";
   import {
     MODEL_PROVIDERS,
@@ -27,14 +27,14 @@
   let { data } = $props();
   const lang = $derived(data.lang as Locale);
 
-  const SEL_KEY = "shimpz_current_capsule";
+  const SEL_KEY = "shimpz_current_team";
 
   let phase = $state("checking"); // checking | login | none | ready
-  let capsules = $state<any[]>([]);
+  let teams = $state<any[]>([]);
   let selected = $state("");
   let inference = $state<any>(null); // {provider, model}
   let configuredProviders = $state<string[]>([]);
-  let capsuleFiles = $state<any[]>([]);
+  let teamFiles = $state<any[]>([]);
   let storageUsed = $state(0);
   let storageLimit = $state(100 * 1024 * 1024);
   let storageRemaining = $state(100 * 1024 * 1024);
@@ -51,14 +51,14 @@
   let thread = $state<HTMLElement | null>(null);
   let fileInput = $state<HTMLInputElement | null>(null);
 
-  const activeTeam = $derived(capsules.find((team) => team.id === selected) ?? null);
-  const teamName = $derived(typeof activeTeam?.name === "string" ? activeTeam.name : "");
+  const activeTeam = $derived(teams.find((team) => team.team_id === selected) ?? null);
+  const teamName = $derived(typeof activeTeam?.team_name === "string" ? activeTeam.team_name : "");
   const providerReady = $derived(Boolean(inference?.provider && configuredProviders.includes(inference.provider)));
   const canChat = $derived(Boolean(teamName && providerReady));
   const storagePercent = $derived(
     storageLimit > 0 ? Math.min(100, Math.max(0, (storageUsed / storageLimit) * 100)) : 0,
   );
-  const attachedFiles = $derived(capsuleFiles.filter((file) => attachedFileIds.includes(file.id)));
+  const attachedFiles = $derived(teamFiles.filter((file) => attachedFileIds.includes(file.id)));
 
   function formatBytes(value: number) {
     if (value < 1024) return `${value} B`;
@@ -67,28 +67,28 @@
   }
 
   function applyStorage(payload: any) {
-    const parsed = parseCapsuleStorage(payload);
-    capsuleFiles = parsed.files;
+    const parsed = parseTeamStorage(payload);
+    teamFiles = parsed.files;
     attachedFileIds = attachedFileIds.filter((fileId) => parsed.files.some((file) => file.id === fileId));
     storageUsed = parsed.used_bytes;
     storageLimit = parsed.limit_bytes;
     storageRemaining = parsed.remaining_bytes;
   }
 
-  async function refreshStorage(cid = selected) {
-    if (!cid) return;
+  async function refreshStorage(team_id = selected) {
+    if (!team_id) return;
     storageLoading = true;
     storageError = "";
     try {
-      const response = await fetch(`/api/capsules/${cid}/files`);
+      const response = await fetch(`/api/teams/${team_id}/files`);
       const payload = await response.json().catch(() => ({}));
-      if (selected !== cid) return;
+      if (selected !== team_id) return;
       if (!response.ok) throw new Error(payload?.detail ?? payload?.error ?? "storage unavailable");
       applyStorage(payload);
     } catch (error) {
-      if (selected === cid) storageError = error instanceof Error ? error.message : "storage unavailable";
+      if (selected === team_id) storageError = error instanceof Error ? error.message : "storage unavailable";
     } finally {
-      if (selected === cid) storageLoading = false;
+      if (selected === team_id) storageLoading = false;
     }
   }
 
@@ -96,7 +96,7 @@
   // the browser build. Until it loads, replies render as safe escaped text.
   let renderMd = $state<(s: string) => string>((s) => s.replace(/[&<>]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;" })[c] as string));
 
-  // One WebSocket per Capsule releases one closed terminal event for each admitted turn.
+  // One WebSocket per Team releases one closed terminal event for each admitted turn.
   let ws = $state<WebSocket | null>(null);
   let wsReady = $state(false);
   let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
@@ -118,7 +118,7 @@
     return "✗ " + (detail || "error");
   }
 
-  function connectWs(cid = selected) {
+  function connectWs(team_id = selected) {
     if (reconnectTimer !== null) {
       clearTimeout(reconnectTimer);
       reconnectTimer = null;
@@ -127,14 +127,14 @@
     ws = null;
     previous?.close();
     wsReady = false;
-    if (!cid || selected !== cid || chatDestroyed) return;
+    if (!team_id || selected !== team_id || chatDestroyed) return;
     const proto = location.protocol === "https:" ? "wss://" : "ws://";
     const sock = new WebSocket(
-      `${proto}${location.host}${teamChatWebSocketPath(cid)}`,
+      `${proto}${location.host}${teamChatWebSocketPath(team_id)}`,
       CHAT_WS_SUBPROTOCOL,
     );
     sock.onopen = () => {
-      if (ws !== sock || selected !== cid) return;
+      if (ws !== sock || selected !== team_id) return;
       if (sock.protocol !== CHAT_WS_SUBPROTOCOL) {
         ws = null;
         sock.close(1002, "required subprotocol missing");
@@ -145,7 +145,7 @@
       wsReady = true;
     };
     sock.onclose = () => {
-      if (ws !== sock || selected !== cid) return;
+      if (ws !== sock || selected !== team_id) return;
       wsReady = false;
       ws = null;
       if (busy) {
@@ -155,17 +155,17 @@
         messages.push({ role: "system", tone: "error", text: tr("chat_disconnected", lang) });
         scrollDown(true);
       }
-      if (!chatDestroyed && phase === "ready" && selected === cid && reconnectTimer === null) {
+      if (!chatDestroyed && phase === "ready" && selected === team_id && reconnectTimer === null) {
         const delay = teamChatReconnectDelay(reconnectAttempt);
         reconnectAttempt += 1;
         reconnectTimer = setTimeout(() => {
           reconnectTimer = null;
-          if (!chatDestroyed && phase === "ready" && selected === cid) connectWs(cid);
+          if (!chatDestroyed && phase === "ready" && selected === team_id) connectWs(team_id);
         }, delay);
       }
     };
     sock.onmessage = (ev) => {
-      if (ws !== sock || selected !== cid) return;
+      if (ws !== sock || selected !== team_id) return;
       let m;
       try {
         m = parseChatTerminalEvent(JSON.parse(ev.data), teamName);
@@ -182,7 +182,7 @@
       }
       stopping = false;
       if (m.type === "done") {
-        messages.push({ role: "assistant", team: m.team, text: m.reply });
+        messages.push({ role: "assistant", team_name: m.team_name, text: m.reply });
         busy = false;
         status = "";
       } else if (m.type === "stopped") {
@@ -243,24 +243,24 @@
     thread.scrollTo({ top: thread.scrollHeight, behavior: smooth && !rm ? "smooth" : "auto" });
   }
 
-  async function loadCapsuleContext() {
-    const cid = selected;
+  async function loadTeamContext() {
+    const team_id = selected;
     inference = null;
-    capsuleFiles = [];
+    teamFiles = [];
     attachedFileIds = [];
     storageUsed = 0;
     storageRemaining = storageLimit;
     storageError = "";
-    if (!cid) return;
-    localStorage.setItem(SEL_KEY, cid);
-    const name = capsules.find((c) => c.id === cid)?.name ?? cid;
-    localStorage.setItem(SEL_KEY + "_name", name);
+    if (!team_id) return;
+    localStorage.setItem(SEL_KEY, team_id);
+    const teamName = teams.find((team) => team.team_id === team_id)?.team_name ?? team_id;
+    localStorage.setItem(SEL_KEY + "_name", teamName);
     storageLoading = true;
     const [currentInference, f] = await Promise.all([
-      fetch(`/api/capsules/${cid}/inference`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
-      fetch(`/api/capsules/${cid}/files`).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, data: {} })),
+      fetch(`/api/teams/${team_id}/inference`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      fetch(`/api/teams/${team_id}/files`).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, data: {} })),
     ]);
-    if (selected !== cid) return;
+    if (selected !== team_id) return;
     inference = currentInference;
     try {
       if (!f.ok) throw new Error(f.data?.detail ?? f.data?.error ?? "storage unavailable");
@@ -270,15 +270,15 @@
     } finally {
       storageLoading = false;
     }
-    const capsule = capsules.find((item) => item.id === cid);
-    loadedProvider = currentInference?.provider ?? capsule?.provider ?? "openai";
-    loadedModel = String(currentInference?.model ?? capsule?.model ?? defaultModelFor(loadedProvider));
+    const team = teams.find((item) => item.team_id === team_id);
+    loadedProvider = currentInference?.provider ?? team?.provider ?? "openai";
+    loadedModel = String(currentInference?.model ?? team?.model ?? defaultModelFor(loadedProvider));
     providerChoice = loadedProvider;
     modelChoice = loadedModel;
-    connectWs(cid);
+    connectWs(team_id);
   }
 
-  function resetCapsuleSession() {
+  function resetTeamSession() {
     inferenceError = "";
     inferenceSaved = "";
     const previous = ws;
@@ -295,32 +295,32 @@
     status = "";
     messages = [];
     draft = "";
-    capsuleFiles = [];
+    teamFiles = [];
     attachedFileIds = [];
     storageUsed = 0;
     storageError = "";
     deletingFile = "";
   }
 
-  async function changeCapsule(next: string, updateUrl = true) {
-    if (inferenceBusy || !capsules.some((capsule) => capsule.id === next) || next === selected) return;
-    resetCapsuleSession();
+  async function changeTeam(next: string, updateUrl = true) {
+    if (inferenceBusy || !teams.some((team) => team.team_id === next) || next === selected) return;
+    resetTeamSession();
     selected = next;
     if (updateUrl) {
       await goto(u.chat(lang, next), { keepFocus: true, noScroll: true });
     }
-    await loadCapsuleContext();
+    await loadTeamContext();
   }
 
   async function saveInference() {
     if (!selected || !inferenceHasChanges || inferenceBusy || busy) return;
-    const cid = selected;
+    const team_id = selected;
     inferenceBusy = true;
     inferenceError = "";
     inferenceSaved = "";
     try {
       const payload = normalizeInferenceSelection(providerChoice, modelChoice);
-      const response = await fetch(`/api/capsules/${cid}/inference`, {
+      const response = await fetch(`/api/teams/${team_id}/inference`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
@@ -330,12 +330,12 @@
         inferenceError = result?.detail ?? result?.error ?? tr("brain_switch_failed", lang);
         return;
       }
-      if (selected !== cid) return;
+      if (selected !== team_id) return;
       inference = { provider: payload.provider, model: payload.model };
       loadedProvider = payload.provider;
       loadedModel = payload.model;
-      capsules = capsules.map((item) =>
-        item.id === cid ? { ...item, provider: payload.provider, model: payload.model } : item,
+      teams = teams.map((item) =>
+        item.team_id === team_id ? { ...item, provider: payload.provider, model: payload.model } : item,
       );
       inferenceSaved = tr("brain_switch_ok", lang);
     } catch {
@@ -345,13 +345,13 @@
     }
   }
 
-  function syncCapsuleFromUrl() {
+  function syncTeamFromUrl() {
     if (phase !== "ready" || location.pathname !== u.chat(lang)) return;
-    const requested = new URL(location.href).searchParams.get("capsule") ?? "";
-    const next = capsules.some((capsule) => capsule.id === requested) ? requested : capsules[0]?.id ?? "";
+    const requested = new URL(location.href).searchParams.get("team") ?? "";
+    const next = teams.some((team) => team.team_id === requested) ? requested : teams[0]?.team_id ?? "";
     if (!next) return;
     if (requested !== next) history.replaceState(history.state, "", u.chat(lang, next));
-    if (next !== selected) void changeCapsule(next, false);
+    if (next !== selected) void changeTeam(next, false);
   }
 
   async function boot() {
@@ -361,7 +361,7 @@
       return;
     }
     const [r, brainsResponse] = await Promise.all([
-      fetch("/api/capsules"),
+      fetch("/api/teams"),
       fetch("/api/brains").catch(() => null),
     ]);
     const brainsResult = await brainsResponse?.json().catch(() => null);
@@ -370,20 +370,20 @@
           .filter((entry: any) => entry?.status === "configured" && (entry.provider === "openai" || entry.provider === "anthropic"))
           .map((entry: any) => entry.provider)
       : [];
-    capsules = r.ok ? ((await r.json()).capsules ?? []) : [];
-    if (capsules.length === 0) {
+    teams = r.ok ? ((await r.json()).teams ?? []) : [];
+    if (teams.length === 0) {
       phase = "none";
       return;
     }
-    const requested = new URL(location.href).searchParams.get("capsule") ?? "";
+    const requested = new URL(location.href).searchParams.get("team") ?? "";
     const stored = localStorage.getItem(SEL_KEY) ?? "";
-    selected = capsules.some((c) => c.id === requested)
+    selected = teams.some((team) => team.team_id === requested)
       ? requested
-      : capsules.some((c) => c.id === stored)
+      : teams.some((team) => team.team_id === stored)
         ? stored
-        : capsules[0].id;
+        : teams[0].team_id;
     if (requested !== selected) history.replaceState(history.state, "", u.chat(lang, selected));
-    await loadCapsuleContext();
+    await loadTeamContext();
     phase = "ready";
   }
 
@@ -414,11 +414,11 @@
     try {
       const form = new FormData();
       form.append("file", file);
-      const r = await fetch(`/api/capsules/${selected}/files`, { method: "POST", body: form });
+      const r = await fetch(`/api/teams/${selected}/files`, { method: "POST", body: form });
       const d = await r.json().catch(() => ({}));
       if (r.ok) {
-        const uploaded = parseCapsuleUpload(d);
-        capsuleFiles = [...capsuleFiles, uploaded.file];
+        const uploaded = parseTeamUpload(d);
+        teamFiles = [...teamFiles, uploaded.file];
         storageUsed = uploaded.used_bytes;
         storageLimit = uploaded.limit_bytes;
         storageRemaining = uploaded.remaining_bytes;
@@ -445,7 +445,7 @@
     deletingFile = fileId;
     storageError = "";
     try {
-      const response = await fetch(`/api/capsules/${selected}/files/${fileId}`, { method: "DELETE" });
+      const response = await fetch(`/api/teams/${selected}/files/${fileId}`, { method: "DELETE" });
       const payload = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(payload?.detail ?? payload?.error ?? "delete failed");
       await refreshStorage(selected);
@@ -462,7 +462,7 @@
       attachedFileIds = attachedFileIds.filter((value) => value !== fileId);
       return;
     }
-    if (attachedFileIds.length >= 8 || !capsuleFiles.some((file) => file.id === fileId)) return;
+    if (attachedFileIds.length >= 8 || !teamFiles.some((file) => file.id === fileId)) return;
     attachedFileIds = [...attachedFileIds, fileId];
   }
 
@@ -485,7 +485,7 @@
   });
 </script>
 
-<svelte:window onpopstate={syncCapsuleFromUrl} />
+<svelte:window onpopstate={syncTeamFromUrl} />
 
 <Seo title={tr("chat_title", lang)} description={tr("chat_lead", lang)} {lang} />
 
@@ -517,28 +517,28 @@
   {:else if phase === "login"}
     <div class="panel page-state"><HudIcon name="user" size={28} /><p>{tr("chat_login", lang)}</p><a class="btn-primary" href={u.login(lang)}>{tr("log_in", lang)}</a></div>
   {:else if phase === "none"}
-    <div class="panel page-state"><HudIcon name="capsule" size={30} /><p>{tr("chat_no_capsule", lang)}</p><a class="btn-primary" href={u.capsule(lang)}>{tr("capsule_submit", lang)}</a></div>
+    <div class="panel page-state"><HudIcon name="team" size={30} /><p>{tr("chat_no_team", lang)}</p><a class="btn-primary" href={u.team(lang)}>{tr("team_submit", lang)}</a></div>
   {:else}
     <div class="chat-workspace">
-      <aside class="control-rail" aria-label={tr("chat_capsule_title", lang)}>
-        <section class="panel control-card" aria-labelledby="capsule-context-title">
+      <aside class="control-rail" aria-label={tr("chat_team_title", lang)}>
+        <section class="panel control-card" aria-labelledby="team-context-title">
           <header class="control-heading">
-            <span class="control-icon" aria-hidden="true"><HudIcon name="capsule" size={21} /></span>
-            <div><p class="kicker">Team</p><h2 id="capsule-context-title">{tr("chat_capsule_title", lang)}</h2></div>
+            <span class="control-icon" aria-hidden="true"><HudIcon name="team" size={21} /></span>
+            <div><p class="kicker">Team</p><h2 id="team-context-title">{tr("chat_team_title", lang)}</h2></div>
           </header>
-          <p class="control-help">{tr("chat_capsule_help", lang)}</p>
+          <p class="control-help">{tr("chat_team_help", lang)}</p>
           <label class="field-stack">
-            <span>{tr("my_capsules", lang)}</span>
+            <span>{tr("my_teams", lang)}</span>
             <select
               class="field field-sm"
-              aria-label={tr("my_capsules", lang)}
+              aria-label={tr("my_teams", lang)}
               value={selected}
               disabled={runtimeBusy}
-              onchange={(event) => changeCapsule((event.currentTarget as HTMLSelectElement).value)}>
-              {#each capsules as c (c.id)}<option value={c.id}>{c.name || c.id}</option>{/each}
+              onchange={(event) => changeTeam((event.currentTarget as HTMLSelectElement).value)}>
+              {#each teams as team (team.team_id)}<option value={team.team_id}>{team.team_name}</option>{/each}
             </select>
           </label>
-          <code class="capsule-id">{selected}</code>
+          <code class="team-id">{selected}</code>
         </section>
 
         <section class="panel control-card brain-control" aria-labelledby="brain-control-title" aria-busy={inferenceBusy}>
@@ -602,7 +602,7 @@
           <header class="control-heading">
             <span class="control-icon storage-icon" aria-hidden="true"><HudIcon name="attach" size={20} /></span>
             <div><p class="kicker">Team</p><h2 id="storage-context-title">{tr("chat_storage_title", lang)}</h2></div>
-            <span class="storage-count">{capsuleFiles.length}</span>
+            <span class="storage-count">{teamFiles.length}</span>
           </header>
           <p class="control-help">{tr("chat_storage_help", lang)}</p>
           <div class="storage-meter" aria-label={`${formatBytes(storageUsed)} / ${formatBytes(storageLimit)}`}>
@@ -619,9 +619,9 @@
               <p>{storageError}</p>
               <button class="btn-ghost" type="button" onclick={() => refreshStorage()}>{tr("retry", lang)}</button>
             </div>
-          {:else if capsuleFiles.length}
+          {:else if teamFiles.length}
             <ul class="file-list">
-              {#each capsuleFiles as file (file.id)}
+              {#each teamFiles as file (file.id)}
                 <li class:attached={attachedFileIds.includes(file.id)}>
                   <label class="file-select" title={tr("chat_file_select", lang)}>
                     <input
@@ -656,7 +656,7 @@
 
       <main class="conversation-shell" aria-labelledby="conversation-title">
         <header class="conversation-header">
-          <span class="conversation-avatar" aria-hidden="true"><HudIcon name="capsule" size={24} /></span>
+          <span class="conversation-avatar" aria-hidden="true"><HudIcon name="team" size={24} /></span>
           <div>
             <p class="kicker">{tr("chat_team_target", lang)}</p>
             <h2 id="conversation-title">{teamName}</h2>
@@ -687,7 +687,7 @@
               </div>
             {:else if m.role === "assistant"}
               <div class="message assistant-message">
-                <small class="message-author">{m.team || teamName}</small>
+                <small class="message-author">{m.team_name || teamName}</small>
                 <div class="md">{@html renderMd(m.text || "")}</div>
               </div>
             {:else}
@@ -895,7 +895,7 @@
     text-transform: uppercase;
   }
 
-  .capsule-id {
+  .team-id {
     display: block;
     max-width: 100%;
     margin-top: 0.65rem;

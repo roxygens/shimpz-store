@@ -13,9 +13,9 @@ export const u = {
   // driver/app names internally.
   drivers: (l: Locale) => `/${l}/drivers`,
   driver: (l: Locale, d: Driver) => `/${l}/drivers/${d.id}`,
-  capsule: (l: Locale) => `/${l}/capsule`,
-  chat: (l: Locale, capsule?: string) =>
-    `/${l}/chat${capsule ? `?capsule=${encodeURIComponent(capsule)}` : ""}`,
+  team: (l: Locale) => `/${l}/team`,
+  chat: (l: Locale, teamId?: string) =>
+    `/${l}/chat${teamId ? `?team=${encodeURIComponent(teamId)}` : ""}`,
   login: (l: Locale) => `/${l}/login`,
   account: (l: Locale) => `/${l}/account`,
   creators: (l: Locale) => `/${l}/creators`,

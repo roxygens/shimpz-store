@@ -34,10 +34,10 @@
 
   <div class="connector" aria-hidden="true"><span></span></div>
 
-  <ol class="capsules" aria-label={lang === "pt" ? "Cápsulas isoladas" : "Isolated Capsules"}>
+  <ol class="teams" aria-label={lang === "pt" ? "Times isolados" : "Isolated Teams"}>
     <li>
-      <div class="capsule-heading">
-        <span>{tr("topology_capsule", lang)} // 01</span>
+      <div class="team-heading">
+        <span>{tr("topology_team", lang)} // 01</span>
         <small>{tr("topology_boundary", lang)}</small>
       </div>
       <div class="apps">
@@ -48,8 +48,8 @@
       <p>{tr("topology_apps", lang)}</p>
     </li>
     <li>
-      <div class="capsule-heading">
-        <span>{tr("topology_capsule", lang)} // 02</span>
+      <div class="team-heading">
+        <span>{tr("topology_team", lang)} // 02</span>
         <small>{tr("topology_boundary", lang)}</small>
       </div>
       <div class="apps">
@@ -92,7 +92,7 @@
   .topology-header,
   .space-node,
   .rail-title,
-  .capsule-heading {
+  .team-heading {
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -104,7 +104,7 @@
   .node-type,
   .control-plane,
   .rail-title,
-  .capsule-heading,
+  .team-heading,
   .apps,
   figcaption {
     font-family: var(--font-mono);
@@ -198,7 +198,7 @@
   }
 
   .rail-title small,
-  .capsule-heading small {
+  .team-heading small {
     color: var(--color-muted-2);
     font-size: 0.625rem;
     letter-spacing: 0.08em;
@@ -206,7 +206,7 @@
   }
 
   .driver-rail ul,
-  .capsules {
+  .teams {
     padding: 0;
     list-style: none;
   }
@@ -250,14 +250,14 @@
     background: color-mix(in oklab, var(--color-cyan) 35%, var(--color-border));
   }
 
-  .capsules {
+  .teams {
     display: grid;
     margin: 0;
     grid-template-columns: repeat(2, minmax(0, 1fr));
     gap: 0.7rem;
   }
 
-  .capsules > li {
+  .teams > li {
     position: relative;
     min-width: 0;
     padding: 0.85rem;
@@ -266,7 +266,7 @@
     clip-path: polygon(var(--cut-sm) 0, 100% 0, 100% calc(100% - var(--cut-sm)), calc(100% - var(--cut-sm)) 100%, 0 100%, 0 var(--cut-sm));
   }
 
-  .capsule-heading > span {
+  .team-heading > span {
     color: var(--color-magenta);
     font-size: 0.625rem;
     font-weight: 700;
@@ -296,7 +296,7 @@
 
   .apps span:last-child { color: var(--color-cyan); }
 
-  .capsules p {
+  .teams p {
     margin: 0.55rem 0 0;
     color: var(--color-muted-2);
     font-size: 0.68rem;
@@ -316,6 +316,6 @@
     .driver-rail ul { grid-template-columns: 1fr; }
     .driver-rail li { text-align: left; }
     .connector { display: none; }
-    .capsules { margin-top: 0.7rem; grid-template-columns: 1fr; }
+    .teams { margin-top: 0.7rem; grid-template-columns: 1fr; }
   }
 </style>

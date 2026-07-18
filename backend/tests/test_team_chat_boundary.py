@@ -31,11 +31,11 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         self.calls.append(("GET", self.path, {}))
-        if self.path == "/v1/capsules/cap_one/files":
+        if self.path == "/v1/teams/team_one/files":
             self._json(
                 200,
                 {
-                    "capsule": "cap_one",
+                    "team_id": "team_one",
                     "files": [
                         {
                             "id": FILE_ID,
@@ -59,11 +59,11 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
         self.calls.append(("POST", self.path, body))
         if self.path == "/v1/verify":
             self._json(200, {"account_id": "account-one", "username": "captain"})
-        elif self.path == "/v1/capsules/cap_one/files":
+        elif self.path == "/v1/teams/team_one/files":
             self._json(
                 200,
                 {
-                    "capsule": "cap_one",
+                    "team_id": "team_one",
                     "file": {
                         "id": FILE_ID,
                         "name": body["filename"],
@@ -81,8 +81,8 @@ class _ControlPlaneHandler(BaseHTTPRequestHandler):
 
     def do_DELETE(self) -> None:
         self.calls.append(("DELETE", self.path, {}))
-        if self.path == f"/v1/capsules/cap_one/files/{FILE_ID}":
-            self._json(200, {"capsule": "cap_one", "id": FILE_ID, "deleted": True, **USAGE})
+        if self.path == f"/v1/teams/team_one/files/{FILE_ID}":
+            self._json(200, {"team_id": "team_one", "id": FILE_ID, "deleted": True, **USAGE})
         else:
             self._json(404, {"detail": "not found"})
 
@@ -100,14 +100,14 @@ def _control_plane():
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
     previous_accounts = main.ACCOUNTS_URL
-    previous_driver = main.CAPSULEDRIVER_URL
+    previous_driver = main.TEAMDRIVER_URL
     main.ACCOUNTS_URL = base
-    main.CAPSULEDRIVER_URL = base
+    main.TEAMDRIVER_URL = base
     try:
         yield calls
     finally:
         main.ACCOUNTS_URL = previous_accounts
-        main.CAPSULEDRIVER_URL = previous_driver
+        main.TEAMDRIVER_URL = previous_driver
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
@@ -122,29 +122,29 @@ def _authenticated_client() -> TestClient:
 def test_public_http_chat_endpoint_is_absent():
     with _control_plane() as calls, _authenticated_client() as client:
         response = client.post(
-            "/api/capsules/cap_one/chat",
+            "/api/teams/team_one/chat",
             json={"message": "say hello", "files": [FILE_ID]},
         )
 
     assert response.status_code == 405
     routes = {getattr(route, "path", None) for route in main.app.routes}
-    assert "/api/capsules/{cid}/chat" not in routes
-    assert "/api/capsules/{cid}/ws" not in routes
-    assert "/api/capsules/{cid}/chat/ws" in routes
+    assert "/api/teams/{team_id}/chat" not in routes
+    assert "/api/teams/{team_id}/ws" not in routes
+    assert "/api/teams/{team_id}/chat/ws" in routes
     assert not any(path.endswith("/chat") for _method, path, _body in calls)
 
 
-def test_capsule_files_are_opaque_typed_and_deletable_without_paths():
+def test_team_files_are_opaque_typed_and_deletable_without_paths():
     origin = next(iter(main.ASSISTANT_MUTATION_ALLOWED_ORIGINS))
     with _control_plane() as calls, _authenticated_client() as client:
-        listed = client.get("/api/capsules/cap_one/files")
+        listed = client.get("/api/teams/team_one/files")
         uploaded = client.post(
-            "/api/capsules/cap_one/files",
+            "/api/teams/team_one/files",
             files={"file": ("note.txt", b"hello", "text/plain")},
             headers={"Origin": origin},
         )
         deleted = client.delete(
-            f"/api/capsules/cap_one/files/{FILE_ID}",
+            f"/api/teams/team_one/files/{FILE_ID}",
             headers={"Origin": origin},
         )
 
@@ -175,25 +175,25 @@ def test_capsule_files_are_opaque_typed_and_deletable_without_paths():
     assert deleted.json() == {"id": FILE_ID, "deleted": True, **USAGE}
     assert all("path" not in json.dumps(response.json()) for response in (listed, uploaded, deleted))
 
-    upload_call = next(call for call in calls if call[:2] == ("POST", "/v1/capsules/cap_one/files"))
+    upload_call = next(call for call in calls if call[:2] == ("POST", "/v1/teams/team_one/files"))
     assert upload_call[2] == {
         "filename": "note.txt",
         "media_type": "text/plain",
         "content_b64": base64.b64encode(b"hello").decode(),
     }
-    assert ("GET", "/v1/capsules/cap_one/files", {}) in calls
-    assert ("DELETE", f"/v1/capsules/cap_one/files/{FILE_ID}", {}) in calls
+    assert ("GET", "/v1/teams/team_one/files", {}) in calls
+    assert ("DELETE", f"/v1/teams/team_one/files/{FILE_ID}", {}) in calls
 
 
-def test_capsule_file_mutations_reject_untrusted_origins_and_ids_before_the_driver():
+def test_team_file_mutations_reject_untrusted_origins_and_ids_before_the_driver():
     with _control_plane() as calls, _authenticated_client() as client:
         upload = client.post(
-            "/api/capsules/cap_one/files",
+            "/api/teams/team_one/files",
             files={"file": ("note.txt", b"hello", "text/plain")},
             headers={"Origin": "https://evil.example"},
         )
         deletion = client.delete(
-            "/api/capsules/cap_one/files/not-an-opaque-id",
+            "/api/teams/team_one/files/not-an-opaque-id",
             headers={"Origin": next(iter(main.ASSISTANT_MUTATION_ALLOWED_ORIGINS))},
         )
 

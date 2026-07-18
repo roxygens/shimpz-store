@@ -19,16 +19,16 @@
   } from "$lib/assistantInstallBridge.js";
   import {
     assistantStoreMode,
-    closedAssistantCapsuleHref,
+    closedAssistantTeamHref,
     closedAssistantLoginHref,
     cloudAssistantAction,
     cloudRequestIsCurrent,
     cloudStoreCanStart,
     parseCloudAccount,
     parseCloudAssistantInventory,
-    parseCloudCapsules,
+    parseCloudTeams,
     requestedAssistantFromSearch,
-    selectCloudCapsule,
+    selectCloudTeam,
   } from "$lib/cloudAssistantLifecycle.js";
   import AssistantIcon from "$lib/components/AssistantIcon.svelte";
   import HudIcon from "$lib/components/HudIcon.svelte";
@@ -41,7 +41,7 @@
   type InventoryState = "legacy" | "loading" | "ready" | "error";
   type CloudPhase = "checking" | "unauthenticated" | "empty" | "ready" | "error";
   type CloudInventoryState = "idle" | "loading" | "ready" | "error";
-  type CloudCapsule = { id: string; name: string };
+  type CloudTeam = { team_id: string; team_name: string };
   type PendingAction = {
     action: ActionKind;
     parentOrigin: string;
@@ -61,16 +61,16 @@
   let frameRequest = 0;
   let cloudPhase = $state<CloudPhase>("checking");
   let cloudInventoryState = $state<CloudInventoryState>("idle");
-  let cloudCapsules = $state<CloudCapsule[]>([]);
-  let cloudSelectedCapsule = $state("");
+  let cloudTeams = $state<CloudTeam[]>([]);
+  let cloudSelectedTeam = $state("");
   let cloudInstalledAssistantIds = $state<string[]>([]);
   let cloudActionLatch = $state(false);
   let cloudPendingAction = $state<ActionKind | "">("");
   let cloudFeedback = $state<"" | "success" | "error">("");
   let cloudGeneration = 0;
   let requestedAssistant = $state("");
-  const cloudTargetCapsule = $derived(
-    cloudCapsules.find((capsule) => capsule.id === cloudSelectedCapsule),
+  const cloudTargetTeam = $derived(
+    cloudTeams.find((team) => team.team_id === cloudSelectedTeam),
   );
 
   function actionState(assistant: string): ActionState {
@@ -170,36 +170,36 @@
     cloudGeneration += 1;
     cloudPhase = "unauthenticated";
     cloudInventoryState = "idle";
-    cloudCapsules = [];
-    cloudSelectedCapsule = "";
+    cloudTeams = [];
+    cloudSelectedTeam = "";
     cloudInstalledAssistantIds = [];
     cloudFeedback = "";
-    localStorage.removeItem("shimpz_current_capsule");
-    localStorage.removeItem("shimpz_current_capsule_name");
+    localStorage.removeItem("shimpz_current_team");
+    localStorage.removeItem("shimpz_current_team_name");
   }
 
-  async function loadCloudInventory(capsule: string, generation: number): Promise<string[] | null> {
-    if (!cloudRequestIsCurrent(generation, cloudGeneration, capsule, cloudSelectedCapsule)) return null;
+  async function loadCloudInventory(teamId: string, generation: number): Promise<string[] | null> {
+    if (!cloudRequestIsCurrent(generation, cloudGeneration, teamId, cloudSelectedTeam)) return null;
     cloudInventoryState = "loading";
     cloudInstalledAssistantIds = [];
     try {
-      const response = await fetch(`/api/capsules/${encodeURIComponent(capsule)}/assistants`, {
+      const response = await fetch(`/api/teams/${encodeURIComponent(teamId)}/assistants`, {
         cache: "no-store",
         headers: { Accept: "application/json" },
       });
-      if (!cloudRequestIsCurrent(generation, cloudGeneration, capsule, cloudSelectedCapsule)) return null;
+      if (!cloudRequestIsCurrent(generation, cloudGeneration, teamId, cloudSelectedTeam)) return null;
       if (response.status === 401) {
         clearCloudSession();
         return null;
       }
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const installed = parseCloudAssistantInventory(await response.json());
-      if (!cloudRequestIsCurrent(generation, cloudGeneration, capsule, cloudSelectedCapsule)) return null;
+      if (!cloudRequestIsCurrent(generation, cloudGeneration, teamId, cloudSelectedTeam)) return null;
       cloudInstalledAssistantIds = installed;
       cloudInventoryState = "ready";
       return installed;
     } catch {
-      if (cloudRequestIsCurrent(generation, cloudGeneration, capsule, cloudSelectedCapsule)) {
+      if (cloudRequestIsCurrent(generation, cloudGeneration, teamId, cloudSelectedTeam)) {
         cloudInstalledAssistantIds = [];
         cloudInventoryState = "error";
       }
@@ -215,8 +215,8 @@
     const generation = ++cloudGeneration;
     cloudPhase = "checking";
     cloudInventoryState = "idle";
-    cloudCapsules = [];
-    cloudSelectedCapsule = "";
+    cloudTeams = [];
+    cloudSelectedTeam = "";
     cloudInstalledAssistantIds = [];
     cloudFeedback = "";
     try {
@@ -236,82 +236,82 @@
         return;
       }
 
-      const capsuleResponse = await fetch("/api/capsules", {
+      const teamResponse = await fetch("/api/teams", {
         cache: "no-store",
         headers: { Accept: "application/json" },
       });
       if (generation !== cloudGeneration) return;
-      if (capsuleResponse.status === 401) {
+      if (teamResponse.status === 401) {
         clearCloudSession();
         return;
       }
-      if (!capsuleResponse.ok) throw new Error(`HTTP ${capsuleResponse.status}`);
-      const capsules = parseCloudCapsules(await capsuleResponse.json());
+      if (!teamResponse.ok) throw new Error(`HTTP ${teamResponse.status}`);
+      const teams = parseCloudTeams(await teamResponse.json());
       if (generation !== cloudGeneration) return;
-      cloudCapsules = capsules;
-      if (capsules.length === 0) {
+      cloudTeams = teams;
+      if (teams.length === 0) {
         cloudPhase = "empty";
         return;
       }
       cloudPhase = "ready";
-      const remembered = selectCloudCapsule(
-        capsules,
-        localStorage.getItem("shimpz_current_capsule") ?? "",
+      const remembered = selectCloudTeam(
+        teams,
+        localStorage.getItem("shimpz_current_team") ?? "",
       );
       if (!remembered) return;
-      cloudSelectedCapsule = remembered;
-      const capsule = capsules.find((candidate) => candidate.id === remembered);
-      localStorage.setItem("shimpz_current_capsule_name", capsule?.name ?? remembered);
+      cloudSelectedTeam = remembered;
+      const team = teams.find((candidate) => candidate.team_id === remembered);
+      localStorage.setItem("shimpz_current_team_name", team?.team_name ?? remembered);
       await loadCloudInventory(remembered, generation);
     } catch {
       if (generation === cloudGeneration) cloudPhase = "error";
     }
   }
 
-  async function chooseCloudCapsule(event: Event) {
+  async function chooseCloudTeam(event: Event) {
     if (cloudActionLatch) return;
     const candidate = (event.currentTarget as HTMLSelectElement).value;
-    const selected = selectCloudCapsule(cloudCapsules, candidate);
-    cloudSelectedCapsule = selected;
+    const selected = selectCloudTeam(cloudTeams, candidate);
+    cloudSelectedTeam = selected;
     cloudInventoryState = "idle";
     cloudInstalledAssistantIds = [];
     cloudFeedback = "";
     const generation = ++cloudGeneration;
     if (!selected) {
-      localStorage.removeItem("shimpz_current_capsule");
-      localStorage.removeItem("shimpz_current_capsule_name");
+      localStorage.removeItem("shimpz_current_team");
+      localStorage.removeItem("shimpz_current_team_name");
       return;
     }
-    const capsule = cloudCapsules.find((value) => value.id === selected);
-    localStorage.setItem("shimpz_current_capsule", selected);
-    localStorage.setItem("shimpz_current_capsule_name", capsule?.name ?? selected);
+    const team = cloudTeams.find((value) => value.team_id === selected);
+    localStorage.setItem("shimpz_current_team", selected);
+    localStorage.setItem("shimpz_current_team_name", team?.team_name ?? selected);
     await loadCloudInventory(selected, generation);
   }
 
   async function retryCloudInventory() {
-    if (!cloudSelectedCapsule || cloudActionLatch) return;
+    if (!cloudSelectedTeam || cloudActionLatch) return;
     cloudFeedback = "";
     const generation = ++cloudGeneration;
-    await loadCloudInventory(cloudSelectedCapsule, generation);
+    await loadCloudInventory(cloudSelectedTeam, generation);
   }
 
   async function mutateCloudAssistant(assistant: string) {
     if (
       !cloudStoreCanStart("cloud", window.top === window.self) ||
       cloudActionLatch ||
-      !cloudSelectedCapsule ||
+      !cloudSelectedTeam ||
       cloudInventoryState !== "ready"
     ) return;
     const action = cloudAssistantAction(true, cloudInstalledAssistantIds, assistant);
     if (action === "blocked") return;
-    const capsule = cloudSelectedCapsule;
-    const capsuleName = cloudTargetCapsule?.name ?? capsule;
+    const teamId = cloudSelectedTeam;
+    const teamName = cloudTargetTeam?.team_name ?? teamId;
     if (
       action === "uninstall" &&
       !window.confirm(
         lang === "pt"
-          ? `Desinstalar ${assistant} da Cápsula ${capsuleName}?`
-          : `Uninstall ${assistant} from Capsule ${capsuleName}?`,
+          ? `Desinstalar ${assistant} do Time ${teamName}?`
+          : `Uninstall ${assistant} from Team ${teamName}?`,
       )
     ) {
       return;
@@ -322,7 +322,7 @@
     cloudFeedback = "";
     const generation = cloudGeneration;
     try {
-      const base = `/api/capsules/${encodeURIComponent(capsule)}/assistants`;
+      const base = `/api/teams/${encodeURIComponent(teamId)}/assistants`;
       const response = action === "install"
         ? await fetch(base, {
             method: "POST",
@@ -333,7 +333,7 @@
             method: "DELETE",
             headers: { Accept: "application/json" },
           });
-      if (!cloudRequestIsCurrent(generation, cloudGeneration, capsule, cloudSelectedCapsule)) return;
+      if (!cloudRequestIsCurrent(generation, cloudGeneration, teamId, cloudSelectedTeam)) return;
       if (response.status === 401) {
         clearCloudSession();
         return;
@@ -341,9 +341,9 @@
     } catch {
       // The authoritative refresh below decides what actually committed.
     } finally {
-      if (cloudRequestIsCurrent(generation, cloudGeneration, capsule, cloudSelectedCapsule)) {
-        const installed = await loadCloudInventory(capsule, generation);
-        if (installed && cloudRequestIsCurrent(generation, cloudGeneration, capsule, cloudSelectedCapsule)) {
+      if (cloudRequestIsCurrent(generation, cloudGeneration, teamId, cloudSelectedTeam)) {
+        const installed = await loadCloudInventory(teamId, generation);
+        if (installed && cloudRequestIsCurrent(generation, cloudGeneration, teamId, cloudSelectedTeam)) {
           const nextAction = cloudAssistantAction(true, installed, assistant);
           const committed = action === "install" ? nextAction === "uninstall" : nextAction === "install";
           cloudFeedback = committed ? "success" : "error";
@@ -360,9 +360,9 @@
     }
     if (cloudPhase === "checking") return tr("assistants_cloud_loading", lang);
     if (cloudPhase === "unauthenticated") return tr("assistants_cloud_sign_in", lang);
-    if (cloudPhase === "empty") return tr("assistants_cloud_create_capsule", lang);
+    if (cloudPhase === "empty") return tr("assistants_cloud_create_team", lang);
     if (cloudPhase === "error") return tr("assistants_cloud_retry", lang);
-    if (!cloudSelectedCapsule) return tr("assistants_cloud_choose", lang);
+    if (!cloudSelectedTeam) return tr("assistants_cloud_choose", lang);
     if (cloudInventoryState === "loading" || cloudInventoryState === "idle") {
       return tr("assistants_inventory_loading", lang);
     }
@@ -374,7 +374,7 @@
     return cloudPhase === "checking" ||
       cloudActionLatch ||
       (cloudPhase === "ready" && (
-        !cloudSelectedCapsule || cloudInventoryState === "loading" || cloudInventoryState === "idle"
+        !cloudSelectedTeam || cloudInventoryState === "loading" || cloudInventoryState === "idle"
       ));
   }
 
@@ -384,7 +384,7 @@
       return;
     }
     if (cloudPhase === "empty") {
-      await goto(closedAssistantCapsuleHref(lang, assistant));
+      await goto(closedAssistantTeamHref(lang, assistant));
       return;
     }
     if (cloudPhase === "error") {
@@ -548,7 +548,7 @@
         {:else if cloudPhase === "unauthenticated"}
           <p>{tr("assistants_cloud_sign_in_help", lang)}</p>
         {:else if cloudPhase === "empty"}
-          <p>{tr("assistants_cloud_no_capsules", lang)}</p>
+          <p>{tr("assistants_cloud_no_teams", lang)}</p>
         {:else if cloudPhase === "error"}
           <p class="cloud-error" role="alert">{tr("assistants_cloud_load_failed", lang)}</p>
         {:else}
@@ -559,21 +559,21 @@
         <label class="cloud-selector">
           <span>{tr("assistants_cloud_target_label", lang)}</span>
           <select
-            value={cloudSelectedCapsule}
+            value={cloudSelectedTeam}
             disabled={cloudActionLatch}
-            onchange={chooseCloudCapsule}>
+            onchange={chooseCloudTeam}>
             <option value="">{tr("assistants_cloud_choose", lang)}</option>
-            {#each cloudCapsules as capsule (capsule.id)}
-              <option value={capsule.id}>{capsule.name}</option>
+            {#each cloudTeams as team (team.team_id)}
+              <option value={team.team_id}>{team.team_name}</option>
             {/each}
           </select>
         </label>
       {/if}
-      {#if cloudTargetCapsule}
+      {#if cloudTargetTeam}
         <p class="cloud-target-name">
-          <HudIcon name="capsule" size={17} />
+          <HudIcon name="team" size={17} />
           <span>{tr("assistants_cloud_selected", lang)}</span>
-          <strong>{cloudTargetCapsule.name}</strong>
+          <strong>{cloudTargetTeam.team_name}</strong>
         </p>
       {/if}
     </section>

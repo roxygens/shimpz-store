@@ -1,10 +1,10 @@
 """Serve the Shimpz public console and account-authenticated control surface.
 
-One FastAPI process serves the prerendered SvelteKit build and `/api`: signup/login, Capsule selection,
+One FastAPI process serves the prerendered SvelteKit build and `/api`: signup/login, Team selection,
 and installed-App management. It holds no driver/admin credential; it forwards the user's account token
-to the socket-holding `capsule-driver`, which enforces ownership. Its one narrow service capability can
+to the socket-holding `team-driver`, which enforces ownership. Its one narrow service capability can
 only finalize an exact already-revoking model credential generation. It is reached over the
-Space's internal networks (accounts_net + capsuledriver_net) and uses stdlib http.client for proxy hops.
+Space's internal networks (accounts_net + teamdriver_net) and uses stdlib http.client for proxy hops.
 """
 
 from __future__ import annotations
@@ -37,7 +37,7 @@ log = structlog.get_logger()
 
 BUILD = Path(os.environ.get("SHIMPZ_STORE_BUILD", "/app/build"))
 ACCOUNTS_URL = os.environ.get("SHIMPZ_ACCOUNTS_URL", "http://accounts:7079")
-CAPSULEDRIVER_URL = os.environ.get("SHIMPZ_CAPSULEDRIVER_URL", "http://capsule-driver:7077")
+TEAMDRIVER_URL = os.environ.get("SHIMPZ_TEAMDRIVER_URL", "http://team-driver:7077")
 BRAIN_FINALIZE_TOKEN_FILE = Path(
     os.environ.get(
         "SHIMPZ_ACCOUNTS_BRAIN_FINALIZE_TOKEN_FILE",
@@ -46,17 +46,17 @@ BRAIN_FINALIZE_TOKEN_FILE = Path(
 )
 ACCOUNT_COOKIE = "shimpz_account"
 COOKIE_MAX_AGE = 7 * 24 * 3600
-MAX_CAPSULE_CREATE_BODY_BYTES = max(
+MAX_TEAM_CREATE_BODY_BYTES = max(
     1024,
-    int(os.environ.get("SHIMPZ_STORE_MAX_CAPSULE_CREATE_BODY_BYTES", str(16 * 1024))),
+    int(os.environ.get("SHIMPZ_STORE_MAX_TEAM_CREATE_BODY_BYTES", str(16 * 1024))),
 )
 MAX_INFERENCE_BODY_BYTES = max(
     1024,
     int(os.environ.get("SHIMPZ_STORE_MAX_INFERENCE_BODY_BYTES", str(4 * 1024))),
 )
-MAX_CAPSULE_INSTALL_BODY_BYTES = max(
+MAX_TEAM_INSTALL_BODY_BYTES = max(
     1024,
-    int(os.environ.get("SHIMPZ_STORE_MAX_CAPSULE_INSTALL_BODY_BYTES", str(4 * 1024))),
+    int(os.environ.get("SHIMPZ_STORE_MAX_TEAM_INSTALL_BODY_BYTES", str(4 * 1024))),
 )
 MAX_AUTH_BODY_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_AUTH_BODY_BYTES", str(16 * 1024))))
 MAX_WS_FRAME_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_WS_FRAME_BYTES", str(128 * 1024))))
@@ -72,7 +72,7 @@ STOP_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_STOP_WORKER_THREAD
 STOP_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_STOP_QUEUE_MAX", "4")))
 WS_GLOBAL_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_GLOBAL_CONNECTION_LIMIT", "64")))
 WS_ACCOUNT_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_ACCOUNT_CONNECTION_LIMIT", "4")))
-WS_CAPSULE_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_CAPSULE_CONNECTION_LIMIT", "2")))
+WS_TEAM_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_TEAM_CONNECTION_LIMIT", "2")))
 MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
 MAX_UPSTREAM_STREAM_LINE_BYTES = 256 * 1024
 MAX_UPSTREAM_STREAM_BYTES = 2 * 1024 * 1024
@@ -204,36 +204,36 @@ class _TurnLease:
 
 
 class _WsConnectionAdmission:
-    """Hard process/account/Capsule bounds for sockets and their one ask poller."""
+    """Hard process/account/Team bounds for sockets and their one ask poller."""
 
-    def __init__(self, global_limit: int, account_limit: int, capsule_limit: int) -> None:
-        if min(global_limit, account_limit, capsule_limit) < 1:
+    def __init__(self, global_limit: int, account_limit: int, team_limit: int) -> None:
+        if min(global_limit, account_limit, team_limit) < 1:
             raise ValueError("WebSocket connection limits must be positive")
         self.global_limit = global_limit
         self.account_limit = account_limit
-        self.capsule_limit = capsule_limit
+        self.team_limit = team_limit
         self._guard = threading.Lock()
         self._global = 0
         self._accounts: dict[str, int] = {}
-        self._capsules: dict[tuple[str, str], int] = {}
+        self._teams: dict[tuple[str, str], int] = {}
 
-    def reserve(self, account_id: str, cid: str) -> _WsConnectionLease | None:
-        capsule_key = (account_id, cid)
+    def reserve(self, account_id: str, team_id: str) -> _WsConnectionLease | None:
+        team_key = (account_id, team_id)
         with self._guard:
             if (
                 self._global >= self.global_limit
                 or self._accounts.get(account_id, 0) >= self.account_limit
-                or self._capsules.get(capsule_key, 0) >= self.capsule_limit
+                or self._teams.get(team_key, 0) >= self.team_limit
             ):
                 return None
             self._global += 1
             self._accounts[account_id] = self._accounts.get(account_id, 0) + 1
-            self._capsules[capsule_key] = self._capsules.get(capsule_key, 0) + 1
-        return _WsConnectionLease(self, account_id, capsule_key)
+            self._teams[team_key] = self._teams.get(team_key, 0) + 1
+        return _WsConnectionLease(self, account_id, team_key)
 
     def snapshot(self) -> tuple[int, dict[str, int], dict[tuple[str, str], int]]:
         with self._guard:
-            return self._global, dict(self._accounts), dict(self._capsules)
+            return self._global, dict(self._accounts), dict(self._teams)
 
     def _release(self, lease: _WsConnectionLease) -> None:
         with self._guard:
@@ -242,15 +242,15 @@ class _WsConnectionAdmission:
             lease._released = True
             self._global -= 1
             account_count = self._accounts[lease._account_id] - 1
-            capsule_count = self._capsules[lease._capsule_key] - 1
+            team_count = self._teams[lease._team_key] - 1
             if account_count:
                 self._accounts[lease._account_id] = account_count
             else:
                 del self._accounts[lease._account_id]
-            if capsule_count:
-                self._capsules[lease._capsule_key] = capsule_count
+            if team_count:
+                self._teams[lease._team_key] = team_count
             else:
-                del self._capsules[lease._capsule_key]
+                del self._teams[lease._team_key]
 
 
 class _WsConnectionLease:
@@ -258,11 +258,11 @@ class _WsConnectionLease:
         self,
         admission: _WsConnectionAdmission,
         account_id: str,
-        capsule_key: tuple[str, str],
+        team_key: tuple[str, str],
     ) -> None:
         self._admission = admission
         self._account_id = account_id
-        self._capsule_key = capsule_key
+        self._team_key = team_key
         self._released = False
 
     def release(self) -> None:
@@ -293,7 +293,7 @@ _STOP_EXECUTOR = _BoundedThreadPoolExecutor(
 _WS_CONNECTION_ADMISSION = _WsConnectionAdmission(
     WS_GLOBAL_CONNECTION_LIMIT,
     WS_ACCOUNT_CONNECTION_LIMIT,
-    WS_CAPSULE_CONNECTION_LIMIT,
+    WS_TEAM_CONNECTION_LIMIT,
 )
 
 
@@ -326,10 +326,10 @@ WS_ALLOWED_ORIGINS = frozenset(
     if (origin := _canonical_origin(raw.strip())) is not None
 )
 ASSISTANT_MUTATION_ALLOWED_ORIGINS = WS_ALLOWED_ORIGINS
-CAPSULE_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
+TEAM_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
 ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-CAPSULE_FILE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
-CAPSULE_FILE_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
+TEAM_FILE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
+TEAM_FILE_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 MODEL_CATALOG = {
     "openai": frozenset({"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}),
     "anthropic": frozenset({"claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"}),
@@ -338,10 +338,10 @@ RELEASED_CLOUD_ASSISTANTS = frozenset({"hello-pulse"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
 MAX_CHAT_MESSAGE_CHARS = 16_000
 MAX_CHAT_FILES = 8
-MAX_CAPSULE_FILES = 256
+MAX_TEAM_FILES = 256
 MAX_CHAT_REPLY_CHARS = 60_000
 MAX_CHAT_ERROR_DETAIL_CHARS = 800
-TERMINAL_CONTRACT_ERROR = "capsule-driver stream violated the terminal event contract"
+TERMINAL_CONTRACT_ERROR = "team-driver stream violated the terminal event contract"
 CHAT_WS_SUBPROTOCOL = "shimpz.chat.v1"
 
 
@@ -359,8 +359,8 @@ def _private_json(content: dict, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content, status_code=status_code, headers=PRIVATE_NO_STORE_HEADERS)
 
 
-def _canonical_capsule_id(value: object) -> str | None:
-    return value if isinstance(value, str) and CAPSULE_ID_RE.fullmatch(value) is not None else None
+def _canonical_team_id(value: object) -> str | None:
+    return value if isinstance(value, str) and TEAM_ID_RE.fullmatch(value) is not None else None
 
 
 def _canonical_assistant_id(value: object) -> str | None:
@@ -380,8 +380,8 @@ def _canonical_team_name(value: object) -> str | None:
     return value
 
 
-def _canonical_capsule_file_id(value: object) -> str | None:
-    return value if isinstance(value, str) and CAPSULE_FILE_ID_RE.fullmatch(value) is not None else None
+def _canonical_team_file_id(value: object) -> str | None:
+    return value if isinstance(value, str) and TEAM_FILE_ID_RE.fullmatch(value) is not None else None
 
 
 def _canonical_chat_reply(value: object) -> str | None:
@@ -410,7 +410,7 @@ def _chat_turn_payload(payload: dict) -> dict[str, object]:
     files = payload.get("files", [])
     if not isinstance(files, list) or len(files) > MAX_CHAT_FILES:
         raise ClientPayloadError(400, f"files must contain at most {MAX_CHAT_FILES} opaque ids")
-    opaque_ids = [_canonical_capsule_file_id(file_id) for file_id in files]
+    opaque_ids = [_canonical_team_file_id(file_id) for file_id in files]
     if any(file_id is None for file_id in opaque_ids) or len(opaque_ids) != len(set(opaque_ids)):
         raise ClientPayloadError(400, "files must contain unique opaque ids")
     turn: dict[str, object] = {"message": message}
@@ -419,27 +419,27 @@ def _chat_turn_payload(payload: dict) -> dict[str, object]:
     return turn
 
 
-def _capsule_create_payload(payload: dict, account_id: str) -> tuple[str, dict[str, str]]:
-    if set(payload) != {"name", "provider", "model"}:
-        raise ClientPayloadError(400, "Capsule requires name, provider, and model")
-    name = str(payload.get("name", "")).strip()
+def _team_create_payload(payload: dict, account_id: str) -> tuple[str, dict[str, str]]:
+    if set(payload) != {"team_name", "provider", "model"}:
+        raise ClientPayloadError(400, "Team requires team_name, provider, and model")
+    team_name = str(payload.get("team_name", "")).strip()
     provider = _brain_provider(payload.get("provider"))
     model = _brain_model(provider, payload.get("model")) if provider is not None else None
-    cid = _cid_for(account_id, name)
-    if not name or not cid.strip("_"):
-        raise ClientPayloadError(400, "bad capsule name")
+    team_id = _team_id_for(account_id, team_name)
+    if not team_name or not team_id.strip("_"):
+        raise ClientPayloadError(400, "bad team name")
     if provider is None:
         raise ClientPayloadError(400, "unsupported model provider")
     if model is None:
         raise ClientPayloadError(400, "unsupported model for provider")
-    return cid, {"name": name, "provider": provider, "model": model}
+    return team_id, {"team_name": team_name, "provider": provider, "model": model}
 
 
 def _public_file_metadata(value: object) -> dict | None:
     """Copy only opaque, non-path file metadata from the trusted controller response."""
     if not isinstance(value, dict):
         return None
-    file_id = _canonical_capsule_file_id(value.get("id"))
+    file_id = _canonical_team_file_id(value.get("id"))
     name = value.get("name")
     media_type = value.get("media_type")
     size = value.get("size")
@@ -461,7 +461,7 @@ def _public_file_metadata(value: object) -> dict | None:
         or not isinstance(size, int)
         or size < 0
         or not isinstance(sha256, str)
-        or CAPSULE_FILE_SHA256_RE.fullmatch(sha256) is None
+        or TEAM_FILE_SHA256_RE.fullmatch(sha256) is None
     ):
         return None
     metadata = {
@@ -507,7 +507,7 @@ def _public_file_inventory(value: object) -> dict | None:
     if not isinstance(value, dict) or not isinstance(value.get("files"), list):
         return None
     values = value["files"]
-    if len(values) > MAX_CAPSULE_FILES:
+    if len(values) > MAX_TEAM_FILES:
         return None
     files = [_public_file_metadata(item) for item in values]
     if any(item is None for item in files):
@@ -674,14 +674,14 @@ def _client_ip(request: Request) -> str:
     return request.headers.get("cf-connecting-ip", "") or (request.client.host if request.client else "")
 
 
-def _cid_for(account_id: str, name: str) -> str:
-    """Derive a collision-resistant, Docker/PG-safe ID from the complete account/name pair.
+def _team_id_for(account_id: str, team_name: str) -> str:
+    """Derive a collision-resistant, Docker/PG-safe ID from the complete account/Team-name pair.
 
     The old eight-character account prefix had only 32 bits of collision space. Public signup makes
     an accidental or deliberately searched collision a cross-account denial-of-service risk. Keep a
     short readable suffix, but bind the complete normalized name and account ID into a 96-bit digest.
     """
-    normalized = re.sub(r"[^a-z0-9_]+", "_", name.lower()).strip("_")
+    normalized = re.sub(r"[^a-z0-9_]+", "_", team_name.lower()).strip("_")
     if not normalized:
         return ""
     digest = hashlib.sha256(f"{account_id}\0{normalized}".encode()).hexdigest()[:24]
@@ -901,64 +901,64 @@ def _delete_brain_for_token(token: str, provider: str, forwarded_for: str) -> JS
     return JSONResponse(data, status_code=status)
 
 
-# ── Capsules (forward the user's token; capsule-driver is the enforcer) ────────
-@app.get("/api/capsules")
-async def capsules_list(request: Request) -> JSONResponse:
+# ── Teams (forward the user's token; team-driver is the enforcer) ────────
+@app.get("/api/teams")
+async def teams_list(request: Request) -> JSONResponse:
     token, _, _ = await _authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "GET",
-        "/v1/capsules",
+        "/v1/teams",
         extra={"X-Shimpz-Account": token},
     )
     return JSONResponse(data, status_code=status)
 
 
-@app.post("/api/capsules")
-async def capsules_create(request: Request) -> JSONResponse:
+@app.post("/api/teams")
+async def teams_create(request: Request) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     try:
-        payload = await _read_bounded_json(request, MAX_CAPSULE_CREATE_BODY_BYTES)
-        cid, create_payload = _capsule_create_payload(payload, account_id)
+        payload = await _read_bounded_json(request, MAX_TEAM_CREATE_BODY_BYTES)
+        team_id, create_payload = _team_create_payload(payload, account_id)
     except ClientPayloadError as exc:
         return JSONResponse({"detail": exc.detail}, status_code=exc.status)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "POST",
-        f"/v1/capsules/{cid}/create",
+        f"/v1/teams/{team_id}/create",
         create_payload,
         {"X-Shimpz-Account": token},
     )
     return JSONResponse(data, status_code=status)
 
 
-@app.delete("/api/capsules/{cid}")
-async def capsules_destroy(request: Request, cid: str) -> JSONResponse:
+@app.delete("/api/teams/{team_id}")
+async def teams_destroy(request: Request, team_id: str) -> JSONResponse:
     token, _, _ = await _authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "DELETE",
-        f"/v1/capsules/{cid}",
+        f"/v1/teams/{team_id}",
         extra={"X-Shimpz-Account": token},
     )
     return JSONResponse(data, status_code=status)
 
 
-@app.post("/api/capsules/{cid}/install")
-async def capsule_install(request: Request, cid: str) -> JSONResponse:
-    """Install one trusted internal-registry App into an owned Capsule.
+@app.post("/api/teams/{team_id}/install")
+async def team_install(request: Request, team_id: str) -> JSONResponse:
+    """Install one trusted internal-registry App into an owned Team.
 
-    The Store forwards the account token and App ID; capsule-driver enforces ownership, resolves the
-    immutable artifact, and applies the Capsule isolation policy. This operational endpoint has no
+    The Store forwards the account token and App ID; team-driver enforces ownership, resolves the
+    immutable artifact, and applies the Team isolation policy. This operational endpoint has no
     dependency on the unrendered APPS inventory or any public product route.
     """
     token, account_id, _ = await _authed_account_bounded(request)
@@ -969,10 +969,10 @@ async def capsule_install(request: Request, cid: str) -> JSONResponse:
             raise ClientPayloadError(403, "forbidden origin")
         if request.headers.get("content-type", "").strip().lower() != "application/json":
             raise ClientPayloadError(415, "Content-Type must be application/json")
-        capsule_id = _canonical_capsule_id(cid)
-        if capsule_id is None:
-            raise ClientPayloadError(400, "bad capsule id")
-        payload = await _read_bounded_json(request, MAX_CAPSULE_INSTALL_BODY_BYTES)
+        team_id = _canonical_team_id(team_id)
+        if team_id is None:
+            raise ClientPayloadError(400, "bad team id")
+        payload = await _read_bounded_json(request, MAX_TEAM_INSTALL_BODY_BYTES)
         if set(payload) != {"app"}:
             raise ClientPayloadError(400, "body must contain only app")
         app_id = _canonical_assistant_id(payload["app"])
@@ -982,16 +982,16 @@ async def capsule_install(request: Request, cid: str) -> JSONResponse:
         return _private_json({"detail": exc.detail}, exc.status)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "POST",
-        f"/v1/capsules/{capsule_id}/apps",
+        f"/v1/teams/{team_id}/apps",
         {"app": app_id},
         {"X-Shimpz-Account": token},
     )
     log.info(
         "app_install",
         account=account_id,
-        capsule=capsule_id,
+        team_id=team_id,
         app=app_id,
         status=status,
         installed=data.get("installed"),
@@ -999,64 +999,64 @@ async def capsule_install(request: Request, cid: str) -> JSONResponse:
     return _private_json(data, status)
 
 
-@app.get("/api/capsules/{cid}/apps")
-async def capsule_apps(request: Request, cid: str) -> JSONResponse:
+@app.get("/api/teams/{team_id}/apps")
+async def team_apps(request: Request, team_id: str) -> JSONResponse:
     token, _, _ = await _authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "GET",
-        f"/v1/capsules/{cid}/apps",
+        f"/v1/teams/{team_id}/apps",
         extra={"X-Shimpz-Account": token},
     )
     return JSONResponse(data, status_code=status)
 
 
-@app.delete("/api/capsules/{cid}/apps/{app_id}")
-async def capsule_uninstall(request: Request, cid: str, app_id: str) -> JSONResponse:
+@app.delete("/api/teams/{team_id}/apps/{app_id}")
+async def team_uninstall(request: Request, team_id: str, app_id: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "DELETE",
-        f"/v1/capsules/{cid}/apps/{app_id}",
+        f"/v1/teams/{team_id}/apps/{app_id}",
         extra={"X-Shimpz-Account": token},
     )
-    log.info("app_uninstall", account=account_id, capsule=cid, app=app_id, status=status)
+    log.info("app_uninstall", account=account_id, team_id=team_id, app=app_id, status=status)
     return JSONResponse(data, status_code=status)
 
 
-# ── Assistant Store cloud lifecycle (closed adapter over the legacy Capsule App plane) ──────────
-@app.get("/api/capsules/{cid}/assistants")
-async def cloud_assistants_list(request: Request, cid: str) -> JSONResponse:
+# ── Assistant Store cloud lifecycle (closed adapter over the Team App plane) ─────────────────
+@app.get("/api/teams/{team_id}/assistants")
+async def cloud_assistants_list(request: Request, team_id: str) -> JSONResponse:
     token, _, _ = await _authed_account_bounded(request)
     if not token:
         return _private_json({"detail": "not authenticated"}, 401)
-    capsule_id = _canonical_capsule_id(cid)
-    if capsule_id is None:
-        return _private_json({"detail": "bad capsule id"}, 400)
+    team_id = _canonical_team_id(team_id)
+    if team_id is None:
+        return _private_json({"detail": "bad team id"}, 400)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "GET",
-        f"/v1/capsules/{capsule_id}/apps",
+        f"/v1/teams/{team_id}/apps",
         extra={"X-Shimpz-Account": token},
     )
     if status != 200:
         return _private_json(data, status)
     installed = _released_assistant_inventory(data)
     if installed is None:
-        log.warning("assistant_inventory_invalid", capsule=capsule_id)
+        log.warning("assistant_inventory_invalid", team_id=team_id)
         return _private_json({"detail": "invalid Assistant inventory"}, 502)
     return _private_json({"installed": installed})
 
 
-@app.post("/api/capsules/{cid}/assistants")
-async def cloud_assistant_install(request: Request, cid: str) -> JSONResponse:
+@app.post("/api/teams/{team_id}/assistants")
+async def cloud_assistant_install(request: Request, team_id: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
         return _private_json({"detail": "not authenticated"}, 401)
@@ -1065,10 +1065,10 @@ async def cloud_assistant_install(request: Request, cid: str) -> JSONResponse:
             raise ClientPayloadError(403, "forbidden origin")
         if request.headers.get("content-type", "").strip().lower() != "application/json":
             raise ClientPayloadError(415, "Content-Type must be application/json")
-        capsule_id = _canonical_capsule_id(cid)
-        if capsule_id is None:
-            raise ClientPayloadError(400, "bad capsule id")
-        payload = await _read_bounded_json(request, MAX_CAPSULE_INSTALL_BODY_BYTES)
+        team_id = _canonical_team_id(team_id)
+        if team_id is None:
+            raise ClientPayloadError(400, "bad team id")
+        payload = await _read_bounded_json(request, MAX_TEAM_INSTALL_BODY_BYTES)
         if set(payload) != {"assistant"}:
             raise ClientPayloadError(400, "body must contain only assistant")
         assistant = _canonical_assistant_id(payload["assistant"])
@@ -1078,16 +1078,16 @@ async def cloud_assistant_install(request: Request, cid: str) -> JSONResponse:
         return _private_json({"detail": exc.detail}, exc.status)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "POST",
-        f"/v1/capsules/{capsule_id}/apps",
+        f"/v1/teams/{team_id}/apps",
         {"app": assistant},
         {"X-Shimpz-Account": token},
     )
     log.info(
         "assistant_install",
         account=account_id,
-        capsule=capsule_id,
+        team_id=team_id,
         assistant=assistant,
         status=status,
     )
@@ -1096,18 +1096,18 @@ async def cloud_assistant_install(request: Request, cid: str) -> JSONResponse:
     return _private_json({"assistant": assistant, "accepted": True})
 
 
-@app.delete("/api/capsules/{cid}/assistants/{assistant}")
-async def cloud_assistant_uninstall(request: Request, cid: str, assistant: str) -> JSONResponse:
+@app.delete("/api/teams/{team_id}/assistants/{assistant}")
+async def cloud_assistant_uninstall(request: Request, team_id: str, assistant: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
         return _private_json({"detail": "not authenticated"}, 401)
     try:
         if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
             raise ClientPayloadError(403, "forbidden origin")
-        capsule_id = _canonical_capsule_id(cid)
+        team_id = _canonical_team_id(team_id)
         assistant_id = _canonical_assistant_id(assistant)
-        if capsule_id is None:
-            raise ClientPayloadError(400, "bad capsule id")
+        if team_id is None:
+            raise ClientPayloadError(400, "bad team id")
         if assistant_id is None:
             raise ClientPayloadError(400, "bad Assistant id")
         if assistant_id not in RELEASED_CLOUD_ASSISTANTS:
@@ -1116,15 +1116,15 @@ async def cloud_assistant_uninstall(request: Request, cid: str, assistant: str) 
         return _private_json({"detail": exc.detail}, exc.status)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "DELETE",
-        f"/v1/capsules/{capsule_id}/apps/{assistant_id}",
+        f"/v1/teams/{team_id}/apps/{assistant_id}",
         extra={"X-Shimpz-Account": token},
     )
     log.info(
         "assistant_uninstall",
         account=account_id,
-        capsule=capsule_id,
+        team_id=team_id,
         assistant=assistant_id,
         status=status,
     )
@@ -1133,27 +1133,27 @@ async def cloud_assistant_uninstall(request: Request, cid: str, assistant: str) 
     return _private_json({"assistant": assistant_id, "accepted": True})
 
 
-# ── the Captain's chat (ADR-0004): forwarded to the capsule-driver's named exec ops ──────────────
+# ── the Captain's chat (ADR-0004): forwarded to the team-driver's named exec ops ──────────────
 MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # well under Cloudflare's 100 MB proxied-body cap; big files → R2 later
 
 
-@app.get("/api/capsules/{cid}/inference")
-async def capsule_inference(request: Request, cid: str) -> JSONResponse:
+@app.get("/api/teams/{team_id}/inference")
+async def team_inference(request: Request, team_id: str) -> JSONResponse:
     token, _, _ = await _authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "GET",
-        f"/v1/capsules/{cid}/inference",
+        f"/v1/teams/{team_id}/inference",
         extra={"X-Shimpz-Account": token},
     )
     return JSONResponse(data, status_code=status)
 
 
-@app.put("/api/capsules/{cid}/inference")
-async def capsule_inference_configure(request: Request, cid: str) -> JSONResponse:
+@app.put("/api/teams/{team_id}/inference")
+async def team_inference_configure(request: Request, team_id: str) -> JSONResponse:
     token, _, _ = await _authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
@@ -1171,52 +1171,52 @@ async def capsule_inference_configure(request: Request, cid: str) -> JSONRespons
         return JSONResponse({"detail": "unsupported model for provider"}, status_code=400)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "PUT",
-        f"/v1/capsules/{cid}/inference",
+        f"/v1/teams/{team_id}/inference",
         {"provider": provider, "model": model},
         extra={"X-Shimpz-Account": token},
     )
     return JSONResponse(data, status_code=status)
 
 
-@app.get("/api/capsules/{cid}/files")
-async def capsule_files(request: Request, cid: str) -> JSONResponse:
+@app.get("/api/teams/{team_id}/files")
+async def team_files(request: Request, team_id: str) -> JSONResponse:
     """List opaque file metadata; file bytes and host paths remain controller-private."""
     token, _, _ = await _authed_account_bounded(request)
     if not token:
         return _private_json({"detail": "not authenticated"}, 401)
-    capsule_id = _canonical_capsule_id(cid)
-    if capsule_id is None:
-        return _private_json({"detail": "bad capsule id"}, 400)
+    team_id = _canonical_team_id(team_id)
+    if team_id is None:
+        return _private_json({"detail": "bad team id"}, 400)
     status, body = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "GET",
-        f"/v1/capsules/{capsule_id}/files",
+        f"/v1/teams/{team_id}/files",
         extra={"X-Shimpz-Account": token},
     )
     if status != 200:
         return _private_json(body, status)
     inventory = _public_file_inventory(body)
     if inventory is None:
-        log.warning("capsule_file_inventory_invalid", capsule=capsule_id)
-        return _private_json({"detail": "invalid Capsule storage inventory"}, 502)
+        log.warning("team_file_inventory_invalid", team_id=team_id)
+        return _private_json({"detail": "invalid Team storage inventory"}, 502)
     return _private_json(inventory)
 
 
-@app.post("/api/capsules/{cid}/files")
-async def capsule_file_upload(request: Request, cid: str, file: UploadFile) -> JSONResponse:
-    """Upload one opaque Capsule object without granting a Brain or Assistant filesystem access."""
+@app.post("/api/teams/{team_id}/files")
+async def team_file_upload(request: Request, team_id: str, file: UploadFile) -> JSONResponse:
+    """Upload one opaque Team object without granting a Brain or Assistant filesystem access."""
     token, account_id, _ = await _authed_account_bounded(request)
     try:
         if not token:
             raise ClientPayloadError(401, "not authenticated")
         if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
             raise ClientPayloadError(403, "forbidden origin")
-        capsule_id = _canonical_capsule_id(cid)
-        if capsule_id is None:
-            raise ClientPayloadError(400, "bad capsule id")
+        team_id = _canonical_team_id(team_id)
+        if team_id is None:
+            raise ClientPayloadError(400, "bad team id")
     except ClientPayloadError as exc:
         return _private_json({"detail": exc.detail}, exc.status)
     data = await file.read(MAX_UPLOAD_BYTES + 1)
@@ -1232,49 +1232,49 @@ async def capsule_file_upload(request: Request, cid: str, file: UploadFile) -> J
     }
     status, body = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "POST",
-        f"/v1/capsules/{capsule_id}/files",
+        f"/v1/teams/{team_id}/files",
         payload,
         extra={"X-Shimpz-Account": token},
     )
-    log.info("capsule_file_upload", account=account_id, capsule=capsule_id, bytes=len(data), status=status)
+    log.info("team_file_upload", account=account_id, team_id=team_id, bytes=len(data), status=status)
     if status != 200:
         return _private_json(body, status)
     uploaded = _public_file_upload(body)
     if uploaded is None:
-        log.warning("capsule_file_upload_invalid", capsule=capsule_id)
-        return _private_json({"detail": "invalid Capsule storage response"}, 502)
+        log.warning("team_file_upload_invalid", team_id=team_id)
+        return _private_json({"detail": "invalid Team storage response"}, 502)
     return _private_json(uploaded)
 
 
-@app.delete("/api/capsules/{cid}/files/{file_id}")
-async def capsule_file_delete(request: Request, cid: str, file_id: str) -> JSONResponse:
+@app.delete("/api/teams/{team_id}/files/{file_id}")
+async def team_file_delete(request: Request, team_id: str, file_id: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     try:
         if not token:
             raise ClientPayloadError(401, "not authenticated")
         if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
             raise ClientPayloadError(403, "forbidden origin")
-        capsule_id = _canonical_capsule_id(cid)
-        opaque_id = _canonical_capsule_file_id(file_id)
-        if capsule_id is None:
-            raise ClientPayloadError(400, "bad capsule id")
+        team_id = _canonical_team_id(team_id)
+        opaque_id = _canonical_team_file_id(file_id)
+        if team_id is None:
+            raise ClientPayloadError(400, "bad team id")
         if opaque_id is None:
             raise ClientPayloadError(404, "file not found")
     except ClientPayloadError as exc:
         return _private_json({"detail": exc.detail}, exc.status)
     status, body = await _bounded_call(
         _CONTROL_EXECUTOR,
-        CAPSULEDRIVER_URL,
+        TEAMDRIVER_URL,
         "DELETE",
-        f"/v1/capsules/{capsule_id}/files/{opaque_id}",
+        f"/v1/teams/{team_id}/files/{opaque_id}",
         extra={"X-Shimpz-Account": token},
     )
     log.info(
-        "capsule_file_delete",
+        "team_file_delete",
         account=account_id,
-        capsule=capsule_id,
+        team_id=team_id,
         file_id=opaque_id,
         status=status,
     )
@@ -1282,8 +1282,8 @@ async def capsule_file_delete(request: Request, cid: str, file_id: str) -> JSONR
         return _private_json(body, status)
     deleted = _public_file_deletion(body, opaque_id)
     if deleted is None:
-        log.warning("capsule_file_delete_invalid", capsule=capsule_id, file_id=opaque_id)
-        return _private_json({"detail": "invalid Capsule storage response"}, 502)
+        log.warning("team_file_delete_invalid", team_id=team_id, file_id=opaque_id)
+        return _private_json({"detail": "invalid Team storage response"}, 502)
     return _private_json(deleted)
 
 
@@ -1348,13 +1348,13 @@ def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
 
 
 def _validated_done_event(value: dict) -> dict | None:
-    if set(value) != {"type", "reply", "team"}:
+    if set(value) != {"type", "reply", "team_name"}:
         return None
     reply = _canonical_chat_reply(value["reply"])
-    team = _canonical_team_name(value["team"])
-    if reply is None or team is None:
+    team_name = _canonical_team_name(value["team_name"])
+    if reply is None or team_name is None:
         return None
-    return {"type": "done", "reply": reply, "team": team}
+    return {"type": "done", "reply": reply, "team_name": team_name}
 
 
 def _public_chat_error_event(status: int) -> dict:
@@ -1417,11 +1417,11 @@ def _upstream_error_event(status: int, _raw: bytes) -> dict:
 
 
 class _StreamLimitError(ValueError):
-    """The capsule-driver stream exceeded a bounded relay contract."""
+    """The team-driver stream exceeded a bounded relay contract."""
 
 
 class _StreamProtocolError(ValueError):
-    """The capsule-driver stream violated its typed NDJSON contract."""
+    """The team-driver stream violated its typed NDJSON contract."""
 
 
 def _bounded_upstream_lines(resp: http.client.HTTPResponse):
@@ -1491,7 +1491,7 @@ def _relay_upstream_events(
 
 @dataclass(frozen=True)
 class _StreamRelay:
-    cid: str
+    team_id: str
     text: str
     headers: dict
     queue: asyncio.Queue
@@ -1508,7 +1508,7 @@ class _RelayDelivery:
 
 
 async def _stop_delivery_once(
-    cid: str,
+    team_id: str,
     hdr: dict,
     delivery: _RelayDelivery,
 ) -> tuple[int, dict] | None:
@@ -1516,7 +1516,7 @@ async def _stop_delivery_once(
     if delivery.stop_attempted:
         return None
     delivery.stop_attempted = True
-    return await _driver_stop(cid, hdr)
+    return await _driver_stop(team_id, hdr)
 
 
 async def _send_relay_event(
@@ -1532,7 +1532,7 @@ async def _send_relay_event(
         relay_abort = True
     if relay_abort:
         if not delivery.aborted:
-            await _stop_delivery_once(turn.cid, turn.headers, delivery)
+            await _stop_delivery_once(turn.team_id, turn.headers, delivery)
         delivery.aborted = True
     delivery.terminal_seen = True
     await turn.ws.send_json(terminal)
@@ -1540,7 +1540,7 @@ async def _send_relay_event(
 
 def _stream_lines(relay: _StreamRelay) -> None:
     """BLOCKING (run in a thread): relay the driver's NDJSON into a bounded asyncio queue."""
-    parsed = urlparse(CAPSULEDRIVER_URL)
+    parsed = urlparse(TEAMDRIVER_URL)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=200)
     try:
         payload: dict[str, object] = {"message": relay.text}
@@ -1549,7 +1549,7 @@ def _stream_lines(relay: _StreamRelay) -> None:
         body = jsonlib.dumps(payload, ensure_ascii=False).encode()
         conn.request(
             "POST",
-            f"/v1/capsules/{relay.cid}/chat/stream",
+            f"/v1/teams/{relay.team_id}/chat/stream",
             body,
             {**relay.headers, "Content-Type": "application/json"},
         )
@@ -1564,14 +1564,14 @@ def _stream_lines(relay: _StreamRelay) -> None:
             return
         _relay_upstream_events(resp, relay.queue, relay.loop)
     except (OSError, http.client.HTTPException) as exc:
-        log.warning("chat_stream_failed", capsule=relay.cid, error=type(exc).__name__)
+        log.warning("chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__)
         _stream_queue_put(
             relay.queue,
             relay.loop,
             {
                 "type": "error",
                 "status": 502,
-                "detail": "capsule-driver stream failed",
+                "detail": "team-driver stream failed",
                 "_relay_abort": True,
             },
         )
@@ -1581,15 +1581,15 @@ def _stream_lines(relay: _StreamRelay) -> None:
         _stream_queue_put(relay.queue, relay.loop, None)
 
 
-async def _driver_stop(cid: str, hdr: dict) -> tuple[int, dict]:
+async def _driver_stop(team_id: str, hdr: dict) -> tuple[int, dict]:
     loop = asyncio.get_running_loop()
     try:
         return await loop.run_in_executor(
             _STOP_EXECUTOR,
             _call,
-            CAPSULEDRIVER_URL,
+            TEAMDRIVER_URL,
             "POST",
-            f"/v1/capsules/{cid}/chat/stop",
+            f"/v1/teams/{team_id}/chat/stop",
             None,
             hdr,
         )
@@ -1600,7 +1600,7 @@ async def _driver_stop(cid: str, hdr: dict) -> tuple[int, dict]:
 @dataclass(frozen=True)
 class _WsTurn:
     ws: WebSocket
-    cid: str
+    team_id: str
     headers: dict
     text: str
     started: asyncio.Event
@@ -1637,20 +1637,20 @@ async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Fut
                 break
             await _send_relay_event(turn, evt, delivery)
         if not delivery.terminal_seen:
-            await _stop_delivery_once(turn.cid, turn.headers, delivery)
+            await _stop_delivery_once(turn.team_id, turn.headers, delivery)
             await turn.ws.send_json(
                 {
                     "type": "error",
                     "status": 502,
-                    "detail": "capsule-driver relay ended before a terminal event",
+                    "detail": "team-driver relay ended before a terminal event",
                 }
             )
     except WebSocketDisconnect, OSError, RuntimeError, asyncio.CancelledError:
-        await _stop_delivery_once(turn.cid, turn.headers, delivery)
+        await _stop_delivery_once(turn.team_id, turn.headers, delivery)
         raise
     finally:
         if not delivery.terminal_seen and not worker.done():
-            await _stop_delivery_once(turn.cid, turn.headers, delivery)
+            await _stop_delivery_once(turn.team_id, turn.headers, delivery)
         with contextlib.suppress(asyncio.CancelledError, TimeoutError):
             await asyncio.wait_for(asyncio.shield(worker), timeout=15)
 
@@ -1664,7 +1664,7 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
                 _STREAM_EXECUTOR,
                 _stream_lines,
                 _StreamRelay(
-                    turn.cid,
+                    turn.team_id,
                     turn.text,
                     turn.headers,
                     queue,
@@ -1683,7 +1683,7 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
 
 async def _ws_run_turn(
     ws: WebSocket,
-    cid: str,
+    team_id: str,
     hdr: dict,
     payload: dict[str, object],
     started: asyncio.Event,
@@ -1698,7 +1698,7 @@ async def _ws_run_turn(
     await _ws_run_admitted_turn(
         _WsTurn(
             ws=ws,
-            cid=cid,
+            team_id=team_id,
             headers=hdr,
             text=payload["message"],
             started=started,
@@ -1711,7 +1711,7 @@ async def _ws_run_turn(
 
 def _start_ws_turn(
     ws: WebSocket,
-    cid: str,
+    team_id: str,
     hdr: dict,
     msg: dict,
     lease: _TurnLease,
@@ -1723,7 +1723,7 @@ def _start_ws_turn(
         _ws_run_admitted_turn(
             _WsTurn(
                 ws=ws,
-                cid=cid,
+                team_id=team_id,
                 headers=hdr,
                 text=msg["message"],
                 started=started,
@@ -1737,7 +1737,7 @@ def _start_ws_turn(
     return turn, started, dispatched, delivery
 
 
-async def _ws_stop_turn(ws: WebSocket, cid: str, hdr: dict, state: dict) -> None:
+async def _ws_stop_turn(ws: WebSocket, team_id: str, hdr: dict, state: dict) -> None:
     if state.get("stop_requested", False):
         return
     turns = state["turns"]
@@ -1758,7 +1758,7 @@ async def _ws_stop_turn(ws: WebSocket, cid: str, hdr: dict, state: dict) -> None
         return
     with contextlib.suppress(TimeoutError):
         await asyncio.wait_for(started.wait(), timeout=10)
-    result = await _stop_delivery_once(cid, hdr, delivery)
+    result = await _stop_delivery_once(team_id, hdr, delivery)
     if result is None:
         return
     status, data = result
@@ -1775,7 +1775,7 @@ async def _ws_stop_turn(ws: WebSocket, cid: str, hdr: dict, state: dict) -> None
         )
 
 
-async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dict) -> None:
+async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict) -> None:
     turns = state["turns"]
     starts = state.setdefault("starts", {})
     dispatches = state.setdefault("dispatches", {})
@@ -1802,7 +1802,7 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
                 {
                     "type": "error",
                     "status": 409,
-                    "detail": "capsule already has an active chat turn",
+                    "detail": "team already has an active chat turn",
                 }
             )
             return
@@ -1819,7 +1819,7 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
         # The background task keeps the socket responsive to Stop. The set is capped at one;
         # the controller independently enforces the same invariant across sockets.
         try:
-            turn, started, dispatched, delivery = _start_ws_turn(ws, cid, hdr, msg, lease)
+            turn, started, dispatched, delivery = _start_ws_turn(ws, team_id, hdr, msg, lease)
         except BaseException:
             lease.release()
             raise
@@ -1840,7 +1840,7 @@ async def _ws_dispatch(ws: WebSocket, cid: str, hdr: dict, msg: dict, state: dic
 
         turn.add_done_callback(turn_done)
     elif msg.get("type") == "stop" and set(msg) == {"type"}:
-        await _ws_stop_turn(ws, cid, hdr, state)
+        await _ws_stop_turn(ws, team_id, hdr, state)
     else:
         await ws.send_json({"type": "error", "status": 400, "detail": "unsupported chat frame"})
 
@@ -1858,8 +1858,8 @@ async def _ws_validate_opening(ws: WebSocket) -> bool:
     return True
 
 
-@app.websocket("/api/capsules/{cid}/chat/ws")
-async def capsule_chat_ws(ws: WebSocket, cid: str) -> None:
+@app.websocket("/api/teams/{team_id}/chat/ws")
+async def team_chat_ws(ws: WebSocket, team_id: str) -> None:
     if not await _ws_validate_opening(ws):
         return
     try:
@@ -1870,7 +1870,7 @@ async def capsule_chat_ws(ws: WebSocket, cid: str) -> None:
     if not token:
         await ws.close(code=4401)
         return
-    connection = _WS_CONNECTION_ADMISSION.reserve(account_id, cid)
+    connection = _WS_CONNECTION_ADMISSION.reserve(account_id, team_id)
     if connection is None:
         await ws.send(
             {
@@ -1915,7 +1915,7 @@ async def capsule_chat_ws(ws: WebSocket, cid: str) -> None:
                     )
                     await ws.close(code=exc.close_code)
                     return
-                await _ws_dispatch(ws, cid, hdr, message, state)
+                await _ws_dispatch(ws, team_id, hdr, message, state)
         except WebSocketDisconnect:
             return
         finally:

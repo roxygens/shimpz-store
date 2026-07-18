@@ -20,8 +20,8 @@
     open = false;
     await fetch("/api/logout", { method: "POST" }).catch(() => null);
     account = { authenticated: false };
-    localStorage.removeItem("shimpz_current_capsule");
-    localStorage.removeItem("shimpz_current_capsule_name");
+    localStorage.removeItem("shimpz_current_team");
+    localStorage.removeItem("shimpz_current_team_name");
     goto(u.home(lang));
   }
 </script>
@@ -45,7 +45,7 @@
       <div class="account-menu" role="menu">
         <div class="account-handle">@{account.username}</div>
         <a href={u.account(lang)} role="menuitem" onclick={() => (open = false)}>{tr("account", lang)}</a>
-        <a href={u.capsule(lang)} role="menuitem" onclick={() => (open = false)}>{tr("my_capsules", lang)}</a>
+        <a href={u.team(lang)} role="menuitem" onclick={() => (open = false)}>{tr("my_teams", lang)}</a>
         <button type="button" role="menuitem" onclick={logout}>{tr("log_out", lang)}</button>
       </div>
     {/if}

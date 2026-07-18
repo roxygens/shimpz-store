@@ -5,12 +5,12 @@ import test from "node:test";
 import {
   CHAT_WS_SUBPROTOCOL,
   createTeamChatTurn,
-  parseCapsuleStorage,
-  parseCapsuleUpload,
+  parseTeamStorage,
+  parseTeamUpload,
   parseChatTerminalEvent,
   teamChatReconnectDelay,
   teamChatWebSocketPath,
-} from "../src/lib/capsuleChat.js";
+} from "../src/lib/teamChat.js";
 
 const file = {
   id: "a".repeat(32),
@@ -40,7 +40,7 @@ test("creates only a Team-scoped chat turn without a browser-selected Assistant"
 
 test("accepts only exact bounded terminal events from the authoritative Team", () => {
   const terminalEvents = [
-    { type: "done", reply: "complete", team: "Marketing" },
+    { type: "done", reply: "complete", team_name: "Marketing" },
     { type: "error", status: 504, detail: "provider timed out" },
     { type: "stopped" },
   ];
@@ -53,10 +53,10 @@ test("accepts only exact bounded terminal events from the authoritative Team", (
     { type: "tool", label: "shell" },
     { type: "ask", text: "approve?" },
     { type: "answered", answered: true },
-    { type: "done", reply: "complete", team: "Marketing", trace: [] },
-    { type: "done", reply: "complete", team: "Sales" },
-    { type: "done", reply: "complete", team: " Marketing " },
-    { type: "done", reply: "x".repeat(60_001), team: "Marketing" },
+    { type: "done", reply: "complete", team_name: "Marketing", trace: [] },
+    { type: "done", reply: "complete", team_name: "Sales" },
+    { type: "done", reply: "complete", team_name: " Marketing " },
+    { type: "done", reply: "x".repeat(60_001), team_name: "Marketing" },
     { type: "error", status: true, detail: "failed" },
     { type: "error", status: 200, detail: "not an error" },
     { type: "error", status: 502, detail: "x".repeat(801) },
@@ -68,13 +68,13 @@ test("accepts only exact bounded terminal events from the authoritative Team", (
 
 test("uses the single versioned Team chat WebSocket contract", () => {
   assert.equal(CHAT_WS_SUBPROTOCOL, "shimpz.chat.v1");
-  assert.equal(teamChatWebSocketPath("cap_one"), "/api/capsules/cap_one/chat/ws");
-  for (const capsuleId of ["", "../escape", "cap-one", "A"]) {
-    assert.throws(() => teamChatWebSocketPath(capsuleId));
+  assert.equal(teamChatWebSocketPath("team_one"), "/api/teams/team_one/chat/ws");
+  for (const teamId of ["", "../escape", "team-one", "A"]) {
+    assert.throws(() => teamChatWebSocketPath(teamId));
   }
 });
 
-test("caps chat reconnect backoff without encoding automatic replay", () => {
+test("caps Team chat reconnect backoff without encoding automatic replay", () => {
   assert.deepEqual(
     [0, 1, 2, 3, 4, 20].map(teamChatReconnectDelay),
     [400, 800, 1600, 3200, 5000, 5000],
@@ -84,13 +84,13 @@ test("caps chat reconnect backoff without encoding automatic replay", () => {
   }
 });
 
-test("keeps Capsule files opaque and drops every path-like upstream field", () => {
-  const inventory = parseCapsuleStorage({
+test("keeps Team files opaque and drops every path-like upstream field", () => {
+  const inventory = parseTeamStorage({
     files: [{ ...file, created_at: 1_700_000_000, path: "/private/blob" }],
     ...usage,
     mount: "/private",
   });
-  const uploaded = parseCapsuleUpload({ file: { ...file, ...usage, path: "/private/blob" }, ...usage });
+  const uploaded = parseTeamUpload({ file: { ...file, ...usage, path: "/private/blob" }, ...usage });
 
   assert.deepEqual(inventory, { files: [{ ...file, created_at: 1_700_000_000 }], ...usage });
   assert.deepEqual(uploaded, { file, ...usage });
@@ -98,7 +98,7 @@ test("keeps Capsule files opaque and drops every path-like upstream field", () =
   assert.equal("path" in uploaded.file, false);
 });
 
-test("rejects forged, duplicate and inconsistent Capsule inventories", () => {
+test("rejects forged, duplicate and inconsistent Team inventories", () => {
   for (const value of [
     null,
     { files: "many", ...usage },
@@ -107,6 +107,6 @@ test("rejects forged, duplicate and inconsistent Capsule inventories", () => {
     { files: [{ ...file, created_at: 1 }, { ...file, created_at: 2 }], ...usage },
     { files: [{ ...file, created_at: 1 }], ...usage, remaining_bytes: 0 },
   ]) {
-    assert.throws(() => parseCapsuleStorage(value));
+    assert.throws(() => parseTeamStorage(value));
   }
 });

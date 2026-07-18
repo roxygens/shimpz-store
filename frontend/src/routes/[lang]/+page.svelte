@@ -26,7 +26,7 @@
       <a class="btn-primary" href="https://docs.shimpz.com" target="_blank" rel="noopener noreferrer">
         {tr("home_install", lang)} <span aria-hidden="true">↗</span><span class="sr-only"> ({tr("opens_new_tab", lang)})</span>
       </a>
-      <a class="btn-ghost" href={u.capsule(lang)}>{tr("home_open_capsules", lang)} <span aria-hidden="true">→</span></a>
+      <a class="btn-ghost" href={u.team(lang)}>{tr("home_open_teams", lang)} <span aria-hidden="true">→</span></a>
     </div>
 
     <ul class="signals" aria-label={lang === "pt" ? "Princípios da plataforma" : "Platform principles"}>
@@ -65,8 +65,8 @@
       <li>
         <span class="step">03</span>
         <div>
-          <h3>{tr("home_capsules_title", lang)}</h3>
-          <p>{tr("home_capsules_body", lang)}</p>
+          <h3>{tr("home_teams_title", lang)}</h3>
+          <p>{tr("home_teams_body", lang)}</p>
         </div>
       </li>
       <li>

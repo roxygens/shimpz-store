@@ -4,7 +4,7 @@
     | "attach"
     | "assistants"
     | "brain"
-    | "capsule"
+    | "team"
     | "chat"
     | "check"
     | "chevron"
@@ -31,7 +31,7 @@
   stroke-width="1.6"
   stroke-linecap="square"
   stroke-linejoin="miter">
-  {#if name === "capsule"}
+  {#if name === "team"}
     <path d="m12 2.8 7.8 4.5v9.4L12 21.2l-7.8-4.5V7.3L12 2.8Z" />
     <path d="M8.2 9.2 12 7l3.8 2.2v5.6L12 17l-3.8-2.2V9.2Z" />
     <path d="M12 2.8V7m7.8.3-4 1.9m4 7.5-4-1.9M12 21.2V17m-7.8-.3 4-1.9m-4-7.5 4 1.9" />

@@ -213,7 +213,7 @@
         {#if message}<p class="notice state-notice notice-success" role="status">{message}</p>{/if}
         <div class="stage-actions done-actions">
           <button class="btn-ghost compact" type="button" onclick={() => { message = ""; step = 1; }}>{tr("brain_reconfigure", lang)}</button>
-          <a class="btn-primary compact" href={u.capsule(lang)}>{tr("my_capsules", lang)} →</a>
+          <a class="btn-primary compact" href={u.team(lang)}>{tr("my_teams", lang)} →</a>
         </div>
       {/if}
     </div>

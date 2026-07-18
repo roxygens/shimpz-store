@@ -1,11 +1,11 @@
-const CAPSULE_ID_RE = /^[a-z0-9_]{1,40}$/;
+const TEAM_ID_RE = /^[a-z0-9_]{1,40}$/;
 const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const LOCALES = new Set(["en", "pt"]);
 const RELEASED_ASSISTANTS = new Set(["hello-pulse"]);
 
-/** @typedef {{ id: string, name: string }} CloudCapsule */
+/** @typedef {{ team_id: string, team_name: string }} CloudTeam */
 
-export const CLOUD_CAPSULE_LIMIT = 128;
+export const CLOUD_TEAM_LIMIT = 128;
 export const CLOUD_ASSISTANT_LIMIT = 128;
 
 /** @param {unknown} value @returns {value is Record<string, unknown>} */
@@ -35,41 +35,41 @@ export function parseCloudAccount(payload) {
   return { authenticated: payload.authenticated };
 }
 
-/** @param {unknown} payload @returns {CloudCapsule[]} */
-export function parseCloudCapsules(payload) {
-  if (!isPlainObject(payload) || !Array.isArray(payload.capsules)) {
-    throw new Error("invalid Capsule inventory");
+/** @param {unknown} payload @returns {CloudTeam[]} */
+export function parseCloudTeams(payload) {
+  if (!isPlainObject(payload) || !Array.isArray(payload.teams)) {
+    throw new Error("invalid Team inventory");
   }
-  if (payload.capsules.length > CLOUD_CAPSULE_LIMIT) {
-    throw new Error("Capsule inventory is too large");
+  if (payload.teams.length > CLOUD_TEAM_LIMIT) {
+    throw new Error("Team inventory is too large");
   }
 
   const seen = new Set();
-  const capsules = /** @type {unknown[]} */ (payload.capsules);
-  return capsules.map((value) => {
-    if (!isPlainObject(value) || typeof value.id !== "string" || !CAPSULE_ID_RE.test(value.id)) {
-      throw new Error("invalid Capsule");
+  const teams = /** @type {unknown[]} */ (payload.teams);
+  return teams.map((value) => {
+    if (!isPlainObject(value) || typeof value.team_id !== "string" || !TEAM_ID_RE.test(value.team_id)) {
+      throw new Error("invalid Team");
     }
-    if (seen.has(value.id)) throw new Error("duplicate Capsule");
-    seen.add(value.id);
-    const name = value.name == null ? value.id : value.name;
+    if (seen.has(value.team_id)) throw new Error("duplicate Team");
+    seen.add(value.team_id);
+    const teamName = value.team_name;
     if (
-      typeof name !== "string" ||
-      name.length < 1 ||
-      name.length > 80 ||
-      name.trim() !== name ||
-      [...name].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
+      typeof teamName !== "string" ||
+      teamName.length < 1 ||
+      teamName.length > 80 ||
+      teamName.trim() !== teamName ||
+      [...teamName].some((character) => character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127)
     ) {
-      throw new Error("invalid Capsule name");
+      throw new Error("invalid Team name");
     }
-    return { id: value.id, name };
+    return { team_id: value.team_id, team_name: teamName };
   });
 }
 
-/** @param {unknown} capsules @param {unknown} candidate */
-export function selectCloudCapsule(capsules, candidate) {
-  if (!Array.isArray(capsules) || typeof candidate !== "string") return "";
-  return capsules.some((capsule) => isPlainObject(capsule) && capsule.id === candidate) ? candidate : "";
+/** @param {unknown} teams @param {unknown} candidate */
+export function selectCloudTeam(teams, candidate) {
+  if (!Array.isArray(teams) || typeof candidate !== "string") return "";
+  return teams.some((team) => isPlainObject(team) && team.team_id === candidate) ? candidate : "";
 }
 
 /** @param {unknown} payload @returns {string[]} */
@@ -113,12 +113,12 @@ export function cloudAssistantAction(inventoryReady, installed, assistant) {
   return installed.includes(assistant) ? "uninstall" : "install";
 }
 
-/** @param {unknown} requestGeneration @param {unknown} currentGeneration @param {unknown} requestCapsule @param {unknown} currentCapsule */
-export function cloudRequestIsCurrent(requestGeneration, currentGeneration, requestCapsule, currentCapsule) {
+/** @param {unknown} requestGeneration @param {unknown} currentGeneration @param {unknown} requestTeamId @param {unknown} currentTeamId */
+export function cloudRequestIsCurrent(requestGeneration, currentGeneration, requestTeamId, currentTeamId) {
   return Number.isSafeInteger(requestGeneration) &&
     requestGeneration === currentGeneration &&
-    typeof requestCapsule === "string" &&
-    requestCapsule === currentCapsule;
+    typeof requestTeamId === "string" &&
+    requestTeamId === currentTeamId;
 }
 
 /** @param {unknown} locale @param {unknown} assistant */
@@ -138,11 +138,11 @@ export function closedAssistantLoginHref(locale, assistant) {
 }
 
 /** @param {unknown} locale @param {unknown} assistant */
-export function closedAssistantCapsuleHref(locale, assistant) {
+export function closedAssistantTeamHref(locale, assistant) {
   if (typeof locale !== "string" || typeof assistant !== "string" || !LOCALES.has(locale) || !RELEASED_ASSISTANTS.has(assistant)) {
-    throw new Error("invalid Assistant Capsule destination");
+    throw new Error("invalid Assistant Team destination");
   }
-  return `/${locale}/capsule?return=assistants&assistant=${encodeURIComponent(assistant)}`;
+  return `/${locale}/team?return=assistants&assistant=${encodeURIComponent(assistant)}`;
 }
 
 /** @param {unknown} locale @param {unknown} search @returns {string | null} */

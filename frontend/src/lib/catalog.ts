@@ -76,8 +76,8 @@ export const DRIVERS: Driver[] = [
     id: "bus", name: "Event Bus", category: "Integration", icon: "event-bus", brand: "#E4462B",
     summary: { en: "Async events, queues and retries.", pt: "Eventos async, filas e retries." },
     blurb: {
-      en: "The existing workspace runtime publishes and consumes events with at-least-once delivery, a dead-letter queue and retries. Capsule Assistants are not connected to this bus yet.",
-      pt: "O runtime de workspace existente publica e consome eventos com entrega at-least-once, dead-letter queue e retries. Assistants de Cápsula ainda não estão conectados a esse bus.",
+      en: "The existing workspace runtime publishes and consumes events with at-least-once delivery, a dead-letter queue and retries. Team Assistants are not connected to this bus yet.",
+      pt: "O runtime de workspace existente publica e consome eventos com entrega at-least-once, dead-letter queue e retries. Assistants de Time ainda não estão conectados a esse bus.",
     },
     features: [
       { en: "Publish events to its own <name>.* topics", pt: "Publica eventos nos próprios tópicos <name>.*" },
@@ -89,7 +89,7 @@ export const DRIVERS: Driver[] = [
     ],
     boundaries: [
       { en: "Workspace Apps publish only to their own <name>.* topics", pt: "Apps de workspace publicam apenas nos próprios tópicos <name>.*" },
-      { en: "Capsule Assistants have no bus principal or Service operation grant today", pt: "Assistants de Cápsula ainda não têm principal no bus nem grant de operação de Service" },
+      { en: "Team Assistants have no bus principal or Service operation grant today", pt: "Assistants de Time ainda não têm principal no bus nem grant de operação de Service" },
     ],
   },
   {
@@ -140,7 +140,7 @@ export const SERVICE_BY_ID = DRIVER_BY_ID;
 
 // ── Assistants (public presentation; execution policy remains controller-owned) ─────────────────
 // The Store intentionally exposes product facts only. Image references, digests, ports and runtime
-// privileges never enter browser code; the Capsule controller resolves an ID against its own trusted
+// privileges never enter browser code; the Team controller resolves an ID against its own trusted
 // registry. This keeps the public and embedded Store on one codebase without making it an authority.
 export interface AssistantPower {
   id: string;
@@ -168,8 +168,8 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
     version: "0.1.0",
     creator: "julianoamg",
     summary: {
-      en: "Validate a Capsule with one safe hello Power.",
-      pt: "Valide uma Cápsula com um Power hello seguro.",
+      en: "Validate a Team with one safe hello Power.",
+      pt: "Valide um Time com um Power hello seguro.",
     },
     description: {
       en: "Use Hello Pulse to validate a complete contextual install, invoke and uninstall flow without credentials, Services or internet access.",
@@ -206,7 +206,7 @@ export interface App {
   archs: Arch[];
 }
 
-// Runtime status and installed-Assistant controls still come from the legacy capsule-driver API.
+// Runtime status and installed-Assistant controls come from the Team controller API.
 export const APPS: App[] = [];
 export type Assistant = App;
 export const ASSISTANTS: Assistant[] = APPS;

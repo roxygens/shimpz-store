@@ -194,7 +194,7 @@ test("rejects untrusted, malformed, oversized, and state-bearing non-ready inven
     { ...exact, data: { ...exact.data, installed: tooMany } },
     { ...exact, data: { ...exact.data, status: "loading" } },
     { ...exact, data: { ...exact.data, status: "error" } },
-    { ...exact, data: { ...exact.data, capsule: "private_capsule" } },
+    { ...exact, data: { ...exact.data, team_id: "private_team" } },
     { ...exact, data: { ...exact.data, token: "secret" } },
     { ...exact, data: null },
     { ...exact, data: [ASSISTANT_STORE_STATE_TYPE, 1, "ready", ["hello-pulse"]] },
@@ -300,7 +300,7 @@ test("rejects every malformed trusted ACK and defines a bounded wait", () => {
     { ...exact, version: 2 },
     { ...exact, assistant: "salesnator" },
     { ...exact, accepted: false },
-    { ...exact, capsule: "private_capsule" },
+    { ...exact, team_id: "private_team" },
     { ...exact, token: "secret" },
   ];
   for (const data of cases) {
@@ -336,7 +336,7 @@ test("accepts only the exact uninstall ACK and never confuses it with install", 
     { ...exact, assistant: "salesnator" },
     { ...exact, accepted: false },
     { ...exact, installed: false },
-    { ...exact, capsule: "private_capsule" },
+    { ...exact, team_id: "private_team" },
   ]) {
     assert.equal(
       classifyAssistantUninstallAck({ source: parentWindow, origin: parentOrigin, data }, context),

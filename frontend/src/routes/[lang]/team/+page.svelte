@@ -20,55 +20,55 @@
   const lang = $derived(data.lang as Locale);
 
   let phase = $state("checking"); // checking | ready (unauthed → redirected to /login)
-  let capName = $state("");
+  let teamNameInput = $state("");
   let provider = $state("openai");
   let model = $state(defaultModelFor("openai"));
-  let capsules = $state<any[]>([]);
+  let teams = $state<any[]>([]);
   let selected = $state("");
   let error = $state("");
   let busy = $state(false);
 
-  let createOpen = $state(false); // the "Create Capsule" modal (creation is no longer inline on the page)
+  let createOpen = $state(false); // the "Create Team" modal (creation is no longer inline on the page)
   let destroyTarget = $state<any>(null);
-  let appsByCap = $state<Record<string, any[]>>({}); // installed apps per Capsule
+  let appsByTeam = $state<Record<string, any[]>>({}); // installed apps per Team
   let appsLoaded = $state<Record<string, boolean>>({});
   let appsLoading = $state<Record<string, boolean>>({});
   let appsError = $state<Record<string, string>>({});
-  let openApps = $state(""); // which Capsule's Apps menu is expanded
+  let openApps = $state(""); // which Team's Apps menu is expanded
 
   let createTrigger = $state<HTMLButtonElement>();
   let destroyDialog = $state<HTMLDialogElement>();
   let destroyCancelButton = $state<HTMLButtonElement>();
   let destroyReturnFocus: HTMLButtonElement | null = null;
 
-  const SEL_KEY = "shimpz_current_capsule";
+  const SEL_KEY = "shimpz_current_team";
 
   function chooseProvider(event: Event) {
     provider = (event.currentTarget as HTMLSelectElement).value;
     model = defaultModelFor(provider);
   }
 
-  async function loadApps(id: string) {
-    appsLoading[id] = true;
-    appsError[id] = "";
+  async function loadApps(teamId: string) {
+    appsLoading[teamId] = true;
+    appsError[teamId] = "";
     try {
-      const r = await fetch(`/api/capsules/${id}/apps`);
+      const r = await fetch(`/api/teams/${teamId}/apps`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      appsByCap[id] = (await r.json()).apps ?? [];
-      appsLoaded[id] = true;
+      appsByTeam[teamId] = (await r.json()).apps ?? [];
+      appsLoaded[teamId] = true;
     } catch {
-      appsError[id] = tr("capsule_apps_load_failed", lang);
+      appsError[teamId] = tr("team_apps_load_failed", lang);
     } finally {
-      appsLoading[id] = false;
+      appsLoading[teamId] = false;
     }
   }
 
   async function refresh() {
-    const r = await fetch("/api/capsules");
+    const r = await fetch("/api/teams");
     if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    capsules = (await r.json()).capsules ?? [];
-    if (!capsules.some((capsule) => capsule.id === selected)) {
-      select(capsules[0]?.id ?? "");
+    teams = (await r.json()).teams ?? [];
+    if (!teams.some((team) => team.team_id === selected)) {
+      select(teams[0]?.team_id ?? "");
     }
   }
 
@@ -81,12 +81,12 @@
     if (!appsLoaded[id] && !appsLoading[id]) await loadApps(id);
   }
 
-  async function uninstallApp(capId: string, appId: string) {
+  async function uninstallApp(teamId: string, appId: string) {
     if (busy) return;
     busy = true;
     try {
-      await fetch(`/api/capsules/${capId}/apps/${appId}`, { method: "DELETE" });
-      await loadApps(capId);
+      await fetch(`/api/teams/${teamId}/apps/${appId}`, { method: "DELETE" });
+      await loadApps(teamId);
     } finally {
       busy = false;
     }
@@ -104,7 +104,7 @@
       try {
         await refresh();
       } catch {
-        error = tr("capsule_list_load_failed", lang);
+        error = tr("team_list_load_failed", lang);
       }
       phase = "ready";
     } catch {
@@ -112,20 +112,20 @@
     }
   }
 
-  async function createCapsule() {
-    if (!capName.trim() || busy) return;
+  async function createTeam() {
+    if (!teamNameInput.trim() || busy) return;
     busy = true;
     error = "";
     try {
       const inference = normalizeInferenceSelection(provider, model);
-      const payload = { name: capName.trim(), ...inference };
-      const r = await fetch("/api/capsules", {
+      const payload = { team_name: teamNameInput.trim(), ...inference };
+      const r = await fetch("/api/teams", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
       if (r.ok) {
-        capName = "";
+        teamNameInput = "";
         createOpen = false;
         await refresh();
         const destination = resolveClosedAssistantReturn(lang, window.location.search);
@@ -141,21 +141,21 @@
     }
   }
 
-  async function destroyCapsule(id: string) {
+  async function destroyTeam(teamId: string) {
     busy = true;
     error = "";
     try {
-      await fetch(`/api/capsules/${id}`, { method: "DELETE" });
-      if (selected === id) select("");
+      await fetch(`/api/teams/${teamId}`, { method: "DELETE" });
+      if (selected === teamId) select("");
       await refresh();
     } finally {
       busy = false;
     }
   }
 
-  async function openDestroyDialog(capsule: any, trigger: HTMLButtonElement) {
+  async function openDestroyDialog(team: any, trigger: HTMLButtonElement) {
     if (busy) return;
-    destroyTarget = capsule;
+    destroyTarget = team;
     destroyReturnFocus = trigger;
     await tick();
     if (destroyDialog && !destroyDialog.open) destroyDialog.showModal();
@@ -174,22 +174,22 @@
     });
   }
 
-  async function confirmDestroyCapsule() {
+  async function confirmDestroyTeam() {
     if (!destroyTarget || busy) return;
-    const id = destroyTarget.id;
+    const teamId = destroyTarget.team_id;
     try {
-      await destroyCapsule(id);
+      await destroyTeam(teamId);
     } finally {
       closeDestroyDialog();
     }
   }
 
-  function select(id: string) {
-    selected = id;
-    if (id) {
-      localStorage.setItem(SEL_KEY, id);
-      const name = capsules.find((c) => c.id === id)?.name ?? id;
-      localStorage.setItem(SEL_KEY + "_name", name); // the app page shows WHERE Install will land
+  function select(teamId: string) {
+    selected = teamId;
+    if (teamId) {
+      localStorage.setItem(SEL_KEY, teamId);
+      const teamName = teams.find((team) => team.team_id === teamId)?.team_name ?? teamId;
+      localStorage.setItem(SEL_KEY + "_name", teamName); // the app page shows WHERE Install will land
     } else {
       localStorage.removeItem(SEL_KEY);
       localStorage.removeItem(SEL_KEY + "_name");
@@ -208,30 +208,30 @@
 
 <svelte:window onkeydown={(e) => { if (e.key === "Escape" && createOpen) createOpen = false; }} />
 
-<Seo title={tr("capsule_list_title", lang)} description={tr("capsule_list_lead", lang)} {lang} />
+<Seo title={tr("team_list_title", lang)} description={tr("team_list_lead", lang)} {lang} />
 
 <section class="wrap pt-10 pb-8">
-  {#snippet capsuleMedia()}
-    <div class="capsule-hero-icon"><HudIcon name="capsule" size={44} /></div>
+  {#snippet teamMedia()}
+    <div class="team-hero-icon"><HudIcon name="team" size={44} /></div>
   {/snippet}
 
-  {#snippet capsuleMeta()}
+  {#snippet teamMeta()}
     {#if phase === "ready"}
-      <span class="badge">{capsules.length} {tr("capsule_count_label", lang)}</span>
+      <span class="badge">{teams.length} {tr("team_count_label", lang)}</span>
       <button bind:this={createTrigger} class="btn-primary" onclick={() => { error = ""; createOpen = true; }}>
         <HudIcon name="add" size={17} />
-        {tr("capsule_submit", lang)}
+        {tr("team_submit", lang)}
       </button>
     {/if}
   {/snippet}
 
   <PageIntro
-    headingId="capsule-list-title"
-    kicker={tr("capsule_list_kicker", lang)}
-    title={tr("my_capsules", lang)}
-    description={tr("capsule_list_lead", lang)}
-    media={capsuleMedia}
-    meta={capsuleMeta}
+    headingId="team-list-title"
+    kicker={tr("team_list_kicker", lang)}
+    title={tr("my_teams", lang)}
+    description={tr("team_list_lead", lang)}
+    media={teamMedia}
+    meta={teamMeta}
   />
 
   {#if phase === "checking"}
@@ -239,72 +239,72 @@
   {:else}
     {#if error && !createOpen}<p class="mt-5 notice notice-error">{error}</p>{/if}
 
-    <div class="capsule-list">
-      {#each capsules as c (c.id)}
-        <article class="card capsule-card" class:ring={selected === c.id}>
-          <button class="capsule-identity" type="button" onclick={() => select(c.id)}>
-            <span class="capsule-mark" aria-hidden="true"><HudIcon name="capsule" size={27} /></span>
-            <span class="capsule-copy">
-              <span class="capsule-name">{c.name || c.id}</span>
-              <span class="capsule-id mono">{c.id}</span>
-              <span class="capsule-facts mono">
-                <span><span class="status-signal" aria-hidden="true"></span>{c.status}</span>
-                <span>{tr("brain_label", lang)}: {c.provider ?? "openai"}</span>
-                <span>{tr("model_label", lang)}: {c.model || defaultModelFor(c.provider ?? "openai")}</span>
+    <div class="team-list">
+      {#each teams as team (team.team_id)}
+        <article class="card team-card" class:ring={selected === team.team_id}>
+          <button class="team-identity" type="button" onclick={() => select(team.team_id)}>
+            <span class="team-mark" aria-hidden="true"><HudIcon name="team" size={27} /></span>
+            <span class="team-copy">
+              <span class="team-name">{team.team_name}</span>
+              <span class="team-id mono">{team.team_id}</span>
+              <span class="team-facts mono">
+                <span><span class="status-signal" aria-hidden="true"></span>{team.status}</span>
+                <span>{tr("brain_label", lang)}: {team.provider ?? "openai"}</span>
+                <span>{tr("model_label", lang)}: {team.model || defaultModelFor(team.provider ?? "openai")}</span>
               </span>
             </span>
-            {#if selected === c.id}<span class="badge">{tr("current", lang)}</span>{/if}
+            {#if selected === team.team_id}<span class="badge">{tr("current", lang)}</span>{/if}
           </button>
 
-          <div class="capsule-actions" role="group" aria-label={`${tr("capsule_actions", lang)}: ${c.name || c.id}`}>
-            <button class="capsule-action" type="button" aria-expanded={openApps === c.id} onclick={() => toggleApps(c.id)}>
+          <div class="team-actions" role="group" aria-label={`${tr("team_actions", lang)}: ${team.team_name}`}>
+            <button class="team-action" type="button" aria-expanded={openApps === team.team_id} onclick={() => toggleApps(team.team_id)}>
               <HudIcon name="assistants" size={18} />
               <span>{tr("apps_menu", lang)}</span>
-              {#if appsLoaded[c.id]}<span class="action-count">{appsByCap[c.id]?.length ?? 0}</span>{/if}
-              <span class:expanded={openApps === c.id} class="chevron"><HudIcon name="chevron" size={16} /></span>
+              {#if appsLoaded[team.team_id]}<span class="action-count">{appsByTeam[team.team_id]?.length ?? 0}</span>{/if}
+              <span class:expanded={openApps === team.team_id} class="chevron"><HudIcon name="chevron" size={16} /></span>
             </button>
-            <a class="capsule-action" href={u.chat(lang, c.id)} onclick={() => select(c.id)}>
+            <a class="team-action" href={u.chat(lang, team.team_id)} onclick={() => select(team.team_id)}>
               <HudIcon name="chat" size={18} />
               <span>{tr("nav_chat", lang)}</span>
             </a>
             <button
-              class="capsule-action capsule-action-danger"
+              class="team-action team-action-danger"
               type="button"
               disabled={busy}
-              onclick={(event) => openDestroyDialog(c, event.currentTarget)}>
+              onclick={(event) => openDestroyDialog(team, event.currentTarget)}>
               <HudIcon name="destroy" size={18} />
               <span>{tr("destroy", lang)}</span>
             </button>
           </div>
 
-          {#if openApps === c.id}
+          {#if openApps === team.team_id}
             <div class="assistant-drawer">
               <div class="drawer-heading">
                 <span class="kicker">{tr("installed_apps", lang)}</span>
-                <span class="mono drawer-capsule">{c.name || c.id}</span>
+                <span class="mono drawer-team">{team.team_name}</span>
               </div>
-              {#if appsLoading[c.id]}
+              {#if appsLoading[team.team_id]}
                 <p class="drawer-state dim">{tr("loading", lang)}</p>
-              {:else if appsError[c.id]}
+              {:else if appsError[team.team_id]}
                 <div class="drawer-state drawer-error">
-                  <span>{appsError[c.id]}</span>
-                  <button class="btn-ghost" type="button" onclick={() => loadApps(c.id)}>
+                  <span>{appsError[team.team_id]}</span>
+                  <button class="btn-ghost" type="button" onclick={() => loadApps(team.team_id)}>
                     <HudIcon name="retry" size={16} /> {tr("retry", lang)}
                   </button>
                 </div>
               {:else}
                 <div class="assistant-list">
-                  {#each (appsByCap[c.id] ?? []) as a (a.app)}
+                  {#each (appsByTeam[team.team_id] ?? []) as a (a.app)}
                     <div class="assistant-row">
                       <span class="assistant-row-icon" aria-hidden="true"><HudIcon name="assistants" size={17} /></span>
                       <span class="mono assistant-name">{a.app}</span>
                       <span class="badge">{a.status}</span>
-                      <button class="btn-ghost assistant-uninstall" type="button" disabled={busy} onclick={() => uninstallApp(c.id, a.app)}>
+                      <button class="btn-ghost assistant-uninstall" type="button" disabled={busy} onclick={() => uninstallApp(team.team_id, a.app)}>
                         <HudIcon name="uninstall" size={16} /> {tr("uninstall", lang)}
                       </button>
                     </div>
                   {/each}
-                  {#if (appsByCap[c.id] ?? []).length === 0}
+                  {#if (appsByTeam[team.team_id] ?? []).length === 0}
                     <p class="drawer-state dim">{tr("no_apps", lang)}</p>
                   {/if}
                 </div>
@@ -313,23 +313,23 @@
           {/if}
         </article>
       {/each}
-      {#if capsules.length === 0}<div class="panel empty-state"><HudIcon name="capsule" size={32} /><p>{tr("no_capsules", lang)}</p></div>{/if}
+      {#if teams.length === 0}<div class="panel empty-state"><HudIcon name="team" size={32} /><p>{tr("no_teams", lang)}</p></div>{/if}
     </div>
   {/if}
 </section>
 
-<!-- Create Capsule — a focused overlay, so the page itself stays a clean list -->
+<!-- Create Team — a focused overlay, so the page itself stays a clean list -->
 {#if createOpen}
-  <div class="create-backdrop fixed inset-0 z-[70] flex items-center justify-center p-5" style="background:color-mix(in oklab, var(--color-bg) 88%, transparent)" role="dialog" aria-modal="true" aria-label={tr("capsule_submit", lang)} tabindex="-1">
+  <div class="create-backdrop fixed inset-0 z-[70] flex items-center justify-center p-5" style="background:color-mix(in oklab, var(--color-bg) 88%, transparent)" role="dialog" aria-modal="true" aria-label={tr("team_submit", lang)} tabindex="-1">
     <div class="panel create-panel w-full max-w-md space-y-4">
       <div class="flex items-center justify-between gap-4">
-        <h2 class="mono text-lg font-extrabold uppercase tracking-wide">{tr("capsule_submit", lang)}</h2>
+        <h2 class="mono text-lg font-extrabold uppercase tracking-wide">{tr("team_submit", lang)}</h2>
         <button class="btn-ghost !px-3 !py-1 text-xs" onclick={() => (createOpen = false)} aria-label={tr("close", lang)}>✕</button>
       </div>
-      <p class="text-sm leading-relaxed dim">{tr("capsule_lead", lang)}</p>
+      <p class="text-sm leading-relaxed dim">{tr("team_lead", lang)}</p>
       <div>
-        <span class="kicker">{tr("capsule_name_label", lang)}</span>
-        <input class="field mt-2" placeholder={tr("capsule_name_ph", lang)} bind:value={capName} onkeydown={(e) => e.key === "Enter" && createCapsule()} />
+        <span class="kicker">{tr("team_name_label", lang)}</span>
+        <input class="field mt-2" placeholder={tr("team_name_ph", lang)} bind:value={teamNameInput} onkeydown={(e) => e.key === "Enter" && createTeam()} />
       </div>
       <label class="block text-sm dim">
         <span class="kicker !text-[10px]">{tr("brain_label", lang)}</span>
@@ -348,7 +348,7 @@
         </select>
       </label>
       {#if error}<p class="text-sm" style="color:var(--color-magenta)">{error}</p>{/if}
-      <button class="btn-primary w-full justify-center" disabled={busy || !capName.trim()} onclick={createCapsule}>{tr("capsule_submit", lang)}</button>
+      <button class="btn-primary w-full justify-center" disabled={busy || !teamNameInput.trim()} onclick={createTeam}>{tr("team_submit", lang)}</button>
     </div>
   </div>
 {/if}
@@ -365,15 +365,15 @@
     }}
   >
     <div class="panel destroy-panel">
-      <p class="kicker">{tr("my_capsules", lang)} // {tr("destroy", lang)}</p>
-      <h2 id="destroy-dialog-title">{tr("destroy", lang)} {destroyTarget.name || destroyTarget.id}?</h2>
+      <p class="kicker">{tr("my_teams", lang)} // {tr("destroy", lang)}</p>
+      <h2 id="destroy-dialog-title">{tr("destroy", lang)} {destroyTarget.team_name}?</h2>
       <p id="destroy-dialog-description">{tr("destroy_confirm", lang)}</p>
       <div class="destroy-actions">
         <button bind:this={destroyCancelButton} class="btn-ghost" type="button" disabled={busy} onclick={closeDestroyDialog}>
           {lang === "pt" ? "Cancelar" : "Cancel"}
         </button>
-        <button class="btn-danger" type="button" disabled={busy} onclick={confirmDestroyCapsule}>
-          {busy ? tr("capsule_submitting", lang) : tr("destroy", lang)}
+        <button class="btn-danger" type="button" disabled={busy} onclick={confirmDestroyTeam}>
+          {busy ? tr("team_submitting", lang) : tr("destroy", lang)}
         </button>
       </div>
     </div>
@@ -381,7 +381,7 @@
 {/if}
 
 <style>
-  .capsule-hero-icon {
+  .team-hero-icon {
     display: grid;
     width: 4.5rem;
     height: 4.5rem;
@@ -393,13 +393,13 @@
     text-shadow: 0 0 18px currentColor;
   }
 
-  .capsule-list {
+  .team-list {
     display: grid;
     gap: 0.85rem;
     margin-top: 1.4rem;
   }
 
-  .capsule-card {
+  .team-card {
     display: grid;
     gap: 1rem;
     padding: 0;
@@ -411,7 +411,7 @@
     box-shadow: inset 3px 0 0 var(--color-cyan), 0 0 0 1px var(--color-primary);
   }
 
-  .capsule-identity {
+  .team-identity {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr) auto;
     min-width: 0;
@@ -425,13 +425,13 @@
     text-align: left;
   }
 
-  .capsule-identity:focus-visible,
-  .capsule-action:focus-visible {
+  .team-identity:focus-visible,
+  .team-action:focus-visible {
     outline: 2px solid var(--color-cyan);
     outline-offset: -2px;
   }
 
-  .capsule-mark,
+  .team-mark,
   .assistant-row-icon {
     display: grid;
     place-items: center;
@@ -441,12 +441,12 @@
     clip-path: polygon(0.45rem 0, 100% 0, 100% calc(100% - 0.45rem), calc(100% - 0.45rem) 100%, 0 100%, 0 0.45rem);
   }
 
-  .capsule-mark { width: 3.2rem; height: 3.2rem; }
-  .capsule-copy { display: block; min-width: 0; }
-  .capsule-name { display: block; font-family: var(--font-mono); font-weight: 700; }
-  .capsule-id { display: block; overflow: hidden; color: var(--color-muted-2); font-size: 0.66rem; text-overflow: ellipsis; white-space: nowrap; }
+  .team-mark { width: 3.2rem; height: 3.2rem; }
+  .team-copy { display: block; min-width: 0; }
+  .team-name { display: block; font-family: var(--font-mono); font-weight: 700; }
+  .team-id { display: block; overflow: hidden; color: var(--color-muted-2); font-size: 0.66rem; text-overflow: ellipsis; white-space: nowrap; }
 
-  .capsule-facts {
+  .team-facts {
     display: flex;
     flex-wrap: wrap;
     gap: 0.35rem 1rem;
@@ -455,7 +455,7 @@
     font-size: 0.68rem;
   }
 
-  .capsule-facts > span { display: inline-flex; align-items: center; gap: 0.35rem; }
+  .team-facts > span { display: inline-flex; align-items: center; gap: 0.35rem; }
 
   .status-signal {
     width: 0.4rem;
@@ -465,13 +465,13 @@
     box-shadow: 0 0 7px color-mix(in oklab, var(--color-green) 60%, transparent);
   }
 
-  .capsule-actions {
+  .team-actions {
     display: grid;
     grid-template-columns: repeat(3, minmax(0, 1fr));
     border-top: 1px solid var(--color-border);
   }
 
-  .capsule-action {
+  .team-action {
     display: inline-flex;
     min-width: 0;
     min-height: 3rem;
@@ -492,10 +492,10 @@
     text-transform: uppercase;
   }
 
-  .capsule-action:last-child { border-right: 0; }
-  .capsule-action:hover { background: color-mix(in oklab, var(--color-cyan) 7%, var(--color-card-2)); color: var(--color-cyan); }
-  .capsule-action-danger:hover { background: color-mix(in oklab, var(--color-magenta) 8%, var(--color-card-2)); color: var(--color-magenta); }
-  .capsule-action:disabled { cursor: not-allowed; opacity: 0.5; }
+  .team-action:last-child { border-right: 0; }
+  .team-action:hover { background: color-mix(in oklab, var(--color-cyan) 7%, var(--color-card-2)); color: var(--color-cyan); }
+  .team-action-danger:hover { background: color-mix(in oklab, var(--color-magenta) 8%, var(--color-card-2)); color: var(--color-magenta); }
+  .team-action:disabled { cursor: not-allowed; opacity: 0.5; }
 
   .action-count {
     min-width: 1.35rem;
@@ -517,7 +517,7 @@
 
   .drawer-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem; }
   .drawer-heading .kicker { margin: 0; }
-  .drawer-capsule { color: var(--color-muted-2); font-size: 0.65rem; }
+  .drawer-team { color: var(--color-muted-2); font-size: 0.65rem; }
   .drawer-state { margin: 0.85rem 0 0; font-size: 0.85rem; }
   .drawer-error { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.7rem; color: var(--color-magenta); }
 
@@ -538,11 +538,11 @@
   .empty-state p { margin: 0; }
 
   @media (max-width: 600px) {
-    .capsule-identity { grid-template-columns: auto minmax(0, 1fr); }
-    .capsule-identity > .badge { grid-column: 2; justify-self: start; }
-    .capsule-actions { grid-template-columns: 1fr; }
-    .capsule-action { justify-content: flex-start; border-right: 0; border-bottom: 1px solid var(--color-border); }
-    .capsule-action:last-child { border-bottom: 0; }
+    .team-identity { grid-template-columns: auto minmax(0, 1fr); }
+    .team-identity > .badge { grid-column: 2; justify-self: start; }
+    .team-actions { grid-template-columns: 1fr; }
+    .team-action { justify-content: flex-start; border-right: 0; border-bottom: 1px solid var(--color-border); }
+    .team-action:last-child { border-bottom: 0; }
     .assistant-row { grid-template-columns: auto minmax(0, 1fr) auto; }
     .assistant-uninstall { grid-column: 2 / -1; justify-self: start; }
   }

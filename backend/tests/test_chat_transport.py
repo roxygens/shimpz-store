@@ -38,11 +38,11 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 
-def _done(reply: str = "hello", *, team: str = "Marketing") -> dict:
+def _done(reply: str = "hello", *, team_name: str = "Marketing") -> dict:
     return {
         "type": "done",
         "reply": reply,
-        "team": team,
+        "team_name": team_name,
     }
 
 
@@ -55,7 +55,7 @@ def _websocket_disconnect_code(
     with (
         pytest.raises(WebSocketDisconnect) as raised,
         client.websocket_connect(
-            "/api/capsules/test_capsule/chat/ws",
+            "/api/teams/test_team/chat/ws",
             headers=headers,
             subprotocols=list(subprotocols),
         ),
@@ -100,7 +100,7 @@ def test_websocket_requires_and_negotiates_the_v1_chat_subprotocol(monkeypatch):
     with (
         TestClient(app) as client,
         client.websocket_connect(
-            "/api/capsules/test_capsule/chat/ws",
+            "/api/teams/test_team/chat/ws",
             headers={"origin": allowed},
             subprotocols=[CHAT_WS_SUBPROTOCOL],
         ) as websocket,
@@ -194,7 +194,7 @@ def test_websocket_rejects_binary_frames_even_when_they_contain_valid_json(monke
     with (
         TestClient(app) as client,
         client.websocket_connect(
-            "/api/capsules/test_capsule/chat/ws",
+            "/api/teams/test_team/chat/ws",
             headers={"origin": allowed},
             subprotocols=[CHAT_WS_SUBPROTOCOL],
         ) as websocket,
@@ -233,7 +233,7 @@ def test_websocket_allows_only_one_local_turn_task():
         try:
             await _ws_dispatch(
                 websocket,
-                "test-capsule",
+                "test-team",
                 {},
                 {"type": "chat", "message": "second"},
                 state,
@@ -246,7 +246,7 @@ def test_websocket_allows_only_one_local_turn_task():
         assert json.loads(sent[-1]["text"]) == {
             "type": "error",
             "status": 409,
-            "detail": "capsule already has an active chat turn",
+            "detail": "team already has an active chat turn",
         }
 
     asyncio.run(scenario())
@@ -258,7 +258,7 @@ def test_websocket_rejects_retired_answer_frames():
         await websocket.accept()
         await _ws_dispatch(
             websocket,
-            "test-capsule",
+            "test-team",
             {},
             {"type": "answer", "rid": "legacy", "answer": "yes"},
             {"turns": set()},
@@ -283,7 +283,7 @@ def test_websocket_returns_typed_429_when_global_turn_queue_is_full():
         try:
             await _ws_dispatch(
                 websocket,
-                "test-capsule",
+                "test-team",
                 {},
                 {"type": "chat", "message": "beyond the bound"},
                 {"turns": set()},
@@ -376,7 +376,7 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
         try:
             await _ws_dispatch(
                 websocket,
-                "cap-queued",
+                "team-queued",
                 {},
                 {"type": "chat", "message": "must never execute"},
                 state,
@@ -384,8 +384,8 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
             await asyncio.sleep(0)
             assert admission.snapshot() == (1, 1)
 
-            await _ws_dispatch(websocket, "cap-queued", {}, {"type": "stop"}, state)
-            await _ws_dispatch(websocket, "cap-queued", {}, {"type": "stop"}, state)
+            await _ws_dispatch(websocket, "team-queued", {}, {"type": "stop"}, state)
+            await _ws_dispatch(websocket, "team-queued", {}, {"type": "stop"}, state)
             assert admission.snapshot() == (1, 0)
             assert not state["turns"]
             events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
@@ -409,8 +409,8 @@ def test_duplicate_stop_then_disconnect_requests_provider_stop_once(monkeypatch)
     async def scenario() -> None:
         calls = []
 
-        async def stop(cid: str, headers: dict) -> tuple[int, dict]:
-            calls.append((cid, headers))
+        async def stop(team_id: str, headers: dict) -> tuple[int, dict]:
+            calls.append((team_id, headers))
             return 200, {"requested": True}
 
         class RunningLease:
@@ -428,7 +428,7 @@ def test_duplicate_stop_then_disconnect_requests_provider_stop_once(monkeypatch)
         delivery = main._RelayDelivery()
         turn = main._WsTurn(
             websocket,
-            "cap-stop-once",
+            "team-stop-once",
             {"X-Shimpz-Account": "token"},
             "hello",
             started,
@@ -448,13 +448,13 @@ def test_duplicate_stop_then_disconnect_requests_provider_stop_once(monkeypatch)
             "stop_requested": False,
         }
 
-        await main._ws_stop_turn(websocket, turn.cid, turn.headers, state)
-        await main._ws_stop_turn(websocket, turn.cid, turn.headers, state)
+        await main._ws_stop_turn(websocket, turn.team_id, turn.headers, state)
+        await main._ws_stop_turn(websocket, turn.team_id, turn.headers, state)
         active.cancel()  # The endpoint cancels the relay after a browser disconnect.
         worker.set_result(None)
         await asyncio.gather(active, return_exceptions=True)
 
-        assert calls == [("cap-stop-once", {"X-Shimpz-Account": "token"})]
+        assert calls == [("team-stop-once", {"X-Shimpz-Account": "token"})]
         assert delivery.stop_attempted
 
     asyncio.run(scenario())
@@ -464,15 +464,15 @@ def test_duplicate_stop_then_disconnect_requests_provider_stop_once(monkeypatch)
     "event",
     [
         {"type": "text", "text": "legacy"},
-        _done("invalid Team identity", team=" Marketing "),
+        _done("invalid Team identity", team_name=" Marketing "),
     ],
 )
 def test_final_websocket_gate_converts_invalid_events(event: dict, monkeypatch):
     async def scenario() -> None:
         stops = []
 
-        async def stop(cid: str, headers: dict) -> tuple[int, dict]:
-            stops.append((cid, headers))
+        async def stop(team_id: str, headers: dict) -> tuple[int, dict]:
+            stops.append((team_id, headers))
             return 200, {"requested": True}
 
         monkeypatch.setattr(main, "_driver_stop", stop)
@@ -480,7 +480,7 @@ def test_final_websocket_gate_converts_invalid_events(event: dict, monkeypatch):
         await websocket.accept()
         turn = main._WsTurn(
             websocket,
-            "cap-terminal-gate",
+            "team-terminal-gate",
             {"X-Shimpz-Account": "token"},
             "hello",
             asyncio.Event(),
@@ -493,35 +493,35 @@ def test_final_websocket_gate_converts_invalid_events(event: dict, monkeypatch):
             "status": 502,
             "detail": main.TERMINAL_CONTRACT_ERROR,
         }
-        assert stops == [("cap-terminal-gate", {"X-Shimpz-Account": "token"})]
+        assert stops == [("team-terminal-gate", {"X-Shimpz-Account": "token"})]
         assert delivery.terminal_seen and delivery.aborted
 
     asyncio.run(scenario())
 
 
-def test_websocket_connection_admission_bounds_global_account_and_capsule_counts():
-    admission = main._WsConnectionAdmission(global_limit=3, account_limit=2, capsule_limit=1)
-    account_a_one = admission.reserve("account-a", "cap-1")
+def test_websocket_connection_admission_bounds_global_account_and_team_counts():
+    admission = main._WsConnectionAdmission(global_limit=3, account_limit=2, team_limit=1)
+    account_a_one = admission.reserve("account-a", "team-1")
     assert account_a_one is not None
-    assert admission.reserve("account-a", "cap-1") is None
-    account_a_two = admission.reserve("account-a", "cap-2")
+    assert admission.reserve("account-a", "team-1") is None
+    account_a_two = admission.reserve("account-a", "team-2")
     assert account_a_two is not None
-    assert admission.reserve("account-a", "cap-3") is None
-    account_b_one = admission.reserve("account-b", "cap-1")
+    assert admission.reserve("account-a", "team-3") is None
+    account_b_one = admission.reserve("account-b", "team-1")
     assert account_b_one is not None
-    assert admission.reserve("account-b", "cap-2") is None
+    assert admission.reserve("account-b", "team-2") is None
     assert admission.snapshot() == (
         3,
         {"account-a": 2, "account-b": 1},
         {
-            ("account-a", "cap-1"): 1,
-            ("account-a", "cap-2"): 1,
-            ("account-b", "cap-1"): 1,
+            ("account-a", "team-1"): 1,
+            ("account-a", "team-2"): 1,
+            ("account-b", "team-1"): 1,
         },
     )
 
     account_a_one.release()
-    replacement = admission.reserve("account-b", "cap-2")
+    replacement = admission.reserve("account-b", "team-2")
     assert replacement is not None
     account_a_two.release()
     account_b_one.release()
@@ -627,7 +627,7 @@ def test_upstream_http_errors_and_unterminated_terminal_lines_are_redacted():
 @pytest.mark.parametrize(
     ("event", "expected"),
     [
-        (_done("complete", team="Marketing"), _done("complete", team="Marketing")),
+        (_done("complete", team_name="Marketing"), _done("complete", team_name="Marketing")),
         (
             {"type": "error", "status": 504, "detail": "provider timed out"},
             {"type": "error", "status": 504, "detail": "chat service timed out"},
@@ -648,8 +648,8 @@ def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict,
         {"type": "answered", "answered": True},
         {**_done(), "extra": True},
         {"type": "done", "reply": "hello"},
-        _done("hello", team=" Marketing "),
-        _done("hello", team="Marketing\x00"),
+        _done("hello", team_name=" Marketing "),
+        _done("hello", team_name="Marketing\x00"),
         _done("x" * (main.MAX_CHAT_REPLY_CHARS + 1)),
         {"type": "error", "status": True, "detail": "failed"},
         {"type": "error", "status": 200, "detail": "not an error"},
@@ -748,7 +748,7 @@ def test_upstream_relay_releases_nothing_before_one_complete_terminal_event():
         queue: asyncio.Queue = asyncio.Queue(maxsize=4)
         loop = asyncio.get_running_loop()
         first = b'{"type":"done","reply":"first",'
-        rest = b'"team":"Marketing"}\n'
+        rest = b'"team_name":"Marketing"}\n'
         with _real_delayed_upstream(first, rest) as (
             response,
             first_flushed,
@@ -786,12 +786,12 @@ def _real_stream_driver(response_body: bytes, *, status: int = 200):
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
-    previous = main.CAPSULEDRIVER_URL
-    main.CAPSULEDRIVER_URL = f"http://127.0.0.1:{server.server_port}"
+    previous = main.TEAMDRIVER_URL
+    main.TEAMDRIVER_URL = f"http://127.0.0.1:{server.server_port}"
     try:
         yield requests
     finally:
-        main.CAPSULEDRIVER_URL = previous
+        main.TEAMDRIVER_URL = previous
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
@@ -817,7 +817,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
             await asyncio.to_thread(
                 main._stream_lines,
                 main._StreamRelay(
-                    "cap-utf8",
+                    "team-utf8",
                     prompt,
                     {},
                     queue,
@@ -874,7 +874,7 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
         with _real_stream_driver(response) as requests:
             await main._ws_run_turn(
                 websocket,
-                "cap-terminal",
+                "team-terminal",
                 {},
                 {"message": "hello"},
                 started,
@@ -901,7 +901,7 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
 @pytest.mark.parametrize(
     ("status", "payload"),
     [
-        (409, {"error": "capsule already has an active chat turn"}),
+        (409, {"error": "team already has an active chat turn"}),
         (429, {"detail": "chat rate limit exceeded"}),
     ],
 )
@@ -914,7 +914,7 @@ def test_real_upstream_non_2xx_reaches_websocket_redacted(status: int, payload: 
         with _real_stream_driver(body, status=status) as requests:
             await main._ws_run_turn(
                 websocket,
-                "cap-upstream-error",
+                "team-upstream-error",
                 {},
                 {"message": "hello"},
                 started,
@@ -940,7 +940,7 @@ def test_upstream_relay_is_bounded_and_fails_closed_on_protocol_errors():
     protocol_error = {
         "type": "error",
         "status": 502,
-        "detail": "capsule-driver stream violated the terminal event contract",
+        "detail": "team-driver stream violated the terminal event contract",
         "_relay_abort": True,
     }
     legacy_then_terminal = b'{"type":"text","text":"partial"}\n' + json.dumps(_done()).encode() + b"\n"
@@ -981,7 +981,7 @@ def test_stream_workers_cannot_starve_the_default_control_pool():
                 worker = loop.run_in_executor(
                     main._STREAM_EXECUTOR,
                     main._stream_lines,
-                    main._StreamRelay("cap-pool", "hello", {}, queue, loop, started),
+                    main._StreamRelay("team-pool", "hello", {}, queue, loop, started),
                 )
                 await asyncio.wait_for(started.wait(), timeout=1)
                 await asyncio.wait_for(worker, timeout=2)
@@ -1025,12 +1025,12 @@ def _real_relay_abort_driver(on_stop: Callable[[], None] | None = None):
     server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
     worker.start()
-    previous = main.CAPSULEDRIVER_URL
-    main.CAPSULEDRIVER_URL = f"http://127.0.0.1:{server.server_port}"
+    previous = main.TEAMDRIVER_URL
+    main.TEAMDRIVER_URL = f"http://127.0.0.1:{server.server_port}"
     try:
         yield calls
     finally:
-        main.CAPSULEDRIVER_URL = previous
+        main.TEAMDRIVER_URL = previous
         server.shutdown()
         server.server_close()
         worker.join(timeout=5)
@@ -1044,7 +1044,7 @@ def test_local_relay_eof_stops_provider_before_browser_error():
         with _real_relay_abort_driver() as calls:
             await main._ws_run_turn(
                 websocket,
-                "cap-abort",
+                "team-abort",
                 {},
                 {"message": "hello"},
                 started,
@@ -1058,8 +1058,8 @@ def test_local_relay_eof_stops_provider_before_browser_error():
             },
         ]
         assert calls == [
-            "/v1/capsules/cap-abort/chat/stream",
-            "/v1/capsules/cap-abort/chat/stop",
+            "/v1/teams/team-abort/chat/stream",
+            "/v1/teams/team-abort/chat/stop",
         ]
 
     asyncio.run(scenario())
@@ -1087,7 +1087,7 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
             try:
                 turn = main._WsTurn(
                     websocket,
-                    "cap-disconnect",
+                    "team-disconnect",
                     {},
                     "hello",
                     asyncio.Event(),
@@ -1099,7 +1099,7 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
                 stopped.set()
                 await worker
 
-        assert calls == ["/v1/capsules/cap-disconnect/chat/stop"]
+        assert calls == ["/v1/teams/team-disconnect/chat/stop"]
 
     asyncio.run(scenario())
 
@@ -1119,7 +1119,7 @@ class _BrainControlHandler(BaseHTTPRequestHandler):
 
     def do_GET(self) -> None:
         self.calls.append(("GET", self.path, {}))
-        if self.path == "/v1/capsules/cap-openai/inference":
+        if self.path == "/v1/teams/team-openai/inference":
             self._json(200, {"provider": "openai", "model": "gpt-5.5"})
             return
         self._json(404, {"error": "not found"})
@@ -1128,8 +1128,8 @@ class _BrainControlHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", "0"))
         body = json.loads(self.rfile.read(length) or b"{}")
         self.calls.append(("PUT", self.path, body))
-        if self.path == "/v1/capsules/cap-openai/inference":
-            self._json(200, {"capsule": "cap-openai", **body})
+        if self.path == "/v1/teams/team-openai/inference":
+            self._json(200, {"team_id": "team-openai", **body})
             return
         self._json(404, {"error": "not found"})
 
@@ -1168,7 +1168,7 @@ class _BrainControlHandler(BaseHTTPRequestHandler):
                 self._json(409, {"detail": "generation mismatch"})
             else:
                 self._json(200, {"deleted": True, "generation": 7})
-        elif self.path.startswith("/v1/capsules/") and self.path.endswith("/create"):
+        elif self.path.startswith("/v1/teams/") and self.path.endswith("/create"):
             self._json(201, {"created": True, **body})
         else:
             self._json(404, {"error": "not found"})
@@ -1203,17 +1203,17 @@ def _brain_control_plane(*, finalize_token_available: bool = True):
         base = f"http://127.0.0.1:{server.server_port}"
         previous = (
             main.ACCOUNTS_URL,
-            main.CAPSULEDRIVER_URL,
+            main.TEAMDRIVER_URL,
             main.BRAIN_FINALIZE_TOKEN_FILE,
         )
-        main.ACCOUNTS_URL = main.CAPSULEDRIVER_URL = base
+        main.ACCOUNTS_URL = main.TEAMDRIVER_URL = base
         main.BRAIN_FINALIZE_TOKEN_FILE = token_path
         try:
             yield calls
         finally:
             (
                 main.ACCOUNTS_URL,
-                main.CAPSULEDRIVER_URL,
+                main.TEAMDRIVER_URL,
                 main.BRAIN_FINALIZE_TOKEN_FILE,
             ) = previous
             server.shutdown()
@@ -1221,7 +1221,7 @@ def _brain_control_plane(*, finalize_token_available: bool = True):
             worker.join(timeout=5)
 
 
-def test_provider_key_delete_revokes_generation_without_touching_capsules():
+def test_provider_key_delete_revokes_generation_without_touching_teams():
     with _brain_control_plane() as calls, TestClient(app) as client:
         client.cookies.set(ACCOUNT_COOKIE, "valid-token")
         response = client.delete("/api/brains/openai")
@@ -1239,7 +1239,7 @@ def test_provider_key_delete_revokes_generation_without_touching_capsules():
     assert begin in calls
     assert finalize in calls
     assert calls.index(begin) < calls.index(finalize)
-    assert not any(call[1].startswith("/v1/capsules/") for call in calls)
+    assert not any(call[1].startswith("/v1/teams/") for call in calls)
 
 
 def test_model_credentials_accept_only_generic_provider_api_keys():
@@ -1275,17 +1275,17 @@ def test_model_credentials_accept_only_generic_provider_api_keys():
     ]
 
 
-def test_capsule_create_forwards_the_account_scoped_model_to_the_real_control_plane():
+def test_team_create_forwards_the_account_scoped_model_to_the_real_control_plane():
     with _brain_control_plane() as calls, TestClient(app) as client:
         client.cookies.set(ACCOUNT_COOKIE, "valid-token")
         response = client.post(
-            "/api/capsules",
-            json={"name": "Astra", "provider": "openai", "model": "gpt-5.5"},
+            "/api/teams",
+            json={"team_name": "Astra", "provider": "openai", "model": "gpt-5.5"},
         )
         legacy = client.post(
-            "/api/capsules",
+            "/api/teams",
             json={
-                "name": "Legacy",
+                "team_name": "Legacy",
                 "provider": "openai",
                 "model": "gpt-5.5",
                 "brain": "codex",
@@ -1296,53 +1296,53 @@ def test_capsule_create_forwards_the_account_scoped_model_to_the_real_control_pl
     creates = [
         call
         for call in calls
-        if call[0] == "POST" and call[1].startswith("/v1/capsules/") and call[1].endswith("/create")
+        if call[0] == "POST" and call[1].startswith("/v1/teams/") and call[1].endswith("/create")
     ]
     assert creates == [
         (
             "POST",
-            f"/v1/capsules/{main._cid_for('account-1', 'Astra')}/create",
-            {"name": "Astra", "provider": "openai", "model": "gpt-5.5"},
+            f"/v1/teams/{main._team_id_for('account-1', 'Astra')}/create",
+            {"team_name": "Astra", "provider": "openai", "model": "gpt-5.5"},
         )
     ]
 
 
-def test_capsule_inference_is_read_and_updated_without_recreating_capsule():
+def test_team_inference_is_read_and_updated_without_recreating_team():
     with _brain_control_plane() as calls, TestClient(app) as client:
         client.cookies.set(ACCOUNT_COOKIE, "valid-token")
-        current = client.get("/api/capsules/cap-openai/inference")
+        current = client.get("/api/teams/team-openai/inference")
         updated = client.put(
-            "/api/capsules/cap-openai/inference",
+            "/api/teams/team-openai/inference",
             json={"provider": "anthropic", "model": "claude-sonnet-5"},
         )
-        retired_login = client.post("/api/capsules/cap-openai/brain/login/start")
+        retired_login = client.post("/api/teams/team-openai/brain/login/start")
 
     assert current.status_code == updated.status_code == 200
     assert current.json() == {"provider": "openai", "model": "gpt-5.5"}
     assert updated.json() == {
-        "capsule": "cap-openai",
+        "team_id": "team-openai",
         "provider": "anthropic",
         "model": "claude-sonnet-5",
     }
     assert retired_login.status_code in {404, 405}
-    assert ("GET", "/v1/capsules/cap-openai/inference", {}) in calls
+    assert ("GET", "/v1/teams/team-openai/inference", {}) in calls
     assert (
         "PUT",
-        "/v1/capsules/cap-openai/inference",
+        "/v1/teams/team-openai/inference",
         {"provider": "anthropic", "model": "claude-sonnet-5"},
     ) in calls
     assert not any(call[1].endswith("/create") for call in calls)
 
 
-def test_capsule_models_must_match_the_closed_provider_catalog_before_forwarding():
+def test_team_models_must_match_the_closed_provider_catalog_before_forwarding():
     with _brain_control_plane() as calls, TestClient(app) as client:
         client.cookies.set(ACCOUNT_COOKIE, "valid-token")
         create = client.post(
-            "/api/capsules",
-            json={"name": "Unknown", "provider": "openai", "model": "gpt-unknown"},
+            "/api/teams",
+            json={"team_name": "Unknown", "provider": "openai", "model": "gpt-unknown"},
         )
         switch = client.put(
-            "/api/capsules/cap-openai/inference",
+            "/api/teams/team-openai/inference",
             json={"provider": "anthropic", "model": "gpt-5.5"},
         )
 
@@ -1353,42 +1353,42 @@ def test_capsule_models_must_match_the_closed_provider_catalog_before_forwarding
     )
 
 
-def test_capsule_ids_bind_the_complete_account_and_normalized_name():
-    first = main._cid_for("account-prefix-one", "A very long shared capsule name alpha")
-    same = main._cid_for("account-prefix-one", "A very long shared capsule name alpha")
-    other_account = main._cid_for("account-prefix-two", "A very long shared capsule name alpha")
-    other_tail = main._cid_for("account-prefix-one", "A very long shared capsule name omega")
+def test_team_ids_bind_the_complete_account_and_normalized_name():
+    first = main._team_id_for("account-prefix-one", "A very long shared team name alpha")
+    same = main._team_id_for("account-prefix-one", "A very long shared team name alpha")
+    other_account = main._team_id_for("account-prefix-two", "A very long shared team name alpha")
+    other_tail = main._team_id_for("account-prefix-one", "A very long shared team name omega")
 
     assert first == same
     assert first != other_account
     assert first != other_tail
     assert len(first) <= 40
     assert re.fullmatch(r"[a-z0-9_]+", first)
-    assert main._cid_for("account-prefix-one", "!!!") == ""
+    assert main._team_id_for("account-prefix-one", "!!!") == ""
 
 
-def test_capsule_create_and_install_reject_bodies_before_control_plane_forwarding():
+def test_team_create_and_install_reject_bodies_before_control_plane_forwarding():
     create_body = json.dumps(
         {
-            "name": "Astra",
-            "padding": "x" * main.MAX_CAPSULE_CREATE_BODY_BYTES,
+            "team_name": "Astra",
+            "padding": "x" * main.MAX_TEAM_CREATE_BODY_BYTES,
         }
     ).encode()
     install_body = json.dumps(
         {
             "app": "notification-center",
-            "padding": "x" * main.MAX_CAPSULE_INSTALL_BODY_BYTES,
+            "padding": "x" * main.MAX_TEAM_INSTALL_BODY_BYTES,
         }
     ).encode()
     with _brain_control_plane() as calls, TestClient(app) as client:
         client.cookies.set(ACCOUNT_COOKIE, "valid-token")
         create = client.post(
-            "/api/capsules",
+            "/api/teams",
             content=create_body,
             headers={"Content-Type": "application/json"},
         )
         install = client.post(
-            "/api/capsules/cap_openai/install",
+            "/api/teams/team_openai/install",
             content=install_body,
             headers={"Content-Type": "application/json", "Origin": "https://shimpz.com"},
         )

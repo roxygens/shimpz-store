@@ -12,11 +12,11 @@
   let open = $state(false);
   let loading = $state(false);
   let authenticated = $state(false);
-  let capsules = $state<any[]>([]);
+  let teams = $state<any[]>([]);
   let dialog = $state<HTMLElement>();
 
   onMount(() => {
-    name = localStorage.getItem("shimpz_current_capsule_name") ?? "";
+    name = localStorage.getItem("shimpz_current_team_name") ?? "";
   });
 
   async function openPicker() {
@@ -24,14 +24,14 @@
     await tick();
     dialog?.focus();
     loading = true;
-    capsules = [];
+    teams = [];
     const me = await fetch("/api/me")
       .then((response) => response.json())
       .catch(() => ({}));
     authenticated = !!me.authenticated;
     if (authenticated) {
-      const response = await fetch("/api/capsules").catch(() => null);
-      capsules = response?.ok ? ((await response.json()).capsules ?? []) : [];
+      const response = await fetch("/api/teams").catch(() => null);
+      teams = response?.ok ? ((await response.json()).teams ?? []) : [];
     }
     loading = false;
   }
@@ -40,12 +40,12 @@
     open = false;
   }
 
-  function chooseCapsule(capsule: any) {
-    name = capsule.name ?? capsule.id;
-    localStorage.setItem("shimpz_current_capsule", capsule.id);
-    localStorage.setItem("shimpz_current_capsule_name", name);
+  function chooseTeam(team: any) {
+    name = team.team_name;
+    localStorage.setItem("shimpz_current_team", team.team_id);
+    localStorage.setItem("shimpz_current_team_name", name);
     closePicker();
-    goto(u.chat(lang, capsule.id));
+    goto(u.chat(lang, team.team_id));
   }
 
   $effect(() => {
@@ -59,23 +59,23 @@
 
 <svelte:window onkeydown={(event) => event.key === "Escape" && open && closePicker()} />
 
-<button class="capsule-trigger" type="button" onclick={openPicker} aria-haspopup="dialog" aria-expanded={open}>
+<button class="team-trigger" type="button" onclick={openPicker} aria-haspopup="dialog" aria-expanded={open}>
   <span class="status-dot" aria-hidden="true"></span>
-  <span>{name || tr("my_capsules", lang)}</span>
+  <span>{name || tr("my_teams", lang)}</span>
 </button>
 
 {#if open}
   <div
-    class="capsule-dialog"
+    class="team-dialog"
     role="dialog"
     aria-modal="true"
-    aria-labelledby="capsule-dialog-title"
+    aria-labelledby="team-dialog-title"
     tabindex="-1"
     bind:this={dialog}
   >
     <header>
       <div class="wrap dialog-topbar">
-        <h2 id="capsule-dialog-title"><span aria-hidden="true"><HudIcon name="capsule" size={24} /></span> {tr("my_capsules", lang)}</h2>
+        <h2 id="team-dialog-title"><span aria-hidden="true"><HudIcon name="team" size={24} /></span> {tr("my_teams", lang)}</h2>
         <button class="btn-ghost" type="button" onclick={closePicker} aria-label={tr("close", lang)}>✕</button>
       </div>
     </header>
@@ -84,35 +84,35 @@
         <p class="dim">{tr("loading", lang)}</p>
       {:else if !authenticated}
         <div class="dialog-message">
-          <p>{tr("caps_login", lang)}</p>
+          <p>{tr("team_picker_login", lang)}</p>
           <a href={u.login(lang)} class="btn-primary" onclick={closePicker}>{tr("log_in", lang)} →</a>
         </div>
-      {:else if capsules.length === 0}
+      {:else if teams.length === 0}
         <div class="dialog-message">
-          <p>{tr("caps_none", lang)}</p>
-          <a href={u.capsule(lang)} class="btn-primary" onclick={closePicker}>{tr("caps_new", lang)} →</a>
+          <p>{tr("team_picker_none", lang)}</p>
+          <a href={u.team(lang)} class="btn-primary" onclick={closePicker}>{tr("team_picker_new", lang)} →</a>
         </div>
       {:else}
-        <div class="capsule-grid">
-          {#each capsules as capsule (capsule.id)}
-            <button class="card capsule-card" type="button" onclick={() => chooseCapsule(capsule)}>
-              <span class="capsule-glyph" aria-hidden="true"><HudIcon name="capsule" size={25} /></span>
+        <div class="team-grid">
+          {#each teams as team (team.team_id)}
+            <button class="card team-card" type="button" onclick={() => chooseTeam(team)}>
+              <span class="team-glyph" aria-hidden="true"><HudIcon name="team" size={25} /></span>
               <span>
-                <strong>{capsule.name ?? capsule.id}</strong>
-                <small>{capsule.id}</small>
+                <strong>{team.team_name}</strong>
+                <small>{team.team_id}</small>
               </span>
-              <em>{tr("caps_open", lang)}</em>
+              <em>{tr("team_picker_open", lang)}</em>
             </button>
           {/each}
         </div>
-        <a href={u.capsule(lang)} class="btn-ghost new-capsule" onclick={closePicker}><HudIcon name="add" size={17} /> {tr("caps_new", lang)}</a>
+        <a href={u.team(lang)} class="btn-ghost new-team" onclick={closePicker}><HudIcon name="add" size={17} /> {tr("team_picker_new", lang)}</a>
       {/if}
     </div>
   </div>
 {/if}
 
 <style>
-  .capsule-trigger {
+  .team-trigger {
     display: inline-flex;
     max-width: 11rem;
     min-height: 2.75rem;
@@ -131,8 +131,8 @@
     text-transform: uppercase;
   }
 
-  .capsule-trigger:hover { color: var(--color-fg); }
-  .capsule-trigger > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .team-trigger:hover { color: var(--color-fg); }
+  .team-trigger > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .status-dot {
     width: 0.42rem;
@@ -143,7 +143,7 @@
     box-shadow: 0 0 8px rgba(5, 255, 161, 0.55);
   }
 
-  .capsule-dialog {
+  .team-dialog {
     position: fixed;
     z-index: 70;
     inset: 0;
@@ -153,15 +153,15 @@
     text-transform: none;
   }
 
-  .capsule-dialog > header { border-bottom: 1px solid var(--color-border); }
+  .team-dialog > header { border-bottom: 1px solid var(--color-border); }
   .dialog-topbar { display: flex; min-height: 5.25rem; align-items: center; justify-content: space-between; gap: 1rem; }
   .dialog-topbar h2 { display: flex; align-items: center; gap: 0.65rem; margin: 0; font-size: 1.2rem; }
   .dialog-topbar h2 span { color: var(--color-cyan); }
   .dialog-content { padding-block: 2.5rem; }
   .dialog-message { max-width: 30rem; }
   .dialog-message p { margin: 0 0 1.5rem; color: var(--color-muted); font-size: 1.05rem; }
-  .capsule-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
-  .capsule-card {
+  .team-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+  .team-card {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     align-items: center;
@@ -171,7 +171,7 @@
     cursor: pointer;
     text-align: left;
   }
-  .capsule-glyph {
+  .team-glyph {
     display: grid;
     width: 2.8rem;
     height: 2.8rem;
@@ -179,9 +179,9 @@
     color: var(--color-cyan);
     box-shadow: inset 0 0 0 1px var(--color-border-strong);
   }
-  .capsule-card strong, .capsule-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .capsule-card small { color: var(--color-muted-2); font-family: var(--font-mono); font-size: 0.68rem; }
-  .capsule-card em {
+  .team-card strong, .team-card small { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .team-card small { color: var(--color-muted-2); font-family: var(--font-mono); font-size: 0.68rem; }
+  .team-card em {
     grid-column: 2;
     color: var(--color-cyan);
     font-family: var(--font-mono);
@@ -190,15 +190,15 @@
     letter-spacing: 0.08em;
     text-transform: uppercase;
   }
-  .new-capsule { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 1.25rem; }
+  .new-team { display: inline-flex; align-items: center; gap: 0.45rem; margin-top: 1.25rem; }
 
   @media (max-width: 960px) {
-    .capsule-trigger { flex: none; }
-    .capsule-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .team-trigger { flex: none; }
+    .team-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
 
   @media (max-width: 620px) {
-    .capsule-trigger {
+    .team-trigger {
       width: 100%;
       max-width: none;
       grid-column: 1 / -1;
@@ -207,6 +207,6 @@
       border-left: 0;
     }
 
-    .capsule-grid { grid-template-columns: 1fr; }
+    .team-grid { grid-template-columns: 1fr; }
   }
 </style>

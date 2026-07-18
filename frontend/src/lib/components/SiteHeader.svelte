@@ -3,7 +3,7 @@
   import { tr } from "$lib/i18n";
   import { swapLocale, u } from "$lib/url";
   import AccountMenu from "$lib/components/AccountMenu.svelte";
-  import CapsulePicker from "$lib/components/CapsulePicker.svelte";
+  import TeamPicker from "$lib/components/TeamPicker.svelte";
   import ShimpzBrand from "$lib/components/ShimpzBrand.svelte";
 
   let { lang, path }: { lang: Locale; path: string } = $props();
@@ -29,7 +29,7 @@
         {tr("nav_chat", lang)}
       </a>
       <a href="https://docs.shimpz.com" target="_blank" rel="noopener noreferrer">Docs <span aria-hidden="true">↗</span></a>
-      <CapsulePicker {lang} />
+      <TeamPicker {lang} />
     </nav>
 
     <div class="header-actions">

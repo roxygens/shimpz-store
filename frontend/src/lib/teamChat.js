@@ -1,6 +1,6 @@
 const FILE_ID = /^[a-f0-9]{32}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
-const CAPSULE_ID = /^[a-z0-9_]{1,40}$/;
+const TEAM_ID_RE = /^[a-z0-9_]{1,40}$/;
 const MAX_FILES = 256;
 const MAX_FILES_PER_TURN = 8;
 const MAX_MESSAGE_CHARS = 16_000;
@@ -14,12 +14,12 @@ export function teamChatReconnectDelay(attempt) {
   return Math.min(400 * (2 ** Math.min(attempt, 4)), 5_000);
 }
 
-/** @param {any} capsuleId @returns {string} */
-export function teamChatWebSocketPath(capsuleId) {
-  if (typeof capsuleId !== "string" || !CAPSULE_ID.test(capsuleId)) {
-    throw new TypeError("invalid Capsule id");
+/** @param {any} teamId @returns {string} */
+export function teamChatWebSocketPath(teamId) {
+  if (typeof teamId !== "string" || !TEAM_ID_RE.test(teamId)) {
+    throw new TypeError("invalid Team id");
   }
-  return `/api/capsules/${capsuleId}/chat/ws`;
+  return `/api/teams/${teamId}/chat/ws`;
 }
 
 /** @typedef {{ used_bytes: number, limit_bytes: number, remaining_bytes: number }} StorageUsage */
@@ -66,16 +66,16 @@ function chatReply(value) {
 /** @param {any} value @returns {StorageUsage} */
 function usage(value) {
   const source = record(value);
-  if (!source) throw new TypeError("invalid Capsule storage usage");
+  if (!source) throw new TypeError("invalid Team storage usage");
   /** @type {Record<string, number>} */
   const result = {};
   for (const key of ["used_bytes", "limit_bytes", "remaining_bytes"]) {
     const amount = source[key];
-    if (!Number.isSafeInteger(amount) || amount < 0) throw new TypeError("invalid Capsule storage usage");
+    if (!Number.isSafeInteger(amount) || amount < 0) throw new TypeError("invalid Team storage usage");
     result[key] = amount;
   }
   if (result.used_bytes + result.remaining_bytes !== result.limit_bytes) {
-    throw new TypeError("inconsistent Capsule storage usage");
+    throw new TypeError("inconsistent Team storage usage");
   }
   return /** @type {StorageUsage} */ (result);
 }
@@ -83,7 +83,7 @@ function usage(value) {
 /** @param {any} value @param {boolean} createdAtRequired @returns {StoredFile} */
 function fileMetadata(value, createdAtRequired) {
   const source = record(value);
-  if (!source) throw new TypeError("invalid Capsule file metadata");
+  if (!source) throw new TypeError("invalid Team file metadata");
   const { id, name, media_type: mediaType, size, sha256, created_at: createdAt } = source;
   if (
     typeof id !== "string" ||
@@ -103,13 +103,13 @@ function fileMetadata(value, createdAtRequired) {
     typeof sha256 !== "string" ||
     !SHA256.test(sha256)
   ) {
-    throw new TypeError("invalid Capsule file metadata");
+    throw new TypeError("invalid Team file metadata");
   }
   /** @type {StoredFile} */
   const metadata = { id, name, media_type: mediaType, size, sha256 };
   if (createdAtRequired || createdAt !== undefined) {
     if (!Number.isSafeInteger(createdAt) || createdAt < 0) {
-      throw new TypeError("invalid Capsule file timestamp");
+      throw new TypeError("invalid Team file timestamp");
     }
     metadata.created_at = createdAt;
   }
@@ -137,18 +137,18 @@ export function createTeamChatTurn(message, files = []) {
 /**
  * @param {any} value
  * @param {any} expectedTeam
- * @returns {{ type: "done", reply: string, team: string } | { type: "error", status: number, detail: string } | { type: "stopped" }}
+ * @returns {{ type: "done", reply: string, team_name: string } | { type: "error", status: number, detail: string } | { type: "stopped" }}
  */
 export function parseChatTerminalEvent(value, expectedTeam) {
   const source = record(value);
   if (!source) throw new TypeError("invalid chat terminal event");
   if (source.type === "done") {
-    if (!hasExactKeys(source, ["type", "reply", "team"])) {
+    if (!hasExactKeys(source, ["type", "reply", "team_name"])) {
       throw new TypeError("invalid chat completion event");
     }
-    const team = canonicalTeamName(source.team);
-    if (team !== canonicalTeamName(expectedTeam)) throw new TypeError("Team identity mismatch");
-    return { type: "done", reply: chatReply(source.reply), team };
+    const teamName = canonicalTeamName(source.team_name);
+    if (teamName !== canonicalTeamName(expectedTeam)) throw new TypeError("Team identity mismatch");
+    return { type: "done", reply: chatReply(source.reply), team_name: teamName };
   }
   if (source.type === "error") {
     if (
@@ -173,24 +173,24 @@ export function parseChatTerminalEvent(value, expectedTeam) {
 }
 
 /** @param {any} value @returns {{ files: StoredFile[] } & StorageUsage} */
-export function parseCapsuleStorage(value) {
+export function parseTeamStorage(value) {
   const source = record(value);
   if (!source || !Array.isArray(source.files) || source.files.length > MAX_FILES) {
-    throw new TypeError("invalid Capsule storage inventory");
+    throw new TypeError("invalid Team storage inventory");
   }
   const files = source.files.map((/** @type {any} */ file) => fileMetadata(file, true));
   if (
     files.map(({ id }) => id).length !==
     new Set(files.map(({ id }) => id)).size
   ) {
-    throw new TypeError("duplicate Capsule file");
+    throw new TypeError("duplicate Team file");
   }
   return { files, ...usage(source) };
 }
 
 /** @param {any} value @returns {{ file: StoredFile } & StorageUsage} */
-export function parseCapsuleUpload(value) {
+export function parseTeamUpload(value) {
   const source = record(value);
-  if (!source) throw new TypeError("invalid Capsule upload response");
+  if (!source) throw new TypeError("invalid Team upload response");
   return { file: fileMetadata(source.file, false), ...usage(source) };
 }

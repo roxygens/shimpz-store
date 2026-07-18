@@ -29,8 +29,8 @@
   async function logout() {
     busy = true;
     await fetch("/api/logout", { method: "POST" }).catch(() => null);
-    localStorage.removeItem("shimpz_current_capsule");
-    localStorage.removeItem("shimpz_current_capsule_name");
+    localStorage.removeItem("shimpz_current_team");
+    localStorage.removeItem("shimpz_current_team_name");
     goto(u.home(lang));
   }
 </script>
@@ -82,7 +82,7 @@
             <h2 id="session-title">{tr("account_session", lang)}</h2>
           </div>
           <div class="session-actions">
-            <a href={u.capsule(lang)} class="btn-ghost">{tr("my_capsules", lang)} →</a>
+            <a href={u.team(lang)} class="btn-ghost">{tr("my_teams", lang)} →</a>
             <button class="btn-danger" type="button" disabled={busy} onclick={logout}>{tr("log_out", lang)}</button>
           </div>
         </section>

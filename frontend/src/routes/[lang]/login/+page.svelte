@@ -19,7 +19,7 @@
   let error = $state("");
 
   function destinationAfterLogin(): string {
-    return resolveClosedAssistantReturn(lang, window.location.search) ?? u.capsule(lang);
+    return resolveClosedAssistantReturn(lang, window.location.search) ?? u.team(lang);
   }
 
   onMount(async () => {
