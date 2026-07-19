@@ -29,6 +29,12 @@ import structlog
 from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse, JSONResponse, PlainTextResponse, Response
 
+from app.assistant_releases import (
+    ASSISTANT_RELEASE_CACHE_CONTROL,
+    ASSISTANT_RELEASE_FEED_BODY,
+    ASSISTANT_RELEASE_FEED_ETAG,
+    if_none_match_matches,
+)
 from app.logconf import setup
 from app.middleware import TraceIdMiddleware
 
@@ -730,6 +736,18 @@ def _team_id_for(account_id: str, team_name: str) -> str:
 @app.get("/api/health")
 def health() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/api/releases/assistants")
+def assistant_release_feed(request: Request) -> Response:
+    """Serve cacheable notification metadata without granting installation authority."""
+    headers = {
+        "Cache-Control": ASSISTANT_RELEASE_CACHE_CONTROL,
+        "ETag": ASSISTANT_RELEASE_FEED_ETAG,
+    }
+    if if_none_match_matches(request.headers.get("if-none-match"), ASSISTANT_RELEASE_FEED_ETAG):
+        return Response(status_code=304, headers=headers)
+    return Response(content=ASSISTANT_RELEASE_FEED_BODY, media_type="application/json", headers=headers)
 
 
 # ── account auth (proxied to the `accounts` identity service) ──────────────────
