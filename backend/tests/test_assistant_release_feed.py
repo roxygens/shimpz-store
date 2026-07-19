@@ -53,9 +53,7 @@ def test_release_feed_honors_conditional_get_without_a_body():
     assert unchanged.status_code == 304
     assert unchanged.content == b""
     assert unchanged.headers["etag"] == initial.headers["etag"]
-    assert (
-        unchanged.headers["cache-control"] == releases.ASSISTANT_RELEASE_CACHE_CONTROL
-    )
+    assert unchanged.headers["cache-control"] == releases.ASSISTANT_RELEASE_CACHE_CONTROL
 
 
 @pytest.mark.parametrize(
@@ -75,10 +73,7 @@ def test_release_source_fails_closed_on_invalid_records(source):
 
 
 def test_release_source_enforces_record_and_payload_bounds():
-    too_many = [
-        _record(assistant_id=f"assistant-{index}")
-        for index in range(releases.MAX_RELEASES + 1)
-    ]
+    too_many = [_record(assistant_id=f"assistant-{index}") for index in range(releases.MAX_RELEASES + 1)]
     too_large = [_record(changelog="x" * (releases.MAX_CHANGELOG_BYTES + 1))]
 
     with pytest.raises(ValueError):
