@@ -1,12 +1,14 @@
 const FILE_ID = /^[a-f0-9]{32}$/;
 const SHA256 = /^[a-f0-9]{64}$/;
 const TEAM_ID_RE = /^[a-z0-9_]{1,40}$/;
+const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const MAX_FILES = 256;
 const MAX_FILES_PER_TURN = 8;
+const MAX_ASSISTANTS_PER_TURN = 16;
 const MAX_MESSAGE_CHARS = 16_000;
 const MAX_REPLY_CHARS = 60_000;
 const MAX_ERROR_DETAIL_CHARS = 800;
-export const CHAT_WS_SUBPROTOCOL = "shimpz.chat.v1";
+export const CHAT_WS_SUBPROTOCOL = "shimpz.chat.v2";
 
 /** Capped reconnect delay. Reconnection never implies replaying a chat frame. @param {any} attempt */
 export function teamChatReconnectDelay(attempt) {
@@ -116,8 +118,36 @@ function fileMetadata(value, createdAtRequired) {
   return metadata;
 }
 
-/** @param {any} message @param {any} [files] @returns {{ message: string, files?: string[] }} */
-export function createTeamChatTurn(message, files = []) {
+/** @param {any} value @returns {string[]} */
+function assistantIds(value) {
+  if (!Array.isArray(value) || value.length > MAX_ASSISTANTS_PER_TURN) {
+    throw new TypeError("invalid chat Assistant scope");
+  }
+  const ids = value.map((assistantId) => {
+    if (
+      typeof assistantId !== "string" ||
+      assistantId.length > 80 ||
+      !ASSISTANT_ID_RE.test(assistantId)
+    ) {
+      throw new TypeError("invalid chat Assistant id");
+    }
+    return assistantId;
+  });
+  if (ids.length !== new Set(ids).size) throw new TypeError("duplicate chat Assistant id");
+  return ids;
+}
+
+/** @param {any} value @returns {string[]} */
+export function parseTeamChatAssistantScope(value) {
+  const source = record(value);
+  if (!source || !hasExactKeys(source, ["assistant_ids"])) {
+    throw new TypeError("invalid chat Assistant inventory");
+  }
+  return assistantIds(source.assistant_ids);
+}
+
+/** @param {any} message @param {any} [files] @param {any} [assistants] @returns {{ message: string, files: string[], assistant_ids: string[] }} */
+export function createTeamChatTurn(message, files = [], assistants = []) {
   if (typeof message !== "string") throw new TypeError("message must be a string");
   const text = message.trim();
   if (!text || text.length > MAX_MESSAGE_CHARS) throw new TypeError("invalid chat message");
@@ -129,9 +159,7 @@ export function createTeamChatTurn(message, files = []) {
     return fileId;
   });
   if (opaqueIds.length !== new Set(opaqueIds).size) throw new TypeError("duplicate chat file id");
-  return opaqueIds.length
-    ? { message: text, files: opaqueIds }
-    : { message: text };
+  return { message: text, files: opaqueIds, assistant_ids: assistantIds(assistants) };
 }
 
 /**

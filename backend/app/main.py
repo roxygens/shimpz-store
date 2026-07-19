@@ -338,11 +338,12 @@ RELEASED_CLOUD_ASSISTANTS = frozenset({"shimpz-assistant"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
 MAX_CHAT_MESSAGE_CHARS = 16_000
 MAX_CHAT_FILES = 8
+MAX_CHAT_ASSISTANTS = 16
 MAX_TEAM_FILES = 256
 MAX_CHAT_REPLY_CHARS = 60_000
 MAX_CHAT_ERROR_DETAIL_CHARS = 800
 TERMINAL_CONTRACT_ERROR = "team-driver stream violated the terminal event contract"
-CHAT_WS_SUBPROTOCOL = "shimpz.chat.v1"
+CHAT_WS_SUBPROTOCOL = "shimpz.chat.v2"
 
 
 def _ws_origin_allowed(origin: str | None) -> bool:
@@ -397,8 +398,8 @@ def _canonical_chat_reply(value: object) -> str | None:
 
 def _chat_turn_payload(payload: dict) -> dict[str, object]:
     """Project one browser turn onto the controller's closed Team chat contract."""
-    if set(payload) not in ({"message"}, {"message", "files"}):
-        raise ClientPayloadError(400, "body must contain message and optional files")
+    if set(payload) != {"message", "files", "assistant_ids"}:
+        raise ClientPayloadError(400, "body must contain only message, files, and assistant_ids")
     message = payload["message"]
     if not isinstance(message, str):
         raise ClientPayloadError(400, "message must be a string")
@@ -407,16 +408,28 @@ def _chat_turn_payload(payload: dict) -> dict[str, object]:
         raise ClientPayloadError(400, "message must be non-empty")
     if len(message) > MAX_CHAT_MESSAGE_CHARS:
         raise ClientPayloadError(400, f"message too long (> {MAX_CHAT_MESSAGE_CHARS} chars)")
-    files = payload.get("files", [])
+    files = payload["files"]
     if not isinstance(files, list) or len(files) > MAX_CHAT_FILES:
         raise ClientPayloadError(400, f"files must contain at most {MAX_CHAT_FILES} opaque ids")
     opaque_ids = [_canonical_team_file_id(file_id) for file_id in files]
     if any(file_id is None for file_id in opaque_ids) or len(opaque_ids) != len(set(opaque_ids)):
         raise ClientPayloadError(400, "files must contain unique opaque ids")
-    turn: dict[str, object] = {"message": message}
-    if opaque_ids:
-        turn["files"] = opaque_ids
-    return turn
+    assistant_ids = payload["assistant_ids"]
+    if not isinstance(assistant_ids, list) or len(assistant_ids) > MAX_CHAT_ASSISTANTS:
+        raise ClientPayloadError(
+            400,
+            f"assistant_ids must contain at most {MAX_CHAT_ASSISTANTS} Assistant ids",
+        )
+    canonical_assistant_ids = [_canonical_assistant_id(assistant_id) for assistant_id in assistant_ids]
+    if any(assistant_id is None for assistant_id in canonical_assistant_ids) or len(
+        canonical_assistant_ids
+    ) != len(set(canonical_assistant_ids)):
+        raise ClientPayloadError(400, "assistant_ids must contain unique canonical Assistant ids")
+    return {
+        "message": message,
+        "files": opaque_ids,
+        "assistant_ids": canonical_assistant_ids,
+    }
 
 
 def _team_create_payload(payload: dict, account_id: str) -> tuple[str, dict[str, str]]:
@@ -539,6 +552,32 @@ def _released_assistant_inventory(data: object) -> list[str] | None:
                 return None
             installed.append(assistant)
     return installed
+
+
+def _released_running_assistant_inventory(data: object) -> list[str] | None:
+    """Project only verified, runnable Assistants onto the browser chat scope."""
+    if not isinstance(data, dict) or not isinstance(data.get("apps"), list):
+        return None
+    running: list[str] = []
+    seen: set[str] = set()
+    for item in data["apps"]:
+        if not isinstance(item, dict):
+            return None
+        assistant = item.get("app")
+        if assistant not in RELEASED_CLOUD_ASSISTANTS:
+            continue
+        if assistant in seen:
+            return None
+        seen.add(assistant)
+        status = item.get("status")
+        if not isinstance(status, str):
+            return None
+        if status != "running":
+            continue
+        if len(running) >= MAX_CHAT_ASSISTANTS:
+            return None
+        running.append(assistant)
+    return running
 
 
 app = FastAPI(title="shimpz-store", docs_url=None, redoc_url=None, openapi_url=None)
@@ -1055,6 +1094,31 @@ async def cloud_assistants_list(request: Request, team_id: str) -> JSONResponse:
     return _private_json({"installed": installed})
 
 
+@app.get("/api/teams/{team_id}/chat/assistants")
+async def team_chat_assistants(request: Request, team_id: str) -> JSONResponse:
+    """Return the verified default Assistant scope without exposing runtime metadata."""
+    token, _, _ = await _authed_account_bounded(request)
+    if not token:
+        return _private_json({"detail": "not authenticated"}, 401)
+    team_id = _canonical_team_id(team_id)
+    if team_id is None:
+        return _private_json({"detail": "bad team id"}, 400)
+    status, data = await _bounded_call(
+        _CONTROL_EXECUTOR,
+        TEAMDRIVER_URL,
+        "GET",
+        f"/v1/teams/{team_id}/apps",
+        extra={"X-Shimpz-Account": token},
+    )
+    if status != 200:
+        return _private_json(data, status)
+    assistant_ids = _released_running_assistant_inventory(data)
+    if assistant_ids is None:
+        log.warning("chat_assistant_inventory_invalid", team_id=team_id)
+        return _private_json({"detail": "invalid chat Assistant inventory"}, 502)
+    return _private_json({"assistant_ids": assistant_ids})
+
+
 @app.post("/api/teams/{team_id}/assistants")
 async def cloud_assistant_install(request: Request, team_id: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
@@ -1498,6 +1562,7 @@ class _StreamRelay:
     loop: asyncio.AbstractEventLoop
     started: asyncio.Event
     files: tuple[str, ...] = ()
+    assistant_ids: tuple[str, ...] = ()
 
 
 @dataclass
@@ -1543,9 +1608,11 @@ def _stream_lines(relay: _StreamRelay) -> None:
     parsed = urlparse(TEAMDRIVER_URL)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=200)
     try:
-        payload: dict[str, object] = {"message": relay.text}
-        if relay.files:
-            payload["files"] = list(relay.files)
+        payload: dict[str, object] = {
+            "message": relay.text,
+            "files": list(relay.files),
+            "assistant_ids": list(relay.assistant_ids),
+        }
         body = jsonlib.dumps(payload, ensure_ascii=False).encode()
         conn.request(
             "POST",
@@ -1606,6 +1673,7 @@ class _WsTurn:
     started: asyncio.Event
     dispatched: asyncio.Event
     files: tuple[str, ...] = ()
+    assistant_ids: tuple[str, ...] = ()
     delivery: _RelayDelivery = field(default_factory=_RelayDelivery)
 
 
@@ -1671,6 +1739,7 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
                     loop,
                     turn.started,
                     turn.files,
+                    turn.assistant_ids,
                 ),
             )
             turn.dispatched.set()
@@ -1703,7 +1772,8 @@ async def _ws_run_turn(
             text=payload["message"],
             started=started,
             dispatched=dispatched,
-            files=tuple(payload.get("files", [])),
+            files=tuple(payload["files"]),
+            assistant_ids=tuple(payload["assistant_ids"]),
         ),
         admitted,
     )
@@ -1728,7 +1798,8 @@ def _start_ws_turn(
                 text=msg["message"],
                 started=started,
                 dispatched=dispatched,
-                files=tuple(msg.get("files", [])),
+                files=tuple(msg["files"]),
+                assistant_ids=tuple(msg["assistant_ids"]),
                 delivery=delivery,
             ),
             lease,
@@ -1783,13 +1854,10 @@ async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state:
     deliveries = state.setdefault("deliveries", {})
     if msg.get("type") == "chat":
         try:
-            if set(msg) not in (
-                {"type", "message"},
-                {"type", "message", "files"},
-            ):
+            if set(msg) != {"type", "message", "files", "assistant_ids"}:
                 raise ClientPayloadError(
                     400,
-                    "chat frame must contain type, message, and optional files",
+                    "chat frame must contain only type, message, files, and assistant_ids",
                 )
             turn_payload = _chat_turn_payload({key: value for key, value in msg.items() if key != "type"})
         except ClientPayloadError as exc:

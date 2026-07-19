@@ -5,6 +5,7 @@
   import {
     CHAT_WS_SUBPROTOCOL,
     createTeamChatTurn,
+    parseTeamChatAssistantScope,
     parseTeamStorage,
     parseTeamUpload,
     parseChatTerminalEvent,
@@ -34,6 +35,8 @@
   let selected = $state("");
   let inference = $state<any>(null); // {provider, model}
   let configuredProviders = $state<string[]>([]);
+  let chatAssistantIds = $state<string[]>([]);
+  let assistantScopeReady = $state(false);
   let teamFiles = $state<any[]>([]);
   let storageUsed = $state(0);
   let storageLimit = $state(100 * 1024 * 1024);
@@ -54,7 +57,7 @@
   const activeTeam = $derived(teams.find((team) => team.team_id === selected) ?? null);
   const teamName = $derived(typeof activeTeam?.team_name === "string" ? activeTeam.team_name : "");
   const providerReady = $derived(Boolean(inference?.provider && configuredProviders.includes(inference.provider)));
-  const canChat = $derived(Boolean(teamName && providerReady));
+  const canChat = $derived(Boolean(teamName && providerReady && assistantScopeReady));
   const storagePercent = $derived(
     storageLimit > 0 ? Math.min(100, Math.max(0, (storageUsed / storageLimit) * 100)) : 0,
   );
@@ -246,6 +249,8 @@
   async function loadTeamContext() {
     const team_id = selected;
     inference = null;
+    chatAssistantIds = [];
+    assistantScopeReady = false;
     teamFiles = [];
     attachedFileIds = [];
     storageUsed = 0;
@@ -256,9 +261,10 @@
     const teamName = teams.find((team) => team.team_id === team_id)?.team_name ?? team_id;
     localStorage.setItem(SEL_KEY + "_name", teamName);
     storageLoading = true;
-    const [currentInference, f] = await Promise.all([
+    const [currentInference, f, assistants] = await Promise.all([
       fetch(`/api/teams/${team_id}/inference`).then((r) => (r.ok ? r.json() : null)).catch(() => null),
       fetch(`/api/teams/${team_id}/files`).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, data: {} })),
+      fetch(`/api/teams/${team_id}/chat/assistants`).then(async (r) => ({ ok: r.ok, data: await r.json().catch(() => ({})) })).catch(() => ({ ok: false, data: {} })),
     ]);
     if (selected !== team_id) return;
     inference = currentInference;
@@ -269,6 +275,14 @@
       storageError = error instanceof Error ? error.message : "storage unavailable";
     } finally {
       storageLoading = false;
+    }
+    if (assistants.ok) {
+      try {
+        chatAssistantIds = parseTeamChatAssistantScope(assistants.data);
+        assistantScopeReady = true;
+      } catch {
+        assistantScopeReady = false;
+      }
     }
     const team = teams.find((item) => item.team_id === team_id);
     loadedProvider = currentInference?.provider ?? team?.provider ?? "openai";
@@ -296,6 +310,8 @@
     messages = [];
     draft = "";
     teamFiles = [];
+    chatAssistantIds = [];
+    assistantScopeReady = false;
     attachedFileIds = [];
     storageUsed = 0;
     storageError = "";
@@ -390,9 +406,9 @@
   async function send() {
     const text = draft.trim();
     if (!text || runtimeBusy || !selected || !canSend || !ws) return;
-    let turn: { message: string; files?: string[] };
+    let turn: { message: string; files: string[]; assistant_ids: string[] };
     try {
-      turn = createTeamChatTurn(text, attachedFileIds);
+      turn = createTeamChatTurn(text, attachedFileIds, chatAssistantIds);
     } catch {
       return;
     }

@@ -10,6 +10,14 @@ from fastapi.testclient import TestClient
 class _AssistantControlHandler(BaseHTTPRequestHandler):
     calls: list[tuple[str, str, dict, str]]
     app_status = 200
+    apps = [
+        {
+            "app": "shimpz-assistant",
+            "status": "running",
+            "container": "private-name",
+        },
+        {"app": "notification-center", "status": "running"},
+    ]
 
     def _json(self, status: int, payload: dict) -> None:
         body = json.dumps(payload).encode()
@@ -30,14 +38,7 @@ class _AssistantControlHandler(BaseHTTPRequestHandler):
                 self.app_status,
                 {
                     "team_id": "team_one",
-                    "apps": [
-                        {
-                            "app": "shimpz-assistant",
-                            "status": "running",
-                            "container": "private-name",
-                        },
-                        {"app": "notification-center", "status": "running"},
-                    ],
+                    "apps": self.apps,
                 }
                 if self.app_status == 200
                 else {"detail": "driver unavailable"},
@@ -78,12 +79,16 @@ class _AssistantControlHandler(BaseHTTPRequestHandler):
 
 
 @contextlib.contextmanager
-def _assistant_control_plane(*, app_status: int = 200):
+def _assistant_control_plane(*, app_status: int = 200, apps: list[dict] | None = None):
     calls: list[tuple[str, str, dict, str]] = []
     handler = type(
         "_ScopedAssistantControlHandler",
         (_AssistantControlHandler,),
-        {"calls": calls, "app_status": app_status},
+        {
+            "calls": calls,
+            "app_status": app_status,
+            "apps": _AssistantControlHandler.apps if apps is None else apps,
+        },
     )
     server = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     worker = threading.Thread(target=server.serve_forever, daemon=True)
@@ -115,6 +120,7 @@ def test_cloud_assistant_lifecycle_requires_authentication_before_upstream():
     with _assistant_control_plane() as calls, TestClient(main.app) as client:
         responses = (
             client.get("/api/teams/team_one/assistants"),
+            client.get("/api/teams/team_one/chat/assistants"),
             client.post(
                 "/api/teams/team_one/assistants",
                 content=b'{"assistant":"shimpz-assistant"}',
@@ -125,7 +131,7 @@ def test_cloud_assistant_lifecycle_requires_authentication_before_upstream():
                 headers={"Origin": "https://shimpz.com"},
             ),
         )
-    assert [response.status_code for response in responses] == [401, 401, 401]
+    assert [response.status_code for response in responses] == [401, 401, 401, 401]
     assert calls == []
     for response in responses:
         assert response.json() == {"detail": "not authenticated"}
@@ -140,6 +146,42 @@ def test_cloud_assistant_inventory_projects_only_released_ids_without_private_ru
     assert response.json() == {"installed": ["shimpz-assistant"]}
     _assert_private(response)
     assert ("GET", "/v1/teams/team_one/apps", {}, "valid-token") in calls
+
+
+def test_cloud_chat_scope_projects_only_released_running_assistants():
+    with _assistant_control_plane() as calls, TestClient(main.app) as client:
+        _authenticate(client)
+        response = client.get("/api/teams/team_one/chat/assistants")
+    assert response.status_code == 200
+    assert response.json() == {"assistant_ids": ["shimpz-assistant"]}
+    _assert_private(response)
+    assert ("GET", "/v1/teams/team_one/apps", {}, "valid-token") in calls
+
+
+def test_cloud_chat_scope_is_brain_only_when_the_released_assistant_is_not_running():
+    apps = [
+        {"app": "shimpz-assistant", "status": "stopped"},
+        {"app": "notification-center", "status": "running"},
+    ]
+    with _assistant_control_plane(apps=apps), TestClient(main.app) as client:
+        _authenticate(client)
+        response = client.get("/api/teams/team_one/chat/assistants")
+    assert response.status_code == 200
+    assert response.json() == {"assistant_ids": []}
+    _assert_private(response)
+
+
+def test_cloud_chat_scope_fails_closed_on_ambiguous_running_inventory():
+    apps = [
+        {"app": "shimpz-assistant", "status": "running"},
+        {"app": "shimpz-assistant", "status": "running"},
+    ]
+    with _assistant_control_plane(apps=apps), TestClient(main.app) as client:
+        _authenticate(client)
+        response = client.get("/api/teams/team_one/chat/assistants")
+    assert response.status_code == 502
+    assert response.json() == {"detail": "invalid chat Assistant inventory"}
+    _assert_private(response)
 
 
 def test_cloud_assistant_install_rejects_origin_content_type_shape_and_unreleased_ids_before_driver():

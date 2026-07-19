@@ -5,6 +5,7 @@ import test from "node:test";
 import {
   CHAT_WS_SUBPROTOCOL,
   createTeamChatTurn,
+  parseTeamChatAssistantScope,
   parseTeamStorage,
   parseTeamUpload,
   parseChatTerminalEvent,
@@ -21,10 +22,16 @@ const file = {
 };
 const usage = { used_bytes: 5, limit_bytes: 100 * 1024 * 1024, remaining_bytes: 100 * 1024 * 1024 - 5 };
 
-test("creates only a Team-scoped chat turn without a browser-selected Assistant", () => {
-  assert.deepEqual(createTeamChatTurn("  hello  ", [file.id]), {
+test("creates a strict Team-scoped chat turn with an explicit Assistant scope", () => {
+  assert.deepEqual(createTeamChatTurn("  hello  ", [file.id], ["shimpz-assistant"]), {
     message: "hello",
     files: [file.id],
+    assistant_ids: ["shimpz-assistant"],
+  });
+  assert.deepEqual(createTeamChatTurn("brain only"), {
+    message: "brain only",
+    files: [],
+    assistant_ids: [],
   });
   for (const message of ["", { provider: "openai" }]) {
     assert.throws(() => createTeamChatTurn(message));
@@ -35,6 +42,30 @@ test("creates only a Team-scoped chat turn without a browser-selected Assistant"
     Array.from({ length: 9 }, (_, index) => index.toString(16).padStart(32, "0")),
   ]) {
     assert.throws(() => createTeamChatTurn("hello", files));
+  }
+  for (const assistants of [
+    ["../escape"],
+    ["shimpz-assistant", "shimpz-assistant"],
+    Array.from({ length: 17 }, (_, index) => `assistant-${index}`),
+  ]) {
+    assert.throws(() => createTeamChatTurn("hello", [], assistants));
+  }
+});
+
+test("accepts only an exact bounded default Assistant scope", () => {
+  assert.deepEqual(
+    parseTeamChatAssistantScope({ assistant_ids: ["shimpz-assistant"] }),
+    ["shimpz-assistant"],
+  );
+  assert.deepEqual(parseTeamChatAssistantScope({ assistant_ids: [] }), []);
+  for (const inventory of [
+    null,
+    { installed: ["shimpz-assistant"] },
+    { assistant_ids: ["shimpz-assistant"], private: true },
+    { assistant_ids: ["bad_id"] },
+    { assistant_ids: ["shimpz-assistant", "shimpz-assistant"] },
+  ]) {
+    assert.throws(() => parseTeamChatAssistantScope(inventory));
   }
 });
 
@@ -67,7 +98,7 @@ test("accepts only exact bounded terminal events from the authoritative Team", (
 });
 
 test("uses the single versioned Team chat WebSocket contract", () => {
-  assert.equal(CHAT_WS_SUBPROTOCOL, "shimpz.chat.v1");
+  assert.equal(CHAT_WS_SUBPROTOCOL, "shimpz.chat.v2");
   assert.equal(teamChatWebSocketPath("team_one"), "/api/teams/team_one/chat/ws");
   for (const teamId of ["", "../escape", "team-one", "A"]) {
     assert.throws(() => teamChatWebSocketPath(teamId));

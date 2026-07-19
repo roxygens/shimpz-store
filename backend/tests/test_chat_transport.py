@@ -87,11 +87,11 @@ def test_websocket_origin_is_exact_and_checked_before_authentication():
         assert _websocket_disconnect_code(client, allowed) == 4401
 
 
-def test_websocket_requires_and_negotiates_the_v1_chat_subprotocol(monkeypatch):
+def test_websocket_requires_and_negotiates_the_v2_chat_subprotocol(monkeypatch):
     allowed = next(iter(WS_ALLOWED_ORIGINS))
     with TestClient(app) as client:
         assert _websocket_disconnect_code(client, allowed, ()) == 4406
-        assert _websocket_disconnect_code(client, allowed, ("shimpz.chat.v2",)) == 4406
+        assert _websocket_disconnect_code(client, allowed, ("shimpz.chat.v1",)) == 4406
 
     async def verified(_ws: WebSocket) -> tuple[str, str]:
         return "account-token", "account-one"
@@ -152,6 +152,38 @@ def test_bounded_json_rejects_declared_and_streamed_oversize_bodies():
         assert streamed.value.status == 413
 
     asyncio.run(scenario())
+
+
+def test_chat_turn_requires_an_explicit_bounded_assistant_scope():
+    assert main._chat_turn_payload(
+        {
+            "message": "  hello  ",
+            "files": ["a" * 32],
+            "assistant_ids": ["shimpz-assistant"],
+        }
+    ) == {
+        "message": "hello",
+        "files": ["a" * 32],
+        "assistant_ids": ["shimpz-assistant"],
+    }
+    assert main._chat_turn_payload(
+        {"message": "brain only", "files": [], "assistant_ids": []}
+    ) == {"message": "brain only", "files": [], "assistant_ids": []}
+
+    invalid = (
+        {"message": "implicit scope", "files": []},
+        {"message": "duplicate", "files": [], "assistant_ids": ["one", "one"]},
+        {"message": "invalid", "files": [], "assistant_ids": ["../escape"]},
+        {
+            "message": "too many",
+            "files": [],
+            "assistant_ids": [f"assistant-{index}" for index in range(17)],
+        },
+    )
+    for payload in invalid:
+        with pytest.raises(ClientPayloadError) as raised:
+            main._chat_turn_payload(payload)
+        assert raised.value.status == 400
 
 
 def _websocket(text: str) -> tuple[WebSocket, list[dict]]:
@@ -235,7 +267,7 @@ def test_websocket_allows_only_one_local_turn_task():
                 websocket,
                 "test-team",
                 {},
-                {"type": "chat", "message": "second"},
+                {"type": "chat", "message": "second", "files": [], "assistant_ids": []},
                 state,
             )
         finally:
@@ -285,7 +317,12 @@ def test_websocket_returns_typed_429_when_global_turn_queue_is_full():
                 websocket,
                 "test-team",
                 {},
-                {"type": "chat", "message": "beyond the bound"},
+                {
+                    "type": "chat",
+                    "message": "beyond the bound",
+                    "files": [],
+                    "assistant_ids": [],
+                },
                 {"turns": set()},
             )
             assert json.loads(sent[-1]["text"]) == {
@@ -378,7 +415,12 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
                 websocket,
                 "team-queued",
                 {},
-                {"type": "chat", "message": "must never execute"},
+                {
+                    "type": "chat",
+                    "message": "must never execute",
+                    "files": [],
+                    "assistant_ids": [],
+                },
                 state,
             )
             await asyncio.sleep(0)
@@ -824,6 +866,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
                     loop,
                     started,
                     (opaque_file,),
+                    ("shimpz-assistant",),
                 ),
             )
         assert started.is_set()
@@ -831,6 +874,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         assert json.loads(requests[0]) == {
             "message": prompt,
             "files": [opaque_file],
+            "assistant_ids": ["shimpz-assistant"],
         }
         assert prompt.encode() in requests[0]
         assert b"\\u" not in requests[0]
@@ -876,7 +920,7 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
                 websocket,
                 "team-terminal",
                 {},
-                {"message": "hello"},
+                {"message": "hello", "files": [], "assistant_ids": []},
                 started,
             )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
@@ -916,7 +960,7 @@ def test_real_upstream_non_2xx_reaches_websocket_redacted(status: int, payload: 
                 websocket,
                 "team-upstream-error",
                 {},
-                {"message": "hello"},
+                {"message": "hello", "files": [], "assistant_ids": []},
                 started,
             )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
@@ -1046,7 +1090,7 @@ def test_local_relay_eof_stops_provider_before_browser_error():
                 websocket,
                 "team-abort",
                 {},
-                {"message": "hello"},
+                {"message": "hello", "files": [], "assistant_ids": []},
                 started,
             )
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
