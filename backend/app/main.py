@@ -1411,14 +1411,20 @@ def _unique_json_object(pairs: list[tuple[str, object]]) -> dict:
     return value
 
 
-def _validated_done_event(value: dict) -> dict | None:
-    if set(value) != {"type", "reply", "team_name"}:
+def _validated_done_event(value: dict, expected_team_id: str) -> dict | None:
+    if set(value) != {"type", "team_id", "team_name", "reply"}:
         return None
+    team_id = _canonical_team_id(value["team_id"])
     reply = _canonical_chat_reply(value["reply"])
     team_name = _canonical_team_name(value["team_name"])
-    if reply is None or team_name is None:
+    if team_id is None or team_id != expected_team_id or reply is None or team_name is None:
         return None
-    return {"type": "done", "reply": reply, "team_name": team_name}
+    return {
+        "type": "done",
+        "team_id": team_id,
+        "team_name": team_name,
+        "reply": reply,
+    }
 
 
 def _public_chat_error_event(status: int) -> dict:
@@ -1453,12 +1459,12 @@ def _validated_error_event(value: dict) -> dict | None:
     return _public_chat_error_event(status)
 
 
-def _validated_terminal_event(value: object) -> dict | None:
+def _validated_terminal_event(value: object, expected_team_id: str) -> dict | None:
     """Project an untrusted controller value onto the only browser-visible chat events."""
     if not isinstance(value, dict):
         return None
     if value.get("type") == "done":
-        return _validated_done_event(value)
+        return _validated_done_event(value, expected_team_id)
     if value.get("type") == "error":
         return _validated_error_event(value)
     if value.get("type") == "stopped" and set(value) == {"type"}:
@@ -1466,14 +1472,14 @@ def _validated_terminal_event(value: object) -> dict | None:
     return None
 
 
-def _parsed_stream_event(line: bytes) -> dict | None:
+def _parsed_stream_event(line: bytes, expected_team_id: str) -> dict | None:
     if not line.strip():
         return None
     try:
         event = jsonlib.loads(line, object_pairs_hook=_unique_json_object)
     except jsonlib.JSONDecodeError, UnicodeDecodeError, ValueError:
         return None
-    return _validated_terminal_event(event)
+    return _validated_terminal_event(event, expected_team_id)
 
 
 def _upstream_error_event(status: int, _raw: bytes) -> dict:
@@ -1513,6 +1519,7 @@ def _relay_upstream_events(
     resp: http.client.HTTPResponse,
     queue: asyncio.Queue,
     loop: asyncio.AbstractEventLoop,
+    expected_team_id: str,
 ) -> None:
     """Release exactly one validated terminal event after the controller closes its response."""
     terminal_event = None
@@ -1520,7 +1527,7 @@ def _relay_upstream_events(
         for line in _bounded_upstream_lines(resp):
             if not line.strip():
                 continue
-            event = _parsed_stream_event(line)
+            event = _parsed_stream_event(line, expected_team_id)
             if event is None:
                 raise _StreamProtocolError
             if terminal_event is not None:
@@ -1591,7 +1598,7 @@ async def _send_relay_event(
 ) -> None:
     projected = dict(event)
     relay_abort = bool(projected.pop("_relay_abort", False))
-    terminal = _validated_terminal_event(projected)
+    terminal = _validated_terminal_event(projected, turn.team_id)
     if terminal is None:
         terminal = {"type": "error", "status": 502, "detail": TERMINAL_CONTRACT_ERROR}
         relay_abort = True
@@ -1629,7 +1636,7 @@ def _stream_lines(relay: _StreamRelay) -> None:
                 _upstream_error_event(resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)),
             )
             return
-        _relay_upstream_events(resp, relay.queue, relay.loop)
+        _relay_upstream_events(resp, relay.queue, relay.loop, relay.team_id)
     except (OSError, http.client.HTTPException) as exc:
         log.warning("chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__)
         _stream_queue_put(

@@ -38,11 +38,20 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 
-def _done(reply: str = "hello", *, team_name: str = "Marketing") -> dict:
+TEST_TEAM_ID = "test_team"
+
+
+def _done(
+    reply: str = "hello",
+    *,
+    team_id: str = TEST_TEAM_ID,
+    team_name: str = "Marketing",
+) -> dict:
     return {
         "type": "done",
-        "reply": reply,
+        "team_id": team_id,
         "team_name": team_name,
+        "reply": reply,
     }
 
 
@@ -522,7 +531,7 @@ def test_final_websocket_gate_converts_invalid_events(event: dict, monkeypatch):
         await websocket.accept()
         turn = main._WsTurn(
             websocket,
-            "team-terminal-gate",
+            "team_terminal_gate",
             {"X-Shimpz-Account": "token"},
             "hello",
             asyncio.Event(),
@@ -535,7 +544,7 @@ def test_final_websocket_gate_converts_invalid_events(event: dict, monkeypatch):
             "status": 502,
             "detail": main.TERMINAL_CONTRACT_ERROR,
         }
-        assert stops == [("team-terminal-gate", {"X-Shimpz-Account": "token"})]
+        assert stops == [("team_terminal_gate", {"X-Shimpz-Account": "token"})]
         assert delivery.terminal_seen and delivery.aborted
 
     asyncio.run(scenario())
@@ -652,7 +661,10 @@ def test_retired_public_marketplace_routes_are_absent():
 def test_upstream_http_errors_and_unterminated_terminal_lines_are_redacted():
     leak_marker = "upstream-private-marker-7e9b"
     http_error = _upstream_error_event(409, json.dumps({"error": leak_marker}).encode())
-    stream_error = _parsed_stream_event(json.dumps({"type": "error", "status": 502, "detail": leak_marker}).encode())
+    stream_error = _parsed_stream_event(
+        json.dumps({"type": "error", "status": 502, "detail": leak_marker}).encode(),
+        TEST_TEAM_ID,
+    )
     assert http_error == {
         "type": "error",
         "status": 409,
@@ -678,7 +690,7 @@ def test_upstream_http_errors_and_unterminated_terminal_lines_are_redacted():
     ],
 )
 def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict, expected: dict):
-    assert _validated_terminal_event(event) == expected
+    assert _validated_terminal_event(event, TEST_TEAM_ID) == expected
 
 
 @pytest.mark.parametrize(
@@ -690,6 +702,7 @@ def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict,
         {"type": "answered", "answered": True},
         {**_done(), "extra": True},
         {"type": "done", "reply": "hello"},
+        _done("hello", team_id="another_team"),
         _done("hello", team_name=" Marketing "),
         _done("hello", team_name="Marketing\x00"),
         _done("x" * (main.MAX_CHAT_REPLY_CHARS + 1)),
@@ -700,11 +713,11 @@ def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict,
     ],
 )
 def test_terminal_event_contract_rejects_legacy_extra_and_unbounded_values(event: dict):
-    assert _validated_terminal_event(event) is None
+    assert _validated_terminal_event(event, TEST_TEAM_ID) is None
 
 
 def test_terminal_event_parser_rejects_duplicate_fields():
-    assert _parsed_stream_event(b'{"type":"stopped","type":"done"}') is None
+    assert _parsed_stream_event(b'{"type":"stopped","type":"done"}', TEST_TEAM_ID) is None
 
 
 @contextlib.contextmanager
@@ -734,12 +747,12 @@ def _real_upstream(body: bytes):
         worker.join(timeout=5)
 
 
-def _relay(body: bytes) -> list[dict]:
+def _relay(body: bytes, team_id: str = TEST_TEAM_ID) -> list[dict]:
     async def scenario() -> list[dict]:
         queue: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_running_loop()
         with _real_upstream(body) as response:
-            await asyncio.to_thread(_relay_upstream_events, response, queue, loop)
+            await asyncio.to_thread(_relay_upstream_events, response, queue, loop, team_id)
         events = []
         while not queue.empty():
             events.append(queue.get_nowait())
@@ -789,14 +802,22 @@ def test_upstream_relay_releases_nothing_before_one_complete_terminal_event():
     async def scenario() -> None:
         queue: asyncio.Queue = asyncio.Queue(maxsize=4)
         loop = asyncio.get_running_loop()
-        first = b'{"type":"done","reply":"first",'
-        rest = b'"team_name":"Marketing"}\n'
+        first = b'{"type":"done","team_id":"test_team",'
+        rest = b'"team_name":"Marketing","reply":"first"}\n'
         with _real_delayed_upstream(first, rest) as (
             response,
             first_flushed,
             release_rest,
         ):
-            relay = asyncio.create_task(asyncio.to_thread(_relay_upstream_events, response, queue, loop))
+            relay = asyncio.create_task(
+                asyncio.to_thread(
+                    _relay_upstream_events,
+                    response,
+                    queue,
+                    loop,
+                    TEST_TEAM_ID,
+                )
+            )
             assert await asyncio.to_thread(first_flushed.wait, 1)
             with pytest.raises(TimeoutError):
                 await asyncio.wait_for(queue.get(), timeout=0.05)
@@ -844,7 +865,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         reply = "Olá, Capitão 🦐"
         encoded_reply = (
             json.dumps(
-                _done(reply),
+                _done(reply, team_id="team_utf8"),
                 ensure_ascii=False,
                 separators=(",", ":"),
             ).encode()
@@ -859,7 +880,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
             await asyncio.to_thread(
                 main._stream_lines,
                 main._StreamRelay(
-                    "team-utf8",
+                    "team_utf8",
                     prompt,
                     {},
                     queue,
@@ -878,7 +899,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         }
         assert prompt.encode() in requests[0]
         assert b"\\u" not in requests[0]
-        assert await queue.get() == _done(reply)
+        assert await queue.get() == _done(reply, team_id="team_utf8")
         assert await queue.get() is None
 
     asyncio.run(scenario())
@@ -996,6 +1017,9 @@ def test_upstream_relay_is_bounded_and_fails_closed_on_protocol_errors():
     extra_after_terminal = json.dumps(_done()).encode() + b'\n{"type":"stopped"}\n'
     assert _relay(extra_after_terminal) == [protocol_error]
 
+    mismatched_team = json.dumps(_done(team_id="another_team")).encode() + b"\n"
+    assert _relay(mismatched_team) == [protocol_error]
+
     assert _relay(b"") == [protocol_error]
 
     oversized = b"x" * (MAX_UPSTREAM_STREAM_LINE_BYTES + 1)
@@ -1017,7 +1041,13 @@ def test_stream_workers_cannot_starve_the_default_control_pool():
         occupied = loop.run_in_executor(None, occupy_only_default_thread)
         await asyncio.wait_for(default_started.wait(), timeout=1)
 
-        reply = json.dumps(_done("reserved"), separators=(",", ":")).encode() + b"\n"
+        reply = (
+            json.dumps(
+                _done("reserved", team_id="team_pool"),
+                separators=(",", ":"),
+            ).encode()
+            + b"\n"
+        )
         queue: asyncio.Queue = asyncio.Queue(maxsize=4)
         started = asyncio.Event()
         try:
@@ -1025,11 +1055,11 @@ def test_stream_workers_cannot_starve_the_default_control_pool():
                 worker = loop.run_in_executor(
                     main._STREAM_EXECUTOR,
                     main._stream_lines,
-                    main._StreamRelay("team-pool", "hello", {}, queue, loop, started),
+                    main._StreamRelay("team_pool", "hello", {}, queue, loop, started),
                 )
                 await asyncio.wait_for(started.wait(), timeout=1)
                 await asyncio.wait_for(worker, timeout=2)
-            assert await queue.get() == _done("reserved")
+            assert await queue.get() == _done("reserved", team_id="team_pool")
             assert await queue.get() is None
             assert not occupied.done()
         finally:
@@ -1123,7 +1153,7 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
         websocket = WebSocket({"type": "websocket", "path": "/"}, receive, send)
         await websocket.accept()
         queue: asyncio.Queue = asyncio.Queue()
-        queue.put_nowait(_done("complete"))
+        queue.put_nowait(_done("complete", team_id="team_disconnect"))
         stopped = threading.Event()
 
         with _real_relay_abort_driver(stopped.set) as calls:
@@ -1131,7 +1161,7 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
             try:
                 turn = main._WsTurn(
                     websocket,
-                    "team-disconnect",
+                    "team_disconnect",
                     {},
                     "hello",
                     asyncio.Event(),
@@ -1143,7 +1173,7 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
                 stopped.set()
                 await worker
 
-        assert calls == ["/v1/teams/team-disconnect/chat/stop"]
+        assert calls == ["/v1/teams/team_disconnect/chat/stop"]
 
     asyncio.run(scenario())
 
