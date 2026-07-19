@@ -165,7 +165,7 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
   {
     id: "shimpz-assistant",
     name: "Shimpz Assistant",
-    version: "0.1.0",
+    version: "0.1.1",
     creator: "roxygens",
     summary: {
       en: "Explore a real Assistant through three safe weather Powers.",
