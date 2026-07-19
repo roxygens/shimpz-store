@@ -37,7 +37,6 @@ from fastapi import Request, WebSocket
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-
 TEST_TEAM_ID = "test_team"
 
 
@@ -175,9 +174,11 @@ def test_chat_turn_requires_an_explicit_bounded_assistant_scope():
         "files": ["a" * 32],
         "assistant_ids": ["shimpz-assistant"],
     }
-    assert main._chat_turn_payload(
-        {"message": "brain only", "files": [], "assistant_ids": []}
-    ) == {"message": "brain only", "files": [], "assistant_ids": []}
+    assert main._chat_turn_payload({"message": "brain only", "files": [], "assistant_ids": []}) == {
+        "message": "brain only",
+        "files": [],
+        "assistant_ids": [],
+    }
 
     invalid = (
         {"message": "implicit scope", "files": []},

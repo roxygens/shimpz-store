@@ -2,6 +2,7 @@ import contextlib
 import json
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import ClassVar
 
 from app import main
 from fastapi.testclient import TestClient
@@ -10,7 +11,7 @@ from fastapi.testclient import TestClient
 class _AssistantControlHandler(BaseHTTPRequestHandler):
     calls: list[tuple[str, str, dict, str]]
     app_status = 200
-    apps = [
+    apps: ClassVar[list[dict[str, object]]] = [
         {
             "app": "shimpz-assistant",
             "status": "running",
