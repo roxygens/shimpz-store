@@ -61,13 +61,13 @@ test("projects a bounded canonical cloud Team selector", () => {
 
 test("accepts only an explicit account state and exact bounded Assistant inventory", () => {
   assert.deepEqual(parseCloudAccount({ authenticated: true, username: "captain" }), { authenticated: true });
-  assert.deepEqual(parseCloudAssistantInventory({ installed: ["hello-pulse"] }), ["hello-pulse"]);
+  assert.deepEqual(parseCloudAssistantInventory({ installed: ["shimpz-assistant"] }), ["shimpz-assistant"]);
   for (const value of [null, {}, { authenticated: "yes" }]) assert.throws(() => parseCloudAccount(value));
   for (const value of [
     null,
     {},
-    { installed: "hello-pulse" },
-    { installed: ["hello-pulse", "hello-pulse"] },
+    { installed: "shimpz-assistant" },
+    { installed: ["shimpz-assistant", "shimpz-assistant"] },
     { installed: ["../hello"] },
     { installed: [], team_id: "private" },
     { installed: Array.from({ length: CLOUD_ASSISTANT_LIMIT + 1 }, (_, index) => `assistant-${index}`) },
@@ -77,9 +77,9 @@ test("accepts only an explicit account state and exact bounded Assistant invento
 });
 
 test("derives one contextual action only from authoritative selected-Team state", () => {
-  assert.equal(cloudAssistantAction(true, [], "hello-pulse"), "install");
-  assert.equal(cloudAssistantAction(true, ["hello-pulse"], "hello-pulse"), "uninstall");
-  assert.equal(cloudAssistantAction(false, ["hello-pulse"], "hello-pulse"), "blocked");
+  assert.equal(cloudAssistantAction(true, [], "shimpz-assistant"), "install");
+  assert.equal(cloudAssistantAction(true, ["shimpz-assistant"], "shimpz-assistant"), "uninstall");
+  assert.equal(cloudAssistantAction(false, ["shimpz-assistant"], "shimpz-assistant"), "blocked");
   assert.equal(cloudAssistantAction(true, [], "unknown"), "blocked");
 });
 
@@ -91,31 +91,31 @@ test("rejects stale inventory and mutation completions after a Team switch", () 
 });
 
 test("uses a closed Store/login return enum and never accepts an arbitrary redirect", () => {
-  assert.equal(closedAssistantStoreHref("en", "hello-pulse"), "/en/assistants?assistant=hello-pulse");
+  assert.equal(closedAssistantStoreHref("en", "shimpz-assistant"), "/en/assistants?assistant=shimpz-assistant");
   assert.equal(
-    closedAssistantLoginHref("pt", "hello-pulse"),
-    "/pt/login?return=assistants&assistant=hello-pulse",
+    closedAssistantLoginHref("pt", "shimpz-assistant"),
+    "/pt/login?return=assistants&assistant=shimpz-assistant",
   );
   assert.equal(
-    closedAssistantTeamHref("en", "hello-pulse"),
-    "/en/team?return=assistants&assistant=hello-pulse",
+    closedAssistantTeamHref("en", "shimpz-assistant"),
+    "/en/team?return=assistants&assistant=shimpz-assistant",
   );
   assert.equal(
-    resolveClosedAssistantReturn("en", "?return=assistants&assistant=hello-pulse"),
-    "/en/assistants?assistant=hello-pulse",
+    resolveClosedAssistantReturn("en", "?return=assistants&assistant=shimpz-assistant"),
+    "/en/assistants?assistant=shimpz-assistant",
   );
   for (const search of [
-    "?return=https://evil.example&assistant=hello-pulse",
+    "?return=https://evil.example&assistant=shimpz-assistant",
     "?return=assistants&assistant=unknown",
-    "?return=assistants&assistant=hello-pulse&next=https://evil.example",
-    "?return=assistants&return=assistants&assistant=hello-pulse",
+    "?return=assistants&assistant=shimpz-assistant&next=https://evil.example",
+    "?return=assistants&return=assistants&assistant=shimpz-assistant",
   ]) {
     assert.equal(resolveClosedAssistantReturn("en", search), null);
   }
-  assert.equal(requestedAssistantFromSearch("?assistant=hello-pulse"), "hello-pulse");
-  assert.equal(requestedAssistantFromSearch("?assistant=hello-pulse&install=true"), "");
+  assert.equal(requestedAssistantFromSearch("?assistant=shimpz-assistant"), "shimpz-assistant");
+  assert.equal(requestedAssistantFromSearch("?assistant=shimpz-assistant&install=true"), "");
   assert.equal(requestedAssistantFromSearch("?assistant=unknown"), "");
   assert.throws(() => closedAssistantStoreHref("en", "unknown"));
-  assert.throws(() => closedAssistantLoginHref("xx", "hello-pulse"));
+  assert.throws(() => closedAssistantLoginHref("xx", "shimpz-assistant"));
   assert.throws(() => closedAssistantTeamHref("en", "unknown"));
 });

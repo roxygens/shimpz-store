@@ -334,7 +334,7 @@ MODEL_CATALOG = {
     "openai": frozenset({"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}),
     "anthropic": frozenset({"claude-fable-5", "claude-opus-4-8", "claude-sonnet-5", "claude-haiku-4-5-20251001"}),
 }
-RELEASED_CLOUD_ASSISTANTS = frozenset({"hello-pulse"})
+RELEASED_CLOUD_ASSISTANTS = frozenset({"shimpz-assistant"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
 MAX_CHAT_MESSAGE_CHARS = 16_000
 MAX_CHAT_FILES = 8

@@ -238,8 +238,8 @@ const D: Dict = {
     pt: "Software nativo de Time que atua por Powers declarados, segue rotinas opt-in e colabora por permissões explícitas.",
   },
   assistants_preview_notice: {
-    en: "Hello Pulse is free. Install it in your hosted Team here or through the Store embedded in a local Admin. Checkout and paid listings are not part of this evaluation release.",
-    pt: "O Hello Pulse é gratuito. Instale-o em seu Time hospedado aqui ou pela loja embutida em um Admin local. Checkout e itens pagos não fazem parte desta versão de avaliação.",
+    en: "Shimpz Assistant is free. Install it in your hosted Team here or through the Store embedded in a local Admin. Checkout and paid listings are not part of this evaluation release.",
+    pt: "O Shimpz Assistant é gratuito. Instale-o em seu Time hospedado aqui ou pela loja embutida em um Admin local. Checkout e itens pagos não fazem parte desta versão de avaliação.",
   },
   assistants_available_kicker: { en: "Available now // free", pt: "Disponível agora // grátis" },
   assistants_available_title: { en: "Meet the first Shimpz Assistant.", pt: "Conheça o primeiro Assistant do Shimpz." },
@@ -337,8 +337,8 @@ const D: Dict = {
   },
   assistants_local_setup: { en: "Need a local Space first?", pt: "Ainda precisa de um Space local?" },
   assistants_local_setup_help: {
-    en: "Install Shimpz, create your Admin password and return to Assistants. The Admin will ask which Team should receive Hello Pulse.",
-    pt: "Instale o Shimpz, crie sua senha do Admin e volte para Assistants. O Admin perguntará qual Time deve receber o Hello Pulse.",
+    en: "Install Shimpz, create your Admin password and return to Assistants. The Admin will ask which Team should receive Shimpz Assistant.",
+    pt: "Instale o Shimpz, crie sua senha do Admin e volte para Assistants. O Admin perguntará qual Time deve receber o Shimpz Assistant.",
   },
   assistants_model_kicker: { en: "Assistant model // v2", pt: "Modelo de Assistant // v2" },
   assistants_model_title: { en: "Useful by design. Bounded by contract.", pt: "Útil por design. Limitado por contrato." },

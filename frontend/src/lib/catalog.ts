@@ -163,31 +163,47 @@ export interface AssistantListing {
 
 export const ASSISTANT_CATALOG: AssistantListing[] = [
   {
-    id: "hello-pulse",
-    name: "Hello Pulse",
+    id: "shimpz-assistant",
+    name: "Shimpz Assistant",
     version: "0.1.0",
-    creator: "julianoamg",
+    creator: "roxygens",
     summary: {
-      en: "Validate a Team with one safe hello Power.",
-      pt: "Valide um Time com um Power hello seguro.",
+      en: "Explore a real Assistant through three safe weather Powers.",
+      pt: "Explore um Assistant real por meio de três Powers seguros de clima.",
     },
     description: {
-      en: "Use Hello Pulse to validate a complete contextual install, invoke and uninstall flow without credentials, Services or internet access.",
-      pt: "Use o Hello Pulse para validar um fluxo contextual completo de instalação, execução e desinstalação sem credenciais, Services ou acesso à internet.",
+      en: "Search for a place, inspect current conditions and build a daily forecast with public Open-Meteo data. It is the executable reference for installing, chatting with and combining typed Assistant Powers.",
+      pt: "Pesquise um lugar, consulte as condições atuais e monte uma previsão diária com dados públicos do Open-Meteo. Ele é a referência executável para instalar, conversar e combinar Powers tipados de um Assistant.",
     },
     price: "free",
     archs: ["amd64", "arm64"],
     powers: [
       {
-        id: "hello",
-        name: { en: "Say hello", pt: "Dizer olá" },
+        id: "search-location",
+        name: { en: "Search location", pt: "Pesquisar local" },
         summary: {
-          en: "Returns a typed greeting for one bounded name.",
-          pt: "Retorna uma saudação tipada para um nome limitado.",
+          en: "Finds coordinates for a city or postal code.",
+          pt: "Encontra coordenadas de uma cidade ou código postal.",
+        },
+      },
+      {
+        id: "current-weather",
+        name: { en: "Current weather", pt: "Clima atual" },
+        summary: {
+          en: "Reads current conditions for one coordinate.",
+          pt: "Consulta as condições atuais de uma coordenada.",
+        },
+      },
+      {
+        id: "daily-forecast",
+        name: { en: "Daily forecast", pt: "Previsão diária" },
+        summary: {
+          en: "Returns a bounded daily forecast for one coordinate.",
+          pt: "Retorna uma previsão diária limitada para uma coordenada.",
         },
       },
     ],
-    permissions: [],
+    permissions: ["Open-Meteo"],
   },
 ];
 
