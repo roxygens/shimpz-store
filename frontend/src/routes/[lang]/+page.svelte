@@ -2,6 +2,7 @@
   import type { Locale } from "$lib/catalog";
   import HomeHeader from "$lib/components/HomeHeader.svelte";
   import Seo from "$lib/components/Seo.svelte";
+  import ToolStack from "$lib/components/ToolStack.svelte";
   import { u } from "$lib/url";
 
   let { data } = $props();
@@ -205,6 +206,10 @@
         {/each}
       </ol>
     </div>
+
+    <div class="stack-block">
+      <ToolStack {lang} />
+    </div>
   </div>
 </section>
 
@@ -350,6 +355,7 @@
   .section-heading.centered { margin-inline: auto; text-align: center; }
   .demo { border-block: 1px solid var(--color-border); background: #050505; }
   .demo-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(19rem, .85fr); gap: clamp(2rem, 6vw, 5rem); align-items: center; margin-top: clamp(3rem, 7vw, 5rem); }
+  .stack-block { margin-top: clamp(5rem, 10vw, 8rem); padding-top: clamp(4rem, 8vw, 6rem); border-top: 1px solid var(--color-border); }
   .conversation { display: flex; flex-direction: column; gap: 1rem; }
   .message { max-width: 88%; padding: 1.15rem 1.25rem; border-radius: 1rem; }
   .message > span { font-family: var(--font-mono); font-size: .65rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em; }

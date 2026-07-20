@@ -1,0 +1,18 @@
+<svg width="180" height="180" viewBox="0 0 180 180" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <mask id="lovable-mask" style="mask-type:alpha" maskUnits="userSpaceOnUse" x="1" y="0" width="178" height="180">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M54.6052 0C83.9389 0 107.719 23.8424 107.719 53.2535V73.4931H125.395C154.729 73.4931 178.508 97.3355 178.508 126.747C178.508 156.158 154.729 180 125.395 180H1.4917V53.2535C1.4917 23.8424 25.2714 0 54.6052 0Z" fill="white"/>
+  </mask>
+  <g mask="url(#lovable-mask)">
+    <rect width="180" height="180" fill="url(#lovable-gradient)"/>
+    <circle cx="31" cy="154" r="105" fill="#4B73FF" opacity=".85"/>
+    <circle cx="130" cy="12" r="84" fill="#FF0105" opacity=".78"/>
+    <circle cx="88" cy="49" r="67" fill="#FE7B02" opacity=".68"/>
+  </g>
+  <defs>
+    <linearGradient id="lovable-gradient" x1="31" y1="15" x2="148" y2="175" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#FF8E63"/>
+      <stop offset=".52" stop-color="#FF66F4"/>
+      <stop offset="1" stop-color="#4B73FF"/>
+    </linearGradient>
+  </defs>
+</svg>
