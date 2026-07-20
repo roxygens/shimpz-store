@@ -8,9 +8,14 @@ from fastapi.testclient import TestClient
 
 
 def test_release_feed_module_and_health_probe_are_packaged_in_the_runtime_image():
-    dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(encoding="utf-8")
+    dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(
+        encoding="utf-8"
+    )
     assert "backend/app/assistant_releases.py" in dockerfile
-    assert "HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=20" in dockerfile
+    assert (
+        "HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=20"
+        in dockerfile
+    )
 
 
 def _record(**changes):
@@ -51,7 +56,7 @@ def test_release_feed_is_closed_bounded_notification_metadata():
 
 def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_2_0_metadata():
     assert releases._CANONICAL_RELEASE_SOURCE_COMMITS == {
-        "shimpz-assistant": "180e2fcbd69238dbd8ea61b6d68c7dfed4d17ea5"
+        "shimpz-assistant": "ae7054b352db80affd8c1ea50325549cac660268"
     }
     latest = releases._CANONICAL_RELEASES[-1]
     assert latest["assistant_id"] == "shimpz-assistant"
@@ -60,6 +65,7 @@ def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_2_0_metadata():
     assert "api.x.com" in latest["changelog"]
     assert "explicit approval" in latest["changelog"]
     assert "no-inline-suppression security gate" in latest["changelog"]
+    assert "fixed Assistant package root" in latest["changelog"]
 
 
 def test_release_feed_honors_conditional_get_without_a_body():
@@ -73,7 +79,9 @@ def test_release_feed_honors_conditional_get_without_a_body():
     assert unchanged.status_code == 304
     assert unchanged.content == b""
     assert unchanged.headers["etag"] == initial.headers["etag"]
-    assert unchanged.headers["cache-control"] == releases.ASSISTANT_RELEASE_CACHE_CONTROL
+    assert (
+        unchanged.headers["cache-control"] == releases.ASSISTANT_RELEASE_CACHE_CONTROL
+    )
 
 
 @pytest.mark.parametrize(
@@ -93,7 +101,10 @@ def test_release_source_fails_closed_on_invalid_records(source):
 
 
 def test_release_source_enforces_record_and_payload_bounds():
-    too_many = [_record(assistant_id=f"assistant-{index}") for index in range(releases.MAX_RELEASES + 1)]
+    too_many = [
+        _record(assistant_id=f"assistant-{index}")
+        for index in range(releases.MAX_RELEASES + 1)
+    ]
     too_large = [_record(changelog="x" * (releases.MAX_CHANGELOG_BYTES + 1))]
 
     with pytest.raises(ValueError):
