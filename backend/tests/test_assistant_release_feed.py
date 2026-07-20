@@ -51,7 +51,7 @@ def test_release_feed_is_closed_bounded_notification_metadata():
 
 def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_2_0_metadata():
     assert releases._CANONICAL_RELEASE_SOURCE_COMMITS == {
-        "shimpz-assistant": "c945f8530b5c1da3af925932751dae4934fd9396"
+        "shimpz-assistant": "180e2fcbd69238dbd8ea61b6d68c7dfed4d17ea5"
     }
     latest = releases._CANONICAL_RELEASES[-1]
     assert latest["assistant_id"] == "shimpz-assistant"
@@ -59,6 +59,7 @@ def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_2_0_metadata():
     assert latest["headline"] == "Shimpz Assistant 0.2.0 is available"
     assert "api.x.com" in latest["changelog"]
     assert "explicit approval" in latest["changelog"]
+    assert "no-inline-suppression security gate" in latest["changelog"]
 
 
 def test_release_feed_honors_conditional_get_without_a_body():

@@ -34,7 +34,7 @@ _GIT_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 # This binding is intentionally private: it lets repository checks prove that notification copy was
 # reviewed with the exact Assistant source while keeping executable identity out of the public feed.
 _CANONICAL_RELEASE_SOURCE_COMMITS = {
-    "shimpz-assistant": "c945f8530b5c1da3af925932751dae4934fd9396",
+    "shimpz-assistant": "180e2fcbd69238dbd8ea61b6d68c7dfed4d17ea5",
 }
 
 # Append releases in increasing sequence order for each Assistant. This source is intentionally code
@@ -92,7 +92,8 @@ _CANONICAL_RELEASES = (
             "- Replaced the weather demonstration with real, typed X profile and Post Powers.\n"
             "- Added isolated declarations for one Bearer Token and four OAuth 1.0a credentials.\n"
             "- Restricted all outbound requests to `api.x.com` and made every Post write require explicit approval.\n"
-            "- Added strict runtime, RPC, redaction, redirect, timeout, and response-boundary validation for the X integration.\n\n"
+            "- Added strict runtime, RPC, redaction, redirect, timeout, and response-boundary validation for the X integration.\n"
+            "- Made the release source pass the repository-wide no-inline-suppression security gate without exceptions.\n\n"
             "## 0.1.2\n\n"
             "- Shows that the Assistant can provide forecasts for up to 16 days in the English in-Admin help.\n\n"
             "## 0.1.1\n\n"
