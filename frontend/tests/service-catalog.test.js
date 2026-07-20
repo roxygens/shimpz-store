@@ -2,7 +2,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-import { SERVICE_BY_ID } from "../src/lib/catalog.ts";
+import { ASSISTANT_BY_ID, SERVICE_BY_ID } from "../src/lib/catalog.ts";
+
+test("Shimpz Assistant exposes its canonical release version", () => {
+  assert.equal(ASSISTANT_BY_ID.get("shimpz-assistant")?.version, "0.2.0");
+});
 
 test("OpenAI media Service publishes only its implemented operations", () => {
   const service = SERVICE_BY_ID.get("openai");

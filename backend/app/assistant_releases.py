@@ -34,7 +34,7 @@ _GIT_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 # This binding is intentionally private: it lets repository checks prove that notification copy was
 # reviewed with the exact Assistant source while keeping executable identity out of the public feed.
 _CANONICAL_RELEASE_SOURCE_COMMITS = {
-    "shimpz-assistant": "c9fb5f048d640a20d0b9e79008c84771fbb17a25",
+    "shimpz-assistant": "f8b925ca0e7ff434b142db06297e21293e1aa520",
 }
 
 # Append releases in increasing sequence order for each Assistant. This source is intentionally code
@@ -81,6 +81,20 @@ _CANONICAL_RELEASES = (
             "- Added localized in-Admin help and a bounded Genesis playbook for the Team Brain.\n"
         ),
         "published_at": "2026-07-19T23:37:30Z",
+    },
+    {
+        "assistant_id": "shimpz-assistant",
+        "sequence": 4,
+        "headline": "Shimpz Assistant 0.2.0 is available",
+        "changelog": (
+            "# Changelog\n\n"
+            "## 0.2.0\n\n"
+            "- Added read and write Powers for X accounts.\n"
+            "- Added just-in-time collection for the exact secrets required by each Power.\n"
+            "- Restricted outbound access to the declared `api.x.com` host.\n"
+            "- Required explicit approval before any write Power can change X account data.\n"
+        ),
+        "published_at": "2026-07-20T05:10:32Z",
     },
 )
 

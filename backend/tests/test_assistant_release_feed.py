@@ -49,6 +49,18 @@ def test_release_feed_is_closed_bounded_notification_metadata():
         assert "command" not in record
 
 
+def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_2_0_metadata():
+    assert releases._CANONICAL_RELEASE_SOURCE_COMMITS == {
+        "shimpz-assistant": "f8b925ca0e7ff434b142db06297e21293e1aa520"
+    }
+    latest = releases._CANONICAL_RELEASES[-1]
+    assert latest["assistant_id"] == "shimpz-assistant"
+    assert latest["sequence"] == 4
+    assert latest["headline"] == "Shimpz Assistant 0.2.0 is available"
+    assert "api.x.com" in latest["changelog"]
+    assert "explicit approval" in latest["changelog"]
+
+
 def test_release_feed_honors_conditional_get_without_a_body():
     with TestClient(app) as client:
         initial = client.get("/api/releases/assistants")
