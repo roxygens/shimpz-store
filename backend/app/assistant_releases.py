@@ -36,13 +36,14 @@ _GIT_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 # notification copy was reviewed with the exact Assistant source while keeping
 # executable identity out of the public feed.
 _CANONICAL_RELEASE_SOURCE_COMMITS = {
-    "shimpz-assistant": "4a0219ede79a8eb33bb1f520d1e91b5cd420f2b6",
+    "shimpz-assistant": "c46f83c45418a832052fededafcab616ce37579c",
 }
 
 _SHIMPZ_ASSISTANT_0_6_0_CHANGELOG = """# Changelog
 
 ## 0.6.0
 
+- Updated repository and image-source metadata for the TheShimpz organization.
 - Renamed provider authorization from Connections to Accounts throughout the Assistant contract.
 - Added three just-in-time Mux BYOK Secrets with exact per-Power references.
 - Added bounded direct-upload list, test-create, and cancel Powers against only `api.mux.com`.

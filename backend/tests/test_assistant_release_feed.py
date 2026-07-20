@@ -51,7 +51,7 @@ def test_release_feed_is_closed_bounded_notification_metadata():
 
 def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_6_0_metadata():
     assert releases._CANONICAL_RELEASE_SOURCE_COMMITS == {
-        "shimpz-assistant": "4a0219ede79a8eb33bb1f520d1e91b5cd420f2b6"
+        "shimpz-assistant": "c46f83c45418a832052fededafcab616ce37579c"
     }
     latest = releases._CANONICAL_RELEASES[-1]
     assert latest["assistant_id"] == "shimpz-assistant"
@@ -61,6 +61,7 @@ def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_6_0_metadata():
     assert "three just-in-time Mux BYOK Secrets" in latest["changelog"]
     assert "api.mux.com" in latest["changelog"]
     assert "constant-time comparison" in latest["changelog"]
+    assert "TheShimpz organization" in latest["changelog"]
 
 
 def test_release_feed_honors_conditional_get_without_a_body():
