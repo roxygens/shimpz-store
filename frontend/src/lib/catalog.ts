@@ -165,15 +165,15 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
   {
     id: "shimpz-assistant",
     name: "Shimpz Assistant",
-    version: "0.2.0",
+    version: "0.5.0",
     creator: "roxygens",
     summary: {
-      en: "Connect X through four typed Powers with just-in-time credentials and explicit approval for every write.",
-      pt: "Conecte o X por quatro Powers tipados, com credenciais solicitadas apenas quando necessárias e aprovação explícita para cada escrita.",
+      en: "Connect X through four typed Powers with private OAuth consent and explicit approval for every write.",
+      pt: "Conecte o X por quatro Powers tipados, com consentimento OAuth privado e aprovação explícita para cada escrita.",
     },
     description: {
-      en: "Read public X profiles, inspect the connected account, and create or delete its Posts. The Admin requests only the secrets declared by the selected Power, every write requires explicit approval, and network access is restricted to api.x.com.",
-      pt: "Leia perfis públicos do X, consulte a conta conectada e crie ou exclua seus Posts. O Admin solicita apenas os secrets declarados pelo Power selecionado, toda escrita exige aprovação explícita e o acesso de rede é restrito a api.x.com.",
+      en: "Read public X profiles, inspect the connected account, and create or delete its Posts. The Admin opens X consent without collecting developer credentials or tokens, every write requires explicit approval, and network access is restricted to api.x.com.",
+      pt: "Leia perfis públicos do X, consulte a conta conectada e crie ou exclua seus Posts. O Admin abre o consentimento do X sem coletar credenciais de developer nem tokens, toda escrita exige aprovação explícita e o acesso de rede é restrito a api.x.com.",
     },
     price: "free",
     archs: ["amd64", "arm64"],
@@ -182,16 +182,16 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
         id: "public-user-lookup",
         name: { en: "Public profile", pt: "Perfil público" },
         summary: {
-          en: "Reads one public X profile by username with an app Bearer Token.",
-          pt: "Consulta um perfil público do X pelo nome de usuário com um Bearer Token do app.",
+          en: "Reads one public X profile by username through the connected X account.",
+          pt: "Consulta um perfil público do X pelo nome de usuário por meio da conta X conectada.",
         },
       },
       {
         id: "identity-me",
         name: { en: "Connected identity", pt: "Identidade conectada" },
         summary: {
-          en: "Reads the identity of the connected X account with OAuth 1.0a.",
-          pt: "Consulta a identidade da conta conectada do X com OAuth 1.0a.",
+          en: "Reads the identity of the connected X account through OAuth 2.0.",
+          pt: "Consulta a identidade da conta conectada do X por OAuth 2.0.",
         },
       },
       {
@@ -217,8 +217,8 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
         pt: "Egress: somente api.x.com",
       },
       {
-        en: "Secrets: requested just in time per Power (X Bearer Token or four OAuth 1.0a credentials)",
-        pt: "Secrets: solicitados apenas quando necessários por Power (Bearer Token do X ou quatro credenciais OAuth 1.0a)",
+        en: "Connection: controller-owned OAuth 2.0 with S256 PKCE; tokens are never shown to the Brain or Admin",
+        pt: "Conexão: OAuth 2.0 com S256 PKCE sob custódia do controller; tokens nunca são exibidos ao Brain nem ao Admin",
       },
       {
         en: "Writes: explicit approval for every Create Post or Delete Post invocation",

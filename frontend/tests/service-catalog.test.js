@@ -8,12 +8,12 @@ test("Shimpz Assistant exposes its canonical X security contract", () => {
   const assistant = ASSISTANT_BY_ID.get("shimpz-assistant");
 
   assert.ok(assistant);
-  assert.equal(assistant.version, "0.2.0");
+  assert.equal(assistant.version, "0.5.0");
   assert.deepEqual(
     assistant.powers.map((power) => power.id),
     ["public-user-lookup", "identity-me", "create-post", "delete-post"],
   );
-  assert.match(assistant.description.en, /only the secrets declared by the selected Power/);
+  assert.match(assistant.description.en, /without collecting developer credentials or tokens/);
   assert.match(assistant.description.en, /every write requires explicit approval/);
   assert.match(assistant.description.en, /api\.x\.com/);
   assert.deepEqual(assistant.permissions, [
@@ -22,8 +22,8 @@ test("Shimpz Assistant exposes its canonical X security contract", () => {
       pt: "Egress: somente api.x.com",
     },
     {
-      en: "Secrets: requested just in time per Power (X Bearer Token or four OAuth 1.0a credentials)",
-      pt: "Secrets: solicitados apenas quando necessários por Power (Bearer Token do X ou quatro credenciais OAuth 1.0a)",
+      en: "Connection: controller-owned OAuth 2.0 with S256 PKCE; tokens are never shown to the Brain or Admin",
+      pt: "Conexão: OAuth 2.0 com S256 PKCE sob custódia do controller; tokens nunca são exibidos ao Brain nem ao Admin",
     },
     {
       en: "Writes: explicit approval for every Create Post or Delete Post invocation",
