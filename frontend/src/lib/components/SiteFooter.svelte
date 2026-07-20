@@ -4,13 +4,17 @@
   import { u } from "$lib/url";
   import ShimpzBrand from "$lib/components/ShimpzBrand.svelte";
 
-  let { lang }: { lang: Locale } = $props();
+  let { lang, minimal = false }: { lang: Locale; minimal?: boolean } = $props();
 </script>
 
 <footer class="site-footer">
   <div class="wrap footer-inner">
     <div class="footer-brand">
-      <ShimpzBrand href={u.home(lang)} />
+      {#if minimal}
+        <a class="wordmark" href={u.home(lang)} aria-label="Shimpz home">Shimpz</a>
+      {:else}
+        <ShimpzBrand href={u.home(lang)} />
+      {/if}
       <p>{tr("footer", lang)}</p>
     </div>
     <nav aria-label={lang === "pt" ? "Links do rodapé" : "Footer links"}>
@@ -37,6 +41,7 @@
 
   .footer-brand { display: flex; align-items: center; gap: 1.5rem; }
   .footer-brand p { max-width: 34rem; margin: 0; color: var(--color-muted-2); font-size: 0.78rem; }
+  .wordmark { font-family: var(--font-mono); font-size: 1rem; font-weight: 700; letter-spacing: -0.04em; }
 
   nav { display: flex; gap: 1rem; }
   nav a {

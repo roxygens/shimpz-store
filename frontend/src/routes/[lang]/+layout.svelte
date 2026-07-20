@@ -19,7 +19,7 @@
   {@render children()}
 </main>
 
-{#if !embedded}<SiteFooter {lang} />{/if}
+{#if !embedded}<SiteFooter {lang} minimal={homepage} />{/if}
 
 <style>
   main { min-height: calc(100vh - 12rem); }

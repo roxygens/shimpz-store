@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { Locale } from "$lib/catalog";
   import { swapLocale, u } from "$lib/url";
-  import ShimpzBrand from "$lib/components/ShimpzBrand.svelte";
 
   let { lang }: { lang: Locale } = $props();
   const copy = $derived(lang === "pt"
@@ -13,7 +12,7 @@
 
 <header class="home-header">
   <div class="wrap header-inner">
-    <ShimpzBrand href={u.home(lang)} ariaLabel="Shimpz home" />
+    <a class="brand" href={u.home(lang)} aria-label="Shimpz home">Shimpz</a>
 
     <nav aria-label={copy.nav}>
       <a href="#assistants">{copy.assistants}</a>
@@ -59,6 +58,15 @@
     grid-template-columns: 1fr auto auto;
     align-items: center;
     gap: clamp(1rem, 3vw, 2.5rem);
+  }
+
+  .brand {
+    justify-self: start;
+    color: var(--color-fg);
+    font-family: var(--font-mono);
+    font-size: 1rem;
+    font-weight: 700;
+    letter-spacing: -0.04em;
   }
 
   nav { display: flex; align-items: center; gap: clamp(0.3rem, 1vw, 1.2rem); }
