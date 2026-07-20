@@ -10,9 +10,10 @@
   const pathname = $derived($page.url.pathname);
   const path = $derived(pathname + (browser ? $page.url.search : ""));
   const embedded = $derived(/^\/(?:en|pt)\/assistants\/embed\/?$/.test(pathname));
+  const homepage = $derived(/^\/(?:en|pt)\/?$/.test(pathname));
 </script>
 
-{#if !embedded}<SiteHeader {lang} {path} />{/if}
+{#if !embedded && !homepage}<SiteHeader {lang} {path} />{/if}
 
 <main id="main-content" class:embedded>
   {@render children()}
