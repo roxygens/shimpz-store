@@ -251,7 +251,7 @@ const D: Dict = {
   assistants_free: { en: "Free", pt: "Grátis" },
   assistants_version: { en: "Version", pt: "Versão" },
   assistants_architectures: { en: "Architectures", pt: "Arquiteturas" },
-  assistants_permissions: { en: "Permissions", pt: "Permissões" },
+  assistants_permissions: { en: "Security & access", pt: "Segurança e acesso" },
   assistants_no_permissions: { en: "No Services, secrets or egress", pt: "Sem Services, secrets ou egress" },
   assistants_power: { en: "Power", pt: "Power" },
   assistants_install_local: { en: "Install in local Admin", pt: "Instalar no Admin local" },

@@ -158,7 +158,7 @@ export interface AssistantListing {
   price: "free";
   archs: Arch[];
   powers: AssistantPower[];
-  permissions: string[];
+  permissions: I18n[];
 }
 
 export const ASSISTANT_CATALOG: AssistantListing[] = [
@@ -168,42 +168,63 @@ export const ASSISTANT_CATALOG: AssistantListing[] = [
     version: "0.2.0",
     creator: "roxygens",
     summary: {
-      en: "Explore a real Assistant through three safe weather Powers.",
-      pt: "Explore um Assistant real por meio de três Powers seguros de clima.",
+      en: "Connect X through four typed Powers with just-in-time credentials and explicit approval for every write.",
+      pt: "Conecte o X por quatro Powers tipados, com credenciais solicitadas apenas quando necessárias e aprovação explícita para cada escrita.",
     },
     description: {
-      en: "Search for a place, inspect current conditions and build a daily forecast with public Open-Meteo data. It is the executable reference for installing, chatting with and combining typed Assistant Powers.",
-      pt: "Pesquise um lugar, consulte as condições atuais e monte uma previsão diária com dados públicos do Open-Meteo. Ele é a referência executável para instalar, conversar e combinar Powers tipados de um Assistant.",
+      en: "Read public X profiles, inspect the connected account, and create or delete its Posts. The Admin requests only the secrets declared by the selected Power, every write requires explicit approval, and network access is restricted to api.x.com.",
+      pt: "Leia perfis públicos do X, consulte a conta conectada e crie ou exclua seus Posts. O Admin solicita apenas os secrets declarados pelo Power selecionado, toda escrita exige aprovação explícita e o acesso de rede é restrito a api.x.com.",
     },
     price: "free",
     archs: ["amd64", "arm64"],
     powers: [
       {
-        id: "search-location",
-        name: { en: "Search location", pt: "Pesquisar local" },
+        id: "public-user-lookup",
+        name: { en: "Public profile", pt: "Perfil público" },
         summary: {
-          en: "Finds coordinates for a city or postal code.",
-          pt: "Encontra coordenadas de uma cidade ou código postal.",
+          en: "Reads one public X profile by username with an app Bearer Token.",
+          pt: "Consulta um perfil público do X pelo nome de usuário com um Bearer Token do app.",
         },
       },
       {
-        id: "current-weather",
-        name: { en: "Current weather", pt: "Clima atual" },
+        id: "identity-me",
+        name: { en: "Connected identity", pt: "Identidade conectada" },
         summary: {
-          en: "Reads current conditions for one coordinate.",
-          pt: "Consulta as condições atuais de uma coordenada.",
+          en: "Reads the identity of the connected X account with OAuth 1.0a.",
+          pt: "Consulta a identidade da conta conectada do X com OAuth 1.0a.",
         },
       },
       {
-        id: "daily-forecast",
-        name: { en: "Daily forecast", pt: "Previsão diária" },
+        id: "create-post",
+        name: { en: "Create Post", pt: "Criar Post" },
         summary: {
-          en: "Returns a bounded daily forecast for one coordinate.",
-          pt: "Retorna uma previsão diária limitada para uma coordenada.",
+          en: "Publishes one Post only after explicit approval for that invocation.",
+          pt: "Publica um Post somente após aprovação explícita para aquela execução.",
+        },
+      },
+      {
+        id: "delete-post",
+        name: { en: "Delete Post", pt: "Excluir Post" },
+        summary: {
+          en: "Deletes one owned Post only after explicit approval for that invocation.",
+          pt: "Exclui um Post próprio somente após aprovação explícita para aquela execução.",
         },
       },
     ],
-    permissions: ["Open-Meteo"],
+    permissions: [
+      {
+        en: "Egress: api.x.com only",
+        pt: "Egress: somente api.x.com",
+      },
+      {
+        en: "Secrets: requested just in time per Power (X Bearer Token or four OAuth 1.0a credentials)",
+        pt: "Secrets: solicitados apenas quando necessários por Power (Bearer Token do X ou quatro credenciais OAuth 1.0a)",
+      },
+      {
+        en: "Writes: explicit approval for every Create Post or Delete Post invocation",
+        pt: "Escritas: aprovação explícita para cada execução de Criar Post ou Excluir Post",
+      },
+    ],
   },
 ];
 

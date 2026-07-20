@@ -4,8 +4,32 @@ import test from "node:test";
 
 import { ASSISTANT_BY_ID, SERVICE_BY_ID } from "../src/lib/catalog.ts";
 
-test("Shimpz Assistant exposes its canonical release version", () => {
-  assert.equal(ASSISTANT_BY_ID.get("shimpz-assistant")?.version, "0.2.0");
+test("Shimpz Assistant exposes its canonical X security contract", () => {
+  const assistant = ASSISTANT_BY_ID.get("shimpz-assistant");
+
+  assert.ok(assistant);
+  assert.equal(assistant.version, "0.2.0");
+  assert.deepEqual(
+    assistant.powers.map((power) => power.id),
+    ["public-user-lookup", "identity-me", "create-post", "delete-post"],
+  );
+  assert.match(assistant.description.en, /only the secrets declared by the selected Power/);
+  assert.match(assistant.description.en, /every write requires explicit approval/);
+  assert.match(assistant.description.en, /api\.x\.com/);
+  assert.deepEqual(assistant.permissions, [
+    {
+      en: "Egress: api.x.com only",
+      pt: "Egress: somente api.x.com",
+    },
+    {
+      en: "Secrets: requested just in time per Power (X Bearer Token or four OAuth 1.0a credentials)",
+      pt: "Secrets: solicitados apenas quando necessários por Power (Bearer Token do X ou quatro credenciais OAuth 1.0a)",
+    },
+    {
+      en: "Writes: explicit approval for every Create Post or Delete Post invocation",
+      pt: "Escritas: aprovação explícita para cada execução de Criar Post ou Excluir Post",
+    },
+  ]);
 });
 
 test("OpenAI media Service publishes only its implemented operations", () => {

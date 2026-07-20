@@ -62,7 +62,17 @@
         <div><dt>{tr("assistants_architectures", lang)}</dt><dd>{assistant.archs.join(" + ")}</dd></div>
         <div>
           <dt>{tr("assistants_permissions", lang)}</dt>
-          <dd>{assistant.permissions.length ? assistant.permissions.join(", ") : tr("assistants_no_permissions", lang)}</dd>
+          <dd>
+            {#if assistant.permissions.length}
+              <ul class="permission-list">
+                {#each assistant.permissions as permission}
+                  <li>{t(permission, lang)}</li>
+                {/each}
+              </ul>
+            {:else}
+              {tr("assistants_no_permissions", lang)}
+            {/if}
+          </dd>
         </div>
       </dl>
       <a
@@ -97,6 +107,9 @@
   .facts div { padding: 0.9rem 1rem; border-bottom: 1px solid var(--color-border); }
   .facts dt { color: var(--color-muted-2); font-family: var(--font-mono); font-size: 0.56rem; letter-spacing: 0.08em; text-transform: uppercase; }
   .facts dd { margin: 0.3rem 0 0; color: var(--color-fg); font-size: 0.76rem; overflow-wrap: anywhere; }
+  .permission-list { display: grid; gap: 0.45rem; margin: 0; padding: 0; list-style: none; }
+  .permission-list li { position: relative; padding-left: 0.75rem; line-height: 1.45; }
+  .permission-list li::before { position: absolute; left: 0; color: var(--color-cyan); content: "·"; }
   .install-link { width: calc(100% - 2rem); margin: 1rem; padding-inline: 0.75rem; font-size: 0.62rem; }
   @media (max-width: 760px) {
     .detail-grid { grid-template-columns: 1fr; }
