@@ -5,7 +5,7 @@ export const prerender = true;
 
 export function GET() {
   const paths: string[] = [];
-  paths.push("/privacy");
+  paths.push("/privacy", "/terms");
   for (const l of LOCALES) {
     paths.push(u.home(l), u.services(l), u.assistants(l));
     for (const service of SERVICES) paths.push(u.service(l, service));

@@ -39,7 +39,8 @@
   <div class="wrap legal-header-inner">
     <ShimpzBrand href="/en" product="Space" ariaLabel="Shimpz home" />
     <nav aria-label="Legal pages">
-      <a href="/privacy" aria-current="page">Privacy</a>
+      <a href="/privacy" aria-current={path === "/privacy" ? "page" : undefined}>Privacy</a>
+      <a href="/terms" aria-current={path === "/terms" ? "page" : undefined}>Terms</a>
     </nav>
   </div>
 </header>
