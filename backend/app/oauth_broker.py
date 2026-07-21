@@ -21,6 +21,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit
 
 NEURON_ORIGIN = "https://neuron.shimpz.com"
 LOCAL_CALLBACK = "http://127.0.0.1:7777/api/oauth/cloudflare/callback"
+CANARY_CALLBACK = "https://local.shimpz.com/api/oauth/cloudflare/callback"
+CALLBACKS = {"loopback": LOCAL_CALLBACK, "canary": CANARY_CALLBACK}
 HOSTED_CALLBACK = "https://shimpz.com/api/oauth/cloudflare/callback"
 SCOPES = ("dns.read", "offline_access", "zone.read")
 AUTHORIZATION_TTL_SECONDS = 300
@@ -61,6 +63,7 @@ class OAuthTokens:
 class _PendingAuthorization:
     local_state: str
     local_code_challenge: str
+    callback_mode: str
     broker_verifier: str
     expires_at: float
 
@@ -97,6 +100,12 @@ def _base64url(value: bytes) -> str:
 def _binding(value: object, label: str = "binding") -> str:
     if not isinstance(value, str) or _BINDING.fullmatch(value) is None:
         raise OAuthBrokerError(f"OAuth {label} is invalid")
+    return value
+
+
+def _callback_mode(value: object) -> str:
+    if not isinstance(value, str) or value not in CALLBACKS:
+        raise OAuthBrokerError("OAuth callback mode is invalid")
     return value
 
 
@@ -432,9 +441,17 @@ class OAuthBroker:
     def _random_binding() -> str:
         return secrets.token_urlsafe(32)
 
-    def start(self, *, local_state: object, local_code_challenge: object, scopes: object) -> str:
+    def start(
+        self,
+        *,
+        local_state: object,
+        local_code_challenge: object,
+        callback_mode: object,
+        scopes: object,
+    ) -> str:
         state = _binding(local_state, "state")
         challenge = _binding(local_code_challenge, "challenge")
+        callback = _callback_mode(callback_mode)
         _scopes(scopes)
         now = self._clock()
         broker_state = self._random_binding()
@@ -448,6 +465,7 @@ class OAuthBroker:
             self._authorizations[broker_state] = _PendingAuthorization(
                 state,
                 challenge,
+                callback,
                 verifier,
                 now + AUTHORIZATION_TTL_SECONDS,
             )
@@ -492,7 +510,7 @@ class OAuthBroker:
                 tokens,
                 now + GRANT_TTL_SECONDS,
             )
-        return LOCAL_CALLBACK + "?" + urlencode({"state": pending.local_state, "claim": claim})
+        return CALLBACKS[pending.callback_mode] + "?" + urlencode({"state": pending.local_state, "claim": claim})
 
     def claim(self, *, claim: object, state: object, code_verifier: object) -> dict[str, object]:
         if not isinstance(claim, str) or _CLAIM.fullmatch(claim) is None:

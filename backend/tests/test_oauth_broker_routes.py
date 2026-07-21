@@ -59,6 +59,7 @@ def test_browser_start_and_callback_redirect_without_oauth_tokens() -> None:
                 "state": "s" * 43,
                 "code_challenge": "c" * 43,
                 "scope": " ".join(SCOPES),
+                "callback": "loopback",
             },
             follow_redirects=False,
         )
@@ -77,6 +78,7 @@ def test_browser_start_and_callback_redirect_without_oauth_tokens() -> None:
     assert start.headers["cache-control"] == "private, no-store"
     assert callback.headers["referrer-policy"] == "no-referrer"
     assert [call[0] for call in broker.calls] == ["start", "callback"]
+    assert broker.calls[0][1]["callback_mode"] == "loopback"
 
 
 def test_server_only_claim_refresh_and_revoke_are_exact_and_no_store() -> None:

@@ -7,6 +7,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from app.oauth_broker import (
+    CANARY_CALLBACK,
     HOSTED_CALLBACK,
     LOCAL_CALLBACK,
     SCOPES,
@@ -105,6 +106,7 @@ def test_broker_keeps_tokens_out_of_browser_and_claims_once_with_local_pkce() ->
     authorization_url = broker.start(
         local_state=local_state,
         local_code_challenge=_pkce_challenge(local_verifier),
+        callback_mode="loopback",
         scopes=list(SCOPES),
     )
     assert authorization_url == "https://dash.cloudflare.com/oauth2/auth"
@@ -142,6 +144,29 @@ def test_broker_keeps_tokens_out_of_browser_and_claims_once_with_local_pkce() ->
     ]
 
 
+def test_broker_returns_only_the_named_canary_callback() -> None:
+    neuron = _Neuron()
+    broker = OAuthBroker(neuron, BrokerLeaseSigner(b"k" * 32), clock=lambda: 100.0)
+    broker.start(
+        local_state="s" * 43,
+        local_code_challenge="c" * 43,
+        callback_mode="canary",
+        scopes=list(SCOPES),
+    )
+    state = neuron.calls[0][1][0]
+
+    callback = broker.callback(state=state, code="authorization-code-private-123456")
+
+    assert callback.startswith(CANARY_CALLBACK + "?")
+    with pytest.raises(OAuthBrokerError):
+        broker.start(
+            local_state="s" * 43,
+            local_code_challenge="c" * 43,
+            callback_mode="https://evil.example",
+            scopes=list(SCOPES),
+        )
+
+
 def test_broker_rejects_wrong_pkce_tampered_lease_and_expired_state() -> None:
     neuron = _Neuron()
     now = [100.0]
@@ -154,6 +179,7 @@ def test_broker_rejects_wrong_pkce_tampered_lease_and_expired_state() -> None:
     broker.start(
         local_state="s" * 43,
         local_code_challenge=_pkce_challenge(verifier),
+        callback_mode="loopback",
         scopes=list(SCOPES),
     )
     state = neuron.calls[0][1][0]
@@ -172,6 +198,7 @@ def test_broker_rejects_wrong_pkce_tampered_lease_and_expired_state() -> None:
     broker.start(
         local_state="t" * 43,
         local_code_challenge=_pkce_challenge(verifier),
+        callback_mode="loopback",
         scopes=list(SCOPES),
     )
     expired_state = neuron.calls[-1][1][0]
