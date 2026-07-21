@@ -59,7 +59,6 @@ def test_browser_start_and_callback_redirect_without_oauth_tokens() -> None:
                 "state": "s" * 43,
                 "code_challenge": "c" * 43,
                 "scope": " ".join(SCOPES),
-                "callback": "loopback",
             },
             follow_redirects=False,
         )
@@ -79,6 +78,33 @@ def test_browser_start_and_callback_redirect_without_oauth_tokens() -> None:
     assert callback.headers["referrer-policy"] == "no-referrer"
     assert [call[0] for call in broker.calls] == ["start", "callback"]
     assert broker.calls[0][1]["callback_mode"] == "loopback"
+
+
+def test_browser_start_forwards_only_the_named_canary_callback() -> None:
+    with _broker() as broker, TestClient(main.app) as client:
+        start = client.get(
+            "/api/oauth/cloudflare/start",
+            params={
+                "state": "s" * 43,
+                "code_challenge": "c" * 43,
+                "scope": " ".join(SCOPES),
+                "callback": "canary",
+            },
+            follow_redirects=False,
+        )
+
+    assert start.status_code == 303
+    assert broker.calls == [
+        (
+            "start",
+            {
+                "local_state": "s" * 43,
+                "local_code_challenge": "c" * 43,
+                "callback_mode": "canary",
+                "scopes": list(SCOPES),
+            },
+        )
+    ]
 
 
 def test_server_only_claim_refresh_and_revoke_are_exact_and_no_store() -> None:

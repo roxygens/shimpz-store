@@ -812,12 +812,9 @@ def _oauth_failure(operation: str, status: int = 400) -> JSONResponse:
 @app.get("/api/oauth/cloudflare/start")
 async def oauth_cloudflare_start(request: Request) -> Response:
     pairs = list(request.query_params.multi_items())
-    if len(pairs) != 4 or {key for key, _value in pairs} != {
-        "state",
-        "code_challenge",
-        "scope",
-        "callback",
-    }:
+    keys = {key for key, _value in pairs}
+    required = {"state", "code_challenge", "scope"}
+    if len(pairs) not in {3, 4} or keys not in {frozenset(required), frozenset({*required, "callback"})}:
         return _oauth_failure("start")
     fields = dict(pairs)
     try:
@@ -827,7 +824,7 @@ async def oauth_cloudflare_start(request: Request) -> Response:
                 _OAUTH_BROKER.start,
                 local_state=fields["state"],
                 local_code_challenge=fields["code_challenge"],
-                callback_mode=fields["callback"],
+                callback_mode=fields.get("callback", "loopback"),
                 scopes=fields["scope"].split(" "),
             ),
         )
