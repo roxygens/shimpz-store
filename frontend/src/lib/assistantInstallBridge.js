@@ -5,6 +5,7 @@ const FRAME_KEYS = Object.freeze(["height", "type", "version"]);
 const CONTEXT_KEYS = Object.freeze(["type", "version"]);
 const STORE_STATE_KEYS = Object.freeze(["installed", "status", "type", "version"]);
 const LOOPBACK_HOSTS = new Set(["127.0.0.1", "localhost", "[::1]"]);
+const CANARY_ADMIN_ORIGIN = "https://local.shimpz.com";
 const STORE_STATE_STATUSES = new Set(["error", "loading", "ready"]);
 
 export const ASSISTANT_INSTALL_TYPE = "shimpz:assistant-install";
@@ -34,16 +35,26 @@ function hasExactKeys(value, expected) {
   return keys.length === expected.length && keys.every((key, index) => key === expected[index]);
 }
 
+/** @param {unknown} value */
+function isTrustedAdminOrigin(value) {
+  if (typeof value !== "string") return false;
+  try {
+    const origin = new URL(value);
+    if (origin.origin !== value || origin.username || origin.password) return false;
+    return (
+      (origin.protocol === "http:" && LOOPBACK_HOSTS.has(origin.hostname)) ||
+      origin.origin === CANARY_ADMIN_ORIGIN
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** @param {string} referrer */
 export function resolveInstallParentOrigin(referrer) {
   if (typeof referrer !== "string" || !referrer) throw new Error("missing local Admin referrer");
   const parent = new URL(referrer);
-  if (
-    parent.protocol !== "http:" ||
-    !LOOPBACK_HOSTS.has(parent.hostname) ||
-    parent.username ||
-    parent.password
-  ) {
+  if (parent.username || parent.password || !isTrustedAdminOrigin(parent.origin)) {
     throw new Error("unexpected local Admin origin");
   }
   return parent.origin;
@@ -71,7 +82,7 @@ export function createAssistantStoreFrameMessage(height) {
 }
 
 /**
- * Accept the exact context reply only from the current parent window at an HTTP loopback origin.
+ * Accept the exact context reply only from the current parent window at a named Admin origin.
  * The returned origin is safe to use as the exact targetOrigin for the existing install request.
  * @param {{ source?: unknown, origin?: unknown, data?: unknown } | null | undefined} event
  * @param {unknown} parentWindow
@@ -89,21 +100,7 @@ export function acceptAssistantStoreContext(event, parentWindow) {
   ) {
     return null;
   }
-  try {
-    const parent = new URL(event.origin);
-    if (
-      parent.origin !== event.origin ||
-      parent.protocol !== "http:" ||
-      !LOOPBACK_HOSTS.has(parent.hostname) ||
-      parent.username ||
-      parent.password
-    ) {
-      return null;
-    }
-    return parent.origin;
-  } catch {
-    return null;
-  }
+  return isTrustedAdminOrigin(event.origin) ? event.origin : null;
 }
 
 /**

@@ -24,10 +24,11 @@ import {
   shouldReconcileAssistantStoreAction,
 } from "../src/lib/assistantInstallBridge.js";
 
-test("resolves only exact HTTP loopback Admin origins from the iframe referrer", () => {
+test("resolves only exact named Admin origins from the iframe referrer", () => {
   assert.equal(resolveInstallParentOrigin("http://127.0.0.1:7777/assistants/"), "http://127.0.0.1:7777");
   assert.equal(resolveInstallParentOrigin("http://localhost:7777/assistants/"), "http://localhost:7777");
   assert.equal(resolveInstallParentOrigin("http://[::1]:7777/assistants/"), "http://[::1]:7777");
+  assert.equal(resolveInstallParentOrigin("https://local.shimpz.com/assistants/"), "https://local.shimpz.com");
 
   for (const referrer of [
     "",
@@ -35,6 +36,9 @@ test("resolves only exact HTTP loopback Admin origins from the iframe referrer",
     "http://127.0.0.2:7777/assistants/",
     "http://localtest.me:7777/assistants/",
     "http://captain@localhost:7777/assistants/",
+    "http://local.shimpz.com/assistants/",
+    "https://local.shimpz.com:444/assistants/",
+    "https://local.shimpz.com.evil.test/assistants/",
     "not a URL",
   ]) {
     assert.throws(() => resolveInstallParentOrigin(referrer));
@@ -96,13 +100,14 @@ test("creates one exact bounded integer frame measurement", () => {
   }
 });
 
-test("accepts Store context only from the exact parent at an HTTP loopback origin", () => {
+test("accepts Store context only from the exact parent at a named Admin origin", () => {
   const parentWindow = {};
   const data = { type: ASSISTANT_STORE_CONTEXT_TYPE, version: 1 };
   for (const origin of [
     "http://127.0.0.1:7777",
     "http://localhost:7777",
     "http://[::1]:7777",
+    "https://local.shimpz.com",
   ]) {
     assert.equal(acceptAssistantStoreContext({ source: parentWindow, origin, data }, parentWindow), origin);
   }
@@ -110,6 +115,10 @@ test("accepts Store context only from the exact parent at an HTTP loopback origi
   const rejected = [
     { source: {}, origin: "http://localhost:7777", data },
     { source: parentWindow, origin: "https://localhost:7777", data },
+    { source: parentWindow, origin: "http://local.shimpz.com", data },
+    { source: parentWindow, origin: "https://local.shimpz.com:444", data },
+    { source: parentWindow, origin: "https://local.shimpz.com.evil.test", data },
+    { source: parentWindow, origin: "not a URL", data },
     { source: parentWindow, origin: "http://127.0.0.2:7777", data },
     { source: parentWindow, origin: "http://captain@localhost:7777", data },
     { source: parentWindow, origin: "http://localhost:7777/path", data },
@@ -159,6 +168,26 @@ test("accepts only exact bounded installed-Assistant state from the loopback par
       parentOrigin,
     )?.installed.length,
     ASSISTANT_STORE_STATE_MAX_IDS,
+  );
+});
+
+test("accepts bounded installed-Assistant state from the named canary Admin", () => {
+  const parentWindow = {};
+  const parentOrigin = "https://local.shimpz.com";
+  const ready = {
+    type: ASSISTANT_STORE_STATE_TYPE,
+    version: 1,
+    status: "ready",
+    installed: ["shimpz-cloudflare"],
+  };
+
+  assert.deepEqual(
+    acceptAssistantStoreState(
+      { source: parentWindow, origin: parentOrigin, data: ready },
+      parentWindow,
+      parentOrigin,
+    ),
+    { status: "ready", installed: ["shimpz-cloudflare"] },
   );
 });
 
