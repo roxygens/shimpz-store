@@ -38,6 +38,27 @@ def test_runtime_copies_only_builder_resolved_dependencies():
     assert "/usr/local/bin/uv" not in runtime
 
 
+def test_build_context_excludes_local_dependencies_caches_and_secrets():
+    dockerignore = (
+        (Path(__file__).resolve().parents[2] / ".dockerignore")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    )
+
+    assert {
+        ".git",
+        ".env",
+        ".env.*",
+        ".pnpm-store",
+        ".venv",
+        "backend/.venv",
+        "frontend/.pnpm-store",
+        "frontend/.svelte-kit",
+        "frontend/build",
+        "frontend/node_modules",
+    } <= set(dockerignore)
+
+
 def _record(**changes):
     record = {
         "assistant_id": "weather-guide",
