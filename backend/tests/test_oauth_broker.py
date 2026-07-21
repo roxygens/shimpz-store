@@ -6,7 +6,6 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
-
 from app.oauth_broker import (
     HOSTED_CALLBACK,
     LOCAL_CALLBACK,
@@ -41,15 +40,11 @@ class _Neuron:
 
     def exchange(self, *, code: str, verifier: str) -> OAuthTokens:
         self.calls.append(("exchange", (code, verifier)))
-        return OAuthTokens(
-            "access-token-private-123456", "refresh-token-private-123456", 3600
-        )
+        return OAuthTokens("access-token-private-123456", "refresh-token-private-123456", 3600)
 
     def refresh(self, *, refresh_token: str) -> OAuthTokens:
         self.calls.append(("refresh", refresh_token))
-        return OAuthTokens(
-            "rotated-access-private-123456", "rotated-refresh-private-123456", 3600
-        )
+        return OAuthTokens("rotated-access-private-123456", "rotated-refresh-private-123456", 3600)
 
     def revoke(self, *, token: str) -> None:
         self.calls.append(("revoke", token))
@@ -61,9 +56,7 @@ def _secret(path: Path, value: bytes) -> Path:
     return path
 
 
-def test_neuron_client_sends_access_service_identity_and_validates_fixed_authorization() -> (
-    None
-):
+def test_neuron_client_sends_access_service_identity_and_validates_fixed_authorization() -> None:
     state = "a" * 43
     challenge = "b" * 43
     authorization_url = "https://dash.cloudflare.com/oauth2/auth?" + urlencode(
@@ -91,20 +84,12 @@ def test_neuron_client_sends_access_service_identity_and_validates_fixed_authori
         client = NeuronOAuthClient(
             transport,
             client_id_path=_secret(root / "id", ("c" * 32 + ".access").encode()),
-            client_secret_path=_secret(
-                root / "secret", b"service-token-private-material-123456"
-            ),
+            client_secret_path=_secret(root / "secret", b"service-token-private-material-123456"),
         )
-        assert (
-            client.authorization(state=state, code_challenge=challenge)
-            == authorization_url
-        )
+        assert client.authorization(state=state, code_challenge=challenge) == authorization_url
 
     request = transport.requests[0]
-    assert (
-        request["url"]
-        == "https://neuron.shimpz.com/api/internal/oauth/cloudflare/authorization"
-    )
+    assert request["url"] == "https://neuron.shimpz.com/api/internal/oauth/cloudflare/authorization"
     assert request["headers"]["CF-Access-Client-Id"] == "c" * 32 + ".access"
     assert "CF-Access-Client-Secret" in request["headers"]
     assert "client_secret" not in request["body"].decode()
@@ -124,9 +109,7 @@ def test_broker_keeps_tokens_out_of_browser_and_claims_once_with_local_pkce() ->
     )
     assert authorization_url == "https://dash.cloudflare.com/oauth2/auth"
     broker_state = neuron.calls[0][1][0]
-    callback = broker.callback(
-        state=broker_state, code="authorization-code-private-123456"
-    )
+    callback = broker.callback(state=broker_state, code="authorization-code-private-123456")
     parsed = urlsplit(callback)
     query = parse_qs(parsed.query, strict_parsing=True)
     assert callback.startswith(LOCAL_CALLBACK + "?")
@@ -134,9 +117,7 @@ def test_broker_keeps_tokens_out_of_browser_and_claims_once_with_local_pkce() ->
     assert "access-token" not in callback
     assert "refresh-token" not in callback
 
-    payload = broker.claim(
-        claim=query["claim"][0], state=local_state, code_verifier=local_verifier
-    )
+    payload = broker.claim(claim=query["claim"][0], state=local_state, code_verifier=local_verifier)
     assert set(payload) == {
         "access_token",
         "refresh_token",
@@ -145,9 +126,7 @@ def test_broker_keeps_tokens_out_of_browser_and_claims_once_with_local_pkce() ->
         "broker_lease",
     }
     with pytest.raises(OAuthBrokerError):
-        broker.claim(
-            claim=query["claim"][0], state=local_state, code_verifier=local_verifier
-        )
+        broker.claim(claim=query["claim"][0], state=local_state, code_verifier=local_verifier)
 
     refreshed = broker.refresh(
         refresh_token=payload["refresh_token"],
