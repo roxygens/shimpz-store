@@ -37,7 +37,7 @@ ARG SOURCE_DATE_EPOCH=0
 WORKDIR /app
 COPY --from=dependencies /opt/venv /opt/venv
 COPY backend/app/__init__.py backend/app/assistant_releases.py backend/app/logconf.py backend/app/main.py \
-     backend/app/middleware.py ./app/
+     backend/app/middleware.py backend/app/oauth_broker.py ./app/
 COPY --from=web /w/build ./build
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \

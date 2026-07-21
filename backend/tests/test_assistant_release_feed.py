@@ -12,6 +12,7 @@ UV_IMAGE = "ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac1
 def test_release_feed_module_and_health_probe_are_packaged_in_the_runtime_image():
     dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(encoding="utf-8")
     assert "backend/app/assistant_releases.py" in dockerfile
+    assert "backend/app/oauth_broker.py" in dockerfile
     assert "HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=20" in dockerfile
 
 
