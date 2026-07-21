@@ -20,9 +20,7 @@ def test_only_the_assistant_embed_allows_named_admin_origins():
             policy = embedded.headers["content-security-policy"]
             assert "x-frame-options" not in embedded.headers
             ancestors = policy.split("frame-ancestors ", 1)[1].split(";", 1)[0]
-            assert ancestors == (
-                "http://127.0.0.1:* http://localhost:* http://[::1]:* https://local.shimpz.com"
-            )
+            assert ancestors == ("http://127.0.0.1:* http://localhost:* http://[::1]:* https://local.shimpz.com")
             assert embedded.headers["x-robots-tag"] == "noindex, nofollow"
 
         lookalike = client.get("/en/assistants/embed/anything")
