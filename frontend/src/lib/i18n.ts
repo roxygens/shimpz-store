@@ -68,8 +68,8 @@ const D: Dict = {
   home_install_kicker: { en: "Start local", pt: "Comece local" },
   home_install_title: { en: "Your Space starts with one command.", pt: "Seu Space começa com um comando." },
   home_install_lead: {
-    en: "The installer pulls the verified development image and opens the Admin on your machine. Read the platform guide before you start.",
-    pt: "O instalador baixa a imagem de desenvolvimento verificada e abre o Admin na sua máquina. Leia o guia da sua plataforma antes de começar.",
+    en: "The installer pulls the verified stable image and opens the Admin on your machine. Read the platform guide before you start.",
+    pt: "O instalador baixa a imagem estável verificada e abre o Admin na sua máquina. Leia o guia da sua plataforma antes de começar.",
   },
   home_copy: { en: "Copy", pt: "Copiar" },
   home_copied: { en: "Copied", pt: "Copiado" },
@@ -400,8 +400,8 @@ const D: Dict = {
   access_boundary: { en: "Access boundary", pt: "Limite de acesso" },
   service_quick_install_title: { en: "Start Shimpz locally", pt: "Inicie o Shimpz localmente" },
   service_quick_install_body: {
-    en: "Start the local Shimpz Admin with the verified development image. Services are managed by your Space, not installed from this page.",
-    pt: "Inicie o Admin local do Shimpz com a imagem de desenvolvimento verificada. Services são gerenciados pelo seu Space, não instalados por esta página.",
+    en: "Start the local Shimpz Admin with the verified stable image. Services are managed by your Space, not installed from this page.",
+    pt: "Inicie o Admin local do Shimpz com a imagem estável verificada. Services são gerenciados pelo seu Space, não instalados por esta página.",
   },
   nav_chat: { en: "Chat", pt: "Chat" },
   chat_title: { en: "Team chat — Shimpz", pt: "Chat do Time — Shimpz" },
