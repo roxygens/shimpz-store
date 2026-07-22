@@ -41,7 +41,7 @@ _GIT_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 # executable identity out of the public feed.
 _CANONICAL_RELEASE_SOURCE_COMMITS = {
     "shimpz-assistant": "c46f83c45418a832052fededafcab616ce37579c",
-    "shimpz-cloudflare": "095fca96d7e465bd6925c79b3a02055a0c43e6e5",
+    "shimpz-cloudflare": "095fca97b78132d6f6f3271ecbc4547e16edee73",
 }
 
 _SHIMPZ_CLOUDFLARE_0_1_5_CHANGELOG = """# Changelog
