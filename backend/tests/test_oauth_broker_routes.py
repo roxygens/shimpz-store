@@ -3,9 +3,10 @@ from __future__ import annotations
 from contextlib import contextmanager
 from unittest import mock
 
+from fastapi.testclient import TestClient
+
 from app import main
 from app.oauth_broker import SCOPES
-from fastapi.testclient import TestClient
 
 
 class _Broker:

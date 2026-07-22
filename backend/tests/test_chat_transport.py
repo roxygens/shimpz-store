@@ -13,6 +13,10 @@ from pathlib import Path
 from urllib.parse import urlparse
 
 import pytest
+from fastapi import Request, WebSocket
+from fastapi.testclient import TestClient
+from starlette.websockets import WebSocketDisconnect
+
 from app import main
 from app.main import (
     ACCOUNT_COOKIE,
@@ -33,9 +37,6 @@ from app.main import (
     _ws_receive_bounded_json,
     app,
 )
-from fastapi import Request, WebSocket
-from fastapi.testclient import TestClient
-from starlette.websockets import WebSocketDisconnect
 
 TEST_TEAM_ID = "test_team"
 
@@ -646,7 +647,7 @@ def test_public_auth_json_is_bounded_before_any_upstream_hop():
 def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
     forwarded = []
 
-    async def bounded_call(executor, base, method, path, payload, *, extra=None):  # noqa: PLR0913
+    async def bounded_call(executor, base, method, path, payload, *, extra=None):
         forwarded.append((executor, base, method, path, payload, extra))
         return 400, {"error": "rejected"}
 

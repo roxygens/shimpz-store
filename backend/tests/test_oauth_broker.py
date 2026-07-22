@@ -6,6 +6,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
+
 from app.oauth_broker import (
     HOSTED_ADMIN_CALLBACK,
     HOSTED_CALLBACK,

@@ -1,7 +1,8 @@
 from pathlib import Path
 
-from app import main as store
 from fastapi.testclient import TestClient
+
+from app import main as store
 
 
 def _write(root: Path, relative: str, content: str) -> None:

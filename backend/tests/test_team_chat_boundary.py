@@ -6,8 +6,9 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
-from app import main
 from fastapi.testclient import TestClient
+
+from app import main
 
 FILE_ID = "a" * 32
 FILE_SHA256 = hashlib.sha256(b"hello").hexdigest()

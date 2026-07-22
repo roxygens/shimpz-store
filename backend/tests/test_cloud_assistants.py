@@ -4,8 +4,9 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
-from app import main
 from fastapi.testclient import TestClient
+
+from app import main
 
 
 class _AssistantControlHandler(BaseHTTPRequestHandler):
