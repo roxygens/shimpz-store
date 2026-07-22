@@ -10,21 +10,14 @@ UV_IMAGE = "ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac1
 
 
 def test_release_feed_module_and_health_probe_are_packaged_in_the_runtime_image():
-    dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(
-        encoding="utf-8"
-    )
+    dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(encoding="utf-8")
     assert "backend/app/assistant_releases.py" in dockerfile
     assert "backend/app/oauth_broker.py" in dockerfile
-    assert (
-        "HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=20"
-        in dockerfile
-    )
+    assert "HEALTHCHECK --interval=5s --timeout=3s --start-period=5s --retries=20" in dockerfile
 
 
 def test_runtime_copies_only_builder_resolved_dependencies():
-    dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(
-        encoding="utf-8"
-    )
+    dockerfile = (Path(__file__).resolve().parents[2] / "Dockerfile").read_text(encoding="utf-8")
     runtime = dockerfile.split(" AS serve\n", 1)[1]
 
     assert f"FROM {UV_IMAGE} AS uv" in dockerfile
@@ -37,11 +30,7 @@ def test_runtime_copies_only_builder_resolved_dependencies():
 
 
 def test_build_context_excludes_local_dependencies_caches_and_secrets():
-    dockerignore = (
-        (Path(__file__).resolve().parents[2] / ".dockerignore")
-        .read_text(encoding="utf-8")
-        .splitlines()
-    )
+    dockerignore = (Path(__file__).resolve().parents[2] / ".dockerignore").read_text(encoding="utf-8").splitlines()
 
     assert {
         ".git",
@@ -100,11 +89,7 @@ def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_6_0_metadata():
         "shimpz-assistant": "c46f83c45418a832052fededafcab616ce37579c",
         "shimpz-cloudflare": "095fca97b78132d6f6f3271ecbc4547e16edee73",
     }
-    latest = [
-        release
-        for release in releases._CANONICAL_RELEASES
-        if release["assistant_id"] == "shimpz-assistant"
-    ][-1]
+    latest = [release for release in releases._CANONICAL_RELEASES if release["assistant_id"] == "shimpz-assistant"][-1]
     assert latest["assistant_id"] == "shimpz-assistant"
     assert latest["sequence"] == 6
     assert latest["headline"] == "Shimpz Assistant 0.6.0 adds Accounts and Mux BYOK"
@@ -116,16 +101,9 @@ def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_6_0_metadata():
 
 
 def test_release_feed_publishes_the_read_only_cloudflare_assistant():
-    latest = [
-        release
-        for release in releases._CANONICAL_RELEASES
-        if release["assistant_id"] == "shimpz-cloudflare"
-    ][-1]
+    latest = [release for release in releases._CANONICAL_RELEASES if release["assistant_id"] == "shimpz-cloudflare"][-1]
     assert latest["sequence"] == 3
-    assert (
-        latest["headline"]
-        == "Shimpz Cloudflare 0.1.5 supports bounded chunked responses"
-    )
+    assert latest["headline"] == "Shimpz Cloudflare 0.1.5 supports bounded chunked responses"
     assert "bounded chunked Cloudflare responses" in latest["changelog"]
     assert "uncompressed Cloudflare API responses" in latest["changelog"]
     assert "self-contained for isolated builds" in latest["changelog"]
@@ -145,9 +123,7 @@ def test_release_feed_honors_conditional_get_without_a_body():
     assert unchanged.status_code == 304
     assert unchanged.content == b""
     assert unchanged.headers["etag"] == initial.headers["etag"]
-    assert (
-        unchanged.headers["cache-control"] == releases.ASSISTANT_RELEASE_CACHE_CONTROL
-    )
+    assert unchanged.headers["cache-control"] == releases.ASSISTANT_RELEASE_CACHE_CONTROL
 
 
 @pytest.mark.parametrize(
@@ -167,10 +143,7 @@ def test_release_source_fails_closed_on_invalid_records(source):
 
 
 def test_release_source_enforces_record_and_payload_bounds():
-    too_many = [
-        _record(assistant_id=f"assistant-{index}")
-        for index in range(releases.MAX_RELEASES + 1)
-    ]
+    too_many = [_record(assistant_id=f"assistant-{index}") for index in range(releases.MAX_RELEASES + 1)]
     too_large = [_record(changelog="x" * (releases.MAX_CHANGELOG_BYTES + 1))]
 
     with pytest.raises(ValueError):

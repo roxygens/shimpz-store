@@ -33,9 +33,7 @@ MAX_RESPONSE_BYTES = 32 * 1024
 MAX_TOKEN_BYTES = 16 * 1024
 HTTP_TIMEOUT_SECONDS = 10
 ACCESS_CLIENT_ID_PATH = Path(
-    os.environ.get(
-        "SHIMPZ_NEURON_ACCESS_CLIENT_ID_FILE", "/run/secrets/neuron_access_client_id"
-    )
+    os.environ.get("SHIMPZ_NEURON_ACCESS_CLIENT_ID_FILE", "/run/secrets/neuron_access_client_id")
 )
 ACCESS_CLIENT_SECRET_PATH = Path(
     os.environ.get(
@@ -43,17 +41,11 @@ ACCESS_CLIENT_SECRET_PATH = Path(
         "/run/secrets/neuron_access_client_secret",
     )
 )
-LEASE_KEY_PATH = Path(
-    os.environ.get(
-        "SHIMPZ_OAUTH_BROKER_LEASE_KEY_FILE", "/run/secrets/oauth_broker_lease_key"
-    )
-)
+LEASE_KEY_PATH = Path(os.environ.get("SHIMPZ_OAUTH_BROKER_LEASE_KEY_FILE", "/run/secrets/oauth_broker_lease_key"))
 _BINDING = re.compile(r"[A-Za-z0-9_-]{43}\Z")
 _CLAIM = re.compile(r"[0-9a-f]{64}\Z")
 _SERVICE_CLIENT_ID = re.compile(r"[A-Za-z0-9_-]{16,128}\.access\Z")
-_LEASE = re.compile(
-    r"l1\.(\d{10})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]{43})\Z"
-)
+_LEASE = re.compile(r"l1\.(\d{10})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]{43})\.([A-Za-z0-9_-]{43})\Z")
 
 
 class OAuthBrokerError(RuntimeError):
@@ -124,19 +116,13 @@ def _code(value: object, *, label: str, minimum: int = 16, maximum: int = 4096) 
         encoded = value.encode("ascii")
     except UnicodeError as exc:
         raise OAuthBrokerError(f"OAuth {label} is invalid") from exc
-    if not minimum <= len(encoded) <= maximum or any(
-        byte <= 32 or byte >= 127 for byte in encoded
-    ):
+    if not minimum <= len(encoded) <= maximum or any(byte <= 32 or byte >= 127 for byte in encoded):
         raise OAuthBrokerError(f"OAuth {label} is invalid")
     return value
 
 
 def _scopes(value: object) -> tuple[str, ...]:
-    if (
-        not isinstance(value, list)
-        or tuple(sorted(value)) != SCOPES
-        or len(value) != len(set(value))
-    ):
+    if not isinstance(value, list) or tuple(sorted(value)) != SCOPES or len(value) != len(set(value)):
         raise OAuthBrokerError("OAuth scopes are invalid")
     return SCOPES
 
@@ -196,18 +182,14 @@ class FixedNeuronTransport:
             or not parsed.path.startswith("/api/internal/oauth/cloudflare/")
         ):
             raise OAuthBrokerError("Neuron OAuth endpoint is invalid")
-        connection = http.client.HTTPSConnection(
-            parsed.hostname, timeout=HTTP_TIMEOUT_SECONDS
-        )
+        connection = http.client.HTTPSConnection(parsed.hostname, timeout=HTTP_TIMEOUT_SECONDS)
         try:
             connection.request("POST", parsed.path, body=body, headers=dict(headers))
             response = connection.getresponse()
             payload = response.read(MAX_RESPONSE_BYTES + 1)
             if len(payload) > MAX_RESPONSE_BYTES:
                 raise OAuthBrokerError("Neuron OAuth response is invalid")
-            return BrokerResponse(
-                response.status, response.getheader("Content-Type", ""), payload
-            )
+            return BrokerResponse(response.status, response.getheader("Content-Type", ""), payload)
         except OAuthBrokerError:
             raise
         except (OSError, http.client.HTTPException) as exc:
@@ -243,9 +225,7 @@ class NeuronOAuthClient:
                 modes=frozenset({0o400, 0o440, 0o444, 0o600, 0o640}),
             ).decode("ascii")
         except UnicodeError as exc:
-            raise OAuthBrokerError(
-                "Neuron Access service credential is invalid"
-            ) from exc
+            raise OAuthBrokerError("Neuron Access service credential is invalid") from exc
         if _SERVICE_CLIENT_ID.fullmatch(client_id) is None:
             raise OAuthBrokerError("Neuron Access service credential is invalid")
         _code(client_secret, label="service credential", minimum=32, maximum=1024)
@@ -256,11 +236,7 @@ class NeuronOAuthClient:
 
     @staticmethod
     def _object(response: BrokerResponse) -> dict[str, object]:
-        if (
-            response.status != 200
-            or response.content_type.lower().split(";", 1)[0].strip()
-            != "application/json"
-        ):
+        if response.status != 200 or response.content_type.lower().split(";", 1)[0].strip() != "application/json":
             raise OAuthBrokerError("Neuron OAuth operation failed")
 
         def unique(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -282,9 +258,7 @@ class NeuronOAuthClient:
     def _call(self, operation: str, payload: dict[str, object]) -> dict[str, object]:
         if operation not in {"authorization", "exchange", "refresh", "revoke"}:
             raise OAuthBrokerError("Neuron OAuth operation is invalid")
-        body = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode(
-            "ascii"
-        )
+        body = json.dumps(payload, ensure_ascii=True, separators=(",", ":")).encode("ascii")
         headers = {
             **self._access_headers(),
             "Accept": "application/json",
@@ -337,9 +311,7 @@ class NeuronOAuthClient:
             or fields.get("code_challenge") != code_challenge
             or fields.get("code_challenge_method") != "S256"
             or fields.get("scope") != " ".join(SCOPES)
-            or not _code(
-                fields.get("client_id"), label="client id", minimum=8, maximum=256
-            )
+            or not _code(fields.get("client_id"), label="client id", minimum=8, maximum=256)
         ):
             raise OAuthBrokerError("Neuron OAuth response is invalid")
         return url
@@ -420,9 +392,7 @@ class BrokerLeaseSigner:
     def issue(self, tokens: OAuthTokens) -> str:
         expires = int(self._clock()) + LEASE_TTL_SECONDS
         payload = f"l1.{expires}.{self._digest(tokens.access_token)}.{self._digest(tokens.refresh_token)}"
-        signature = _base64url(
-            hmac.new(self._key(), payload.encode("ascii"), hashlib.sha256).digest()
-        )
+        signature = _base64url(hmac.new(self._key(), payload.encode("ascii"), hashlib.sha256).digest())
         return f"{payload}.{signature}"
 
     def verify(self, lease: object, token: str) -> None:
@@ -433,17 +403,12 @@ class BrokerLeaseSigner:
             raise OAuthBrokerError("OAuth broker lease is invalid")
         expires, access_digest, refresh_digest, supplied = match.groups()
         payload = lease.rsplit(".", 1)[0]
-        expected = _base64url(
-            hmac.new(self._key(), payload.encode("ascii"), hashlib.sha256).digest()
-        )
+        expected = _base64url(hmac.new(self._key(), payload.encode("ascii"), hashlib.sha256).digest())
         digest = self._digest(token)
         if (
             int(expires) <= int(self._clock())
             or not hmac.compare_digest(expected, supplied)
-            or not any(
-                hmac.compare_digest(digest, allowed)
-                for allowed in (access_digest, refresh_digest)
-            )
+            or not any(hmac.compare_digest(digest, allowed) for allowed in (access_digest, refresh_digest))
         ):
             raise OAuthBrokerError("OAuth broker lease is invalid")
 
@@ -467,15 +432,9 @@ class OAuthBroker:
         self._lock = threading.Lock()
 
     def _expire(self, now: float) -> None:
-        for key in tuple(
-            key
-            for key, value in self._authorizations.items()
-            if value.expires_at <= now
-        ):
+        for key in tuple(key for key, value in self._authorizations.items() if value.expires_at <= now):
             self._authorizations.pop(key, None)
-        for key in tuple(
-            key for key, value in self._grants.items() if value.expires_at <= now
-        ):
+        for key in tuple(key for key, value in self._grants.items() if value.expires_at <= now):
             self._grants.pop(key, None)
 
     @staticmethod
@@ -534,9 +493,7 @@ class OAuthBroker:
         if pending is None:
             raise OAuthBrokerError("OAuth authorization is unavailable")
         try:
-            tokens = self._neuron.exchange(
-                code=authorization_code, verifier=pending.broker_verifier
-            )
+            tokens = self._neuron.exchange(code=authorization_code, verifier=pending.broker_verifier)
         except BaseException:
             with self._lock:
                 self._grant_reservations -= 1
@@ -553,15 +510,9 @@ class OAuthBroker:
                 tokens,
                 now + GRANT_TTL_SECONDS,
             )
-        return (
-            CALLBACKS[pending.callback_mode]
-            + "?"
-            + urlencode({"state": pending.local_state, "claim": claim})
-        )
+        return CALLBACKS[pending.callback_mode] + "?" + urlencode({"state": pending.local_state, "claim": claim})
 
-    def claim(
-        self, *, claim: object, state: object, code_verifier: object
-    ) -> dict[str, object]:
+    def claim(self, *, claim: object, state: object, code_verifier: object) -> dict[str, object]:
         if not isinstance(claim, str) or _CLAIM.fullmatch(claim) is None:
             raise OAuthBrokerError("OAuth grant is unavailable")
         local_state = _binding(state, "state")
@@ -573,9 +524,7 @@ class OAuthBroker:
             if (
                 pending is None
                 or not hmac.compare_digest(pending.local_state, local_state)
-                or not hmac.compare_digest(
-                    pending.local_code_challenge, _pkce_challenge(verifier)
-                )
+                or not hmac.compare_digest(pending.local_code_challenge, _pkce_challenge(verifier))
             ):
                 raise OAuthBrokerError("OAuth grant is unavailable")
             self._grants.pop(claim, None)
@@ -590,9 +539,7 @@ class OAuthBroker:
             "broker_lease": self._signer.issue(tokens),
         }
 
-    def refresh(
-        self, *, refresh_token: object, lease: object, scopes: object
-    ) -> dict[str, object]:
+    def refresh(self, *, refresh_token: object, lease: object, scopes: object) -> dict[str, object]:
         _scopes(scopes)
         token = _code(refresh_token, label="token", minimum=16, maximum=MAX_TOKEN_BYTES)
         self._signer.verify(lease, token)
