@@ -364,7 +364,7 @@ MODEL_CATALOG = {
         }
     ),
 }
-RELEASED_CLOUD_ASSISTANTS = frozenset({"shimpz-assistant"})
+RELEASED_CLOUD_ASSISTANTS = frozenset({"shimpz-cloudflare"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
 MAX_CHAT_MESSAGE_CHARS = 16_000
 MAX_CHAT_FILES = 8

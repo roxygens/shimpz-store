@@ -13,7 +13,7 @@ class _AssistantControlHandler(BaseHTTPRequestHandler):
     app_status = 200
     apps: ClassVar[list[dict[str, object]]] = [
         {
-            "app": "shimpz-assistant",
+            "app": "shimpz-cloudflare",
             "status": "running",
             "container": "private-name",
         },
@@ -128,11 +128,11 @@ def test_cloud_assistant_lifecycle_requires_authentication_before_upstream():
             client.get("/api/teams/team_one/chat/assistants"),
             client.post(
                 "/api/teams/team_one/assistants",
-                content=b'{"assistant":"shimpz-assistant"}',
+                content=b'{"assistant":"shimpz-cloudflare"}',
                 headers=_mutation_headers(),
             ),
             client.delete(
-                "/api/teams/team_one/assistants/shimpz-assistant",
+                "/api/teams/team_one/assistants/shimpz-cloudflare",
                 headers={"Origin": "https://shimpz.com"},
             ),
         )
@@ -148,7 +148,7 @@ def test_cloud_assistant_inventory_projects_only_released_ids_without_private_ru
         _authenticate(client)
         response = client.get("/api/teams/team_one/assistants")
     assert response.status_code == 200
-    assert response.json() == {"installed": ["shimpz-assistant"]}
+    assert response.json() == {"installed": ["shimpz-cloudflare"]}
     _assert_private(response)
     assert ("GET", "/v1/teams/team_one/apps", {}, "valid-token") in calls
 
@@ -158,14 +158,14 @@ def test_cloud_chat_scope_projects_only_released_running_assistants():
         _authenticate(client)
         response = client.get("/api/teams/team_one/chat/assistants")
     assert response.status_code == 200
-    assert response.json() == {"assistant_ids": ["shimpz-assistant"]}
+    assert response.json() == {"assistant_ids": ["shimpz-cloudflare"]}
     _assert_private(response)
     assert ("GET", "/v1/teams/team_one/apps", {}, "valid-token") in calls
 
 
 def test_cloud_chat_scope_is_brain_only_when_the_released_assistant_is_not_running():
     apps = [
-        {"app": "shimpz-assistant", "status": "stopped"},
+        {"app": "shimpz-cloudflare", "status": "stopped"},
         {"app": "notification-center", "status": "running"},
     ]
     with _assistant_control_plane(apps=apps), TestClient(main.app) as client:
@@ -178,8 +178,8 @@ def test_cloud_chat_scope_is_brain_only_when_the_released_assistant_is_not_runni
 
 def test_cloud_chat_scope_fails_closed_on_ambiguous_running_inventory():
     apps = [
-        {"app": "shimpz-assistant", "status": "running"},
-        {"app": "shimpz-assistant", "status": "running"},
+        {"app": "shimpz-cloudflare", "status": "running"},
+        {"app": "shimpz-cloudflare", "status": "running"},
     ]
     with _assistant_control_plane(apps=apps), TestClient(main.app) as client:
         _authenticate(client)
@@ -191,23 +191,23 @@ def test_cloud_chat_scope_fails_closed_on_ambiguous_running_inventory():
 
 def test_cloud_assistant_install_rejects_origin_content_type_shape_and_unreleased_ids_before_driver():
     cases = (
-        ("/api/teams/team_one/assistants", {}, b'{"assistant":"shimpz-assistant"}', 403),
+        ("/api/teams/team_one/assistants", {}, b'{"assistant":"shimpz-cloudflare"}', 403),
         (
             "/api/teams/team_one/assistants",
             {"Origin": "https://store.shimpz.com", "Content-Type": "application/json"},
-            b'{"assistant":"shimpz-assistant"}',
+            b'{"assistant":"shimpz-cloudflare"}',
             403,
         ),
         (
             "/api/teams/team_one/assistants",
             {"Origin": "https://shimpz.com", "Content-Type": "text/plain"},
-            b'{"assistant":"shimpz-assistant"}',
+            b'{"assistant":"shimpz-cloudflare"}',
             415,
         ),
         (
             "/api/teams/team_one/assistants",
             _mutation_headers(),
-            b'{"assistant":"shimpz-assistant","image":"attacker/image"}',
+            b'{"assistant":"shimpz-cloudflare","image":"attacker/image"}',
             400,
         ),
         (
@@ -219,7 +219,7 @@ def test_cloud_assistant_install_rejects_origin_content_type_shape_and_unrelease
         (
             "/api/teams/TEAM_ONE/assistants",
             _mutation_headers(),
-            b'{"assistant":"shimpz-assistant"}',
+            b'{"assistant":"shimpz-cloudflare"}',
             400,
         ),
     )
@@ -234,20 +234,20 @@ def test_cloud_assistant_install_rejects_origin_content_type_shape_and_unrelease
 
 def test_legacy_app_install_cannot_bypass_origin_json_or_exact_body_contract():
     cases = (
-        ({"Content-Type": "text/plain"}, b'{"app":"shimpz-assistant"}', 403),
+        ({"Content-Type": "text/plain"}, b'{"app":"shimpz-cloudflare"}', 403),
         (
             {"Origin": "https://store.shimpz.com", "Content-Type": "text/plain"},
-            b'{"app":"shimpz-assistant"}',
+            b'{"app":"shimpz-cloudflare"}',
             403,
         ),
         (
             {"Origin": "https://shimpz.com", "Content-Type": "text/plain"},
-            b'{"app":"shimpz-assistant"}',
+            b'{"app":"shimpz-cloudflare"}',
             415,
         ),
         (
             _mutation_headers(),
-            b'{"app":"shimpz-assistant","image":"attacker/image"}',
+            b'{"app":"shimpz-cloudflare","image":"attacker/image"}',
             400,
         ),
     )
@@ -265,9 +265,9 @@ def test_legacy_app_install_cannot_bypass_origin_json_or_exact_body_contract():
 
 def test_cloud_assistant_delete_rejects_untrusted_origins_and_nonreleased_ids_before_driver():
     cases = (
-        ("/api/teams/team_one/assistants/shimpz-assistant", {}, 403),
+        ("/api/teams/team_one/assistants/shimpz-cloudflare", {}, 403),
         (
-            "/api/teams/team_one/assistants/shimpz-assistant",
+            "/api/teams/team_one/assistants/shimpz-cloudflare",
             {"Origin": "https://shimpz.com.evil.example"},
             403,
         ),
@@ -277,7 +277,7 @@ def test_cloud_assistant_delete_rejects_untrusted_origins_and_nonreleased_ids_be
             404,
         ),
         (
-            "/api/teams/TEAM_ONE/assistants/shimpz-assistant",
+            "/api/teams/TEAM_ONE/assistants/shimpz-cloudflare",
             {"Origin": "https://shimpz.com"},
             400,
         ),
@@ -296,11 +296,11 @@ def test_cloud_assistant_mutations_translate_only_identity_and_refreshable_accep
         _authenticate(client)
         installed = client.post(
             "/api/teams/team_one/assistants",
-            content=b'{"assistant":"shimpz-assistant"}',
+            content=b'{"assistant":"shimpz-cloudflare"}',
             headers=_mutation_headers(),
         )
         removed = client.delete(
-            "/api/teams/team_one/assistants/shimpz-assistant",
+            "/api/teams/team_one/assistants/shimpz-cloudflare",
             headers={"Origin": "https://shimpz.com"},
         )
         retired_removed = client.delete(
@@ -309,19 +309,19 @@ def test_cloud_assistant_mutations_translate_only_identity_and_refreshable_accep
         )
     assert installed.status_code == removed.status_code == 200
     assert retired_removed.status_code == 404
-    assert installed.json() == {"assistant": "shimpz-assistant", "accepted": True}
-    assert removed.json() == {"assistant": "shimpz-assistant", "accepted": True}
+    assert installed.json() == {"assistant": "shimpz-cloudflare", "accepted": True}
+    assert removed.json() == {"assistant": "shimpz-cloudflare", "accepted": True}
     for response in (installed, removed, retired_removed):
         _assert_private(response)
     assert (
         "POST",
         "/v1/teams/team_one/apps",
-        {"app": "shimpz-assistant"},
+        {"app": "shimpz-cloudflare"},
         "valid-token",
     ) in calls
     assert (
         "DELETE",
-        "/v1/teams/team_one/apps/shimpz-assistant",
+        "/v1/teams/team_one/apps/shimpz-cloudflare",
         {},
         "valid-token",
     ) in calls
@@ -334,11 +334,11 @@ def test_cloud_assistant_upstream_failures_remain_private_and_typed():
         inventory = client.get("/api/teams/team_one/assistants")
         install = client.post(
             "/api/teams/team_one/assistants",
-            content=b'{"assistant":"shimpz-assistant"}',
+            content=b'{"assistant":"shimpz-cloudflare"}',
             headers=_mutation_headers(),
         )
         uninstall = client.delete(
-            "/api/teams/team_one/assistants/shimpz-assistant",
+            "/api/teams/team_one/assistants/shimpz-cloudflare",
             headers={"Origin": "https://shimpz.com"},
         )
     assert [response.status_code for response in (inventory, install, uninstall)] == [

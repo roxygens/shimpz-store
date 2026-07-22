@@ -218,7 +218,7 @@ const D: Dict = {
   what_it_does: { en: "What it does", pt: "O que faz" },
   features_title: { en: "Everything it does", pt: "Tudo que faz" },
   capabilities: { en: "capabilities", pt: "funcionalidades" },
-  // Assistants area — one free hybrid evaluation listing plus the v2 creator contract.
+  // Assistants area — one free Cloudflare listing plus the v2 creator contract.
   assistants_title: { en: "Assistants", pt: "Assistants" },
   assistants_preview: { en: "Assistant Store // one catalog", pt: "Loja de Assistants // um catálogo" },
   assistants_lead: {
@@ -226,11 +226,11 @@ const D: Dict = {
     pt: "Software nativo de Time que atua por Powers declarados, segue rotinas opt-in e colabora por permissões explícitas.",
   },
   assistants_preview_notice: {
-    en: "Shimpz Assistant is free. Install it in your hosted Team here or through the Store embedded in a local Admin. Checkout and paid listings are not part of this evaluation release.",
-    pt: "O Shimpz Assistant é gratuito. Instale-o em seu Time hospedado aqui ou pela loja embutida em um Admin local. Checkout e itens pagos não fazem parte desta versão de avaliação.",
+    en: "Shimpz Cloudflare is free. Install it in your hosted Team here or through the Store embedded in a local Admin. Checkout and paid listings are not part of this release.",
+    pt: "O Shimpz Cloudflare é gratuito. Instale-o em seu Time hospedado aqui ou pela loja embutida em um Admin local. Checkout e itens pagos não fazem parte desta versão.",
   },
   assistants_available_kicker: { en: "Available now // free", pt: "Disponível agora // grátis" },
-  assistants_available_title: { en: "Meet the first Shimpz Assistant.", pt: "Conheça o primeiro Assistant do Shimpz." },
+  assistants_available_title: { en: "Meet Shimpz Cloudflare.", pt: "Conheça o Shimpz Cloudflare." },
   assistants_available_lead: {
     en: "A deliberately small real workload for proving your Team boundary and its contextual install path end to end.",
     pt: "Um workload real propositalmente pequeno para provar de ponta a ponta o limite do Time e seu fluxo contextual de instalação.",
@@ -325,8 +325,8 @@ const D: Dict = {
   },
   assistants_local_setup: { en: "Need a local Space first?", pt: "Ainda precisa de um Space local?" },
   assistants_local_setup_help: {
-    en: "Install Shimpz, create your Admin password and return to Assistants. The Admin will ask which Team should receive Shimpz Assistant.",
-    pt: "Instale o Shimpz, crie sua senha do Admin e volte para Assistants. O Admin perguntará qual Time deve receber o Shimpz Assistant.",
+    en: "Install Shimpz, create your Admin password and return to Assistants. The Admin will ask which Team should receive Shimpz Cloudflare.",
+    pt: "Instale o Shimpz, crie sua senha do Admin e volte para Assistants. O Admin perguntará qual Time deve receber o Shimpz Cloudflare.",
   },
   assistants_model_kicker: { en: "Assistant model // v2", pt: "Modelo de Assistant // v2" },
   assistants_model_title: { en: "Useful by design. Bounded by contract.", pt: "Útil por design. Limitado por contrato." },

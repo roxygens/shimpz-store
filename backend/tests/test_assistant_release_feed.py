@@ -84,20 +84,11 @@ def test_release_feed_is_closed_bounded_notification_metadata():
         assert "command" not in record
 
 
-def test_release_feed_publishes_the_reviewed_shimpz_assistant_0_6_0_metadata():
+def test_release_feed_binds_only_the_cloudflare_source():
     assert releases._CANONICAL_RELEASE_SOURCE_COMMITS == {
-        "shimpz-assistant": "c46f83c45418a832052fededafcab616ce37579c",
         "shimpz-cloudflare": "095fca97b78132d6f6f3271ecbc4547e16edee73",
     }
-    latest = [release for release in releases._CANONICAL_RELEASES if release["assistant_id"] == "shimpz-assistant"][-1]
-    assert latest["assistant_id"] == "shimpz-assistant"
-    assert latest["sequence"] == 6
-    assert latest["headline"] == "Shimpz Assistant 0.6.0 adds Accounts and Mux BYOK"
-    assert "Accounts throughout the Assistant contract" in latest["changelog"]
-    assert "three just-in-time Mux BYOK Secrets" in latest["changelog"]
-    assert "api.mux.com" in latest["changelog"]
-    assert "constant-time comparison" in latest["changelog"]
-    assert "TheShimpz organization" in latest["changelog"]
+    assert {release["assistant_id"] for release in releases._CANONICAL_RELEASES} == {"shimpz-cloudflare"}
 
 
 def test_release_feed_publishes_the_read_only_cloudflare_assistant():

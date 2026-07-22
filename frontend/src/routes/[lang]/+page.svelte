@@ -44,9 +44,9 @@
     assistantsBodyOne: "Um Assistant pode analisar anúncios. Outro pode organizar informações. Outro pode criar documentos ou enviar mensagens.",
     assistantsBodyTwo: "Eu escolho quais Assistants devem trabalhar juntos em cada pedido.",
     availableNow: "Disponível agora",
-    assistantName: "Shimpz Assistant",
-    assistantResult: "Consulta perfis e a conta conectada no X, publica ou exclui Posts com sua aprovação e gerencia uploads de teste no Mux.",
-    assistantSafety: "Acessa somente api.x.com e api.mux.com. Ações importantes pedem aprovação.",
+    assistantName: "Shimpz Cloudflare",
+    assistantResult: "Lista suas zonas do Cloudflare e inspeciona os registros DNS por uma Account OAuth somente de leitura.",
+    assistantSafety: "Acessa somente api.cloudflare.com com zone.read, dns.read e offline_access.",
     useAssistant: "Usar este Assistant",
     addAssistant: "Adicionar ao meu Time",
     teamsLabel: "Seu espaço de trabalho",
@@ -68,10 +68,10 @@
       "Você pode remover acessos e Assistants.",
     ],
     securityClosing: "Meu cérebro coordena o trabalho. Meus aplicativos executam dentro dos limites que você autorizou.",
-    approval: "Aprovação necessária",
-    approvalAction: "Publicar Post no X",
-    approve: "Aprovar",
-    reject: "Não autorizar",
+    approval: "Account OAuth",
+    approvalAction: "Conectar Cloudflare",
+    approve: "Autorizar",
+    reject: "Agora não",
     finalTitle: "Qual trabalho você quer tirar da sua lista?",
     finalBody: "Entre na sua conta Shimpz, escolha seus Assistants e me diga o resultado que deseja.",
     finalMicrocopy: "Leva apenas alguns passos para começar.",
@@ -111,9 +111,9 @@
     assistantsBodyOne: "One Assistant can review ads. Another can organize information. Another can create documents or send messages.",
     assistantsBodyTwo: "I choose which Assistants should work together on each request.",
     availableNow: "Available now",
-    assistantName: "Shimpz Assistant",
-    assistantResult: "Looks up profiles and the connected X account, creates or deletes Posts with your approval, and manages test uploads in Mux.",
-    assistantSafety: "It can reach only api.x.com and api.mux.com. Important actions require approval.",
+    assistantName: "Shimpz Cloudflare",
+    assistantResult: "Lists your Cloudflare zones and inspects DNS records through a read-only OAuth Account.",
+    assistantSafety: "It can reach only api.cloudflare.com with zone.read, dns.read, and offline_access.",
     useAssistant: "Use this Assistant",
     addAssistant: "Add to my Team",
     teamsLabel: "Your workspace",
@@ -135,10 +135,10 @@
       "You can remove access and Assistants.",
     ],
     securityClosing: "My brain coordinates the work. My apps complete it within the limits you approved.",
-    approval: "Approval required",
-    approvalAction: "Publish Post on X",
-    approve: "Approve",
-    reject: "Do not allow",
+    approval: "OAuth Account",
+    approvalAction: "Connect Cloudflare",
+    approve: "Authorize",
+    reject: "Not now",
     finalTitle: "What work do you want to take off your list?",
     finalBody: "Sign in to your Shimpz account, choose your Assistants, and tell me the result you want.",
     finalMicrocopy: "It only takes a few steps to get started.",
@@ -245,7 +245,7 @@
         <small>{content.assistantSafety}</small>
         <div class="card-actions">
           <a class="btn-primary card-primary" href={u.assistants(lang)}>{content.useAssistant}</a>
-          <a class="btn-ghost card-secondary" href={`${u.assistants(lang)}?assistant=shimpz-assistant`}>{content.addAssistant}</a>
+          <a class="btn-ghost card-secondary" href={`${u.assistants(lang)}?assistant=shimpz-cloudflare`}>{content.addAssistant}</a>
         </div>
       </article>
 
@@ -291,7 +291,7 @@
     <div class="approval-card">
       <span>{content.approval}</span>
       <strong>{content.approvalAction}</strong>
-      <div class="permission"><i aria-hidden="true">S</i><p><b>Shimpz Assistant</b><small>{lang === "pt" ? "Solicita uma ação importante" : "Requests an important action"}</small></p></div>
+      <div class="permission"><i aria-hidden="true">S</i><p><b>Shimpz Cloudflare</b><small>{lang === "pt" ? "Solicita acesso somente de leitura" : "Requests read-only access"}</small></p></div>
       <div class="approval-actions"><button class="btn-primary" type="button">{content.approve}</button><button class="btn-ghost" type="button">{content.reject}</button></div>
     </div>
   </div>

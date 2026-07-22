@@ -61,13 +61,13 @@ test("projects a bounded canonical cloud Team selector", () => {
 
 test("accepts only an explicit account state and exact bounded Assistant inventory", () => {
   assert.deepEqual(parseCloudAccount({ authenticated: true, username: "captain" }), { authenticated: true });
-  assert.deepEqual(parseCloudAssistantInventory({ installed: ["shimpz-assistant"] }), ["shimpz-assistant"]);
+  assert.deepEqual(parseCloudAssistantInventory({ installed: ["shimpz-cloudflare"] }), ["shimpz-cloudflare"]);
   for (const value of [null, {}, { authenticated: "yes" }]) assert.throws(() => parseCloudAccount(value));
   for (const value of [
     null,
     {},
-    { installed: "shimpz-assistant" },
-    { installed: ["shimpz-assistant", "shimpz-assistant"] },
+    { installed: "shimpz-cloudflare" },
+    { installed: ["shimpz-cloudflare", "shimpz-cloudflare"] },
     { installed: ["../hello"] },
     { installed: [], team_id: "private" },
     { installed: Array.from({ length: CLOUD_ASSISTANT_LIMIT + 1 }, (_, index) => `assistant-${index}`) },
@@ -77,10 +77,9 @@ test("accepts only an explicit account state and exact bounded Assistant invento
 });
 
 test("derives one contextual action only from authoritative selected-Team state", () => {
-  assert.equal(cloudAssistantAction(true, [], "shimpz-assistant"), "install");
-  assert.equal(cloudAssistantAction(true, ["shimpz-assistant"], "shimpz-assistant"), "uninstall");
-  assert.equal(cloudAssistantAction(false, ["shimpz-assistant"], "shimpz-assistant"), "blocked");
-  assert.equal(cloudAssistantAction(true, [], "shimpz-cloudflare"), "blocked");
+  assert.equal(cloudAssistantAction(true, [], "shimpz-cloudflare"), "install");
+  assert.equal(cloudAssistantAction(true, ["shimpz-cloudflare"], "shimpz-cloudflare"), "uninstall");
+  assert.equal(cloudAssistantAction(false, ["shimpz-cloudflare"], "shimpz-cloudflare"), "blocked");
   assert.equal(cloudAssistantAction(true, [], "unknown"), "blocked");
 });
 
@@ -92,36 +91,31 @@ test("rejects stale inventory and mutation completions after a Team switch", () 
 });
 
 test("uses a closed Store/login return enum and never accepts an arbitrary redirect", () => {
-  assert.equal(closedAssistantStoreHref("en", "shimpz-assistant"), "/en/assistants?assistant=shimpz-assistant");
+  assert.equal(closedAssistantStoreHref("en", "shimpz-cloudflare"), "/en/assistants?assistant=shimpz-cloudflare");
   assert.equal(
-    closedAssistantStoreHref("en", "shimpz-cloudflare"),
+    closedAssistantLoginHref("pt", "shimpz-cloudflare"),
+    "/pt/login?return=assistants&assistant=shimpz-cloudflare",
+  );
+  assert.equal(
+    closedAssistantTeamHref("en", "shimpz-cloudflare"),
+    "/en/team?return=assistants&assistant=shimpz-cloudflare",
+  );
+  assert.equal(
+    resolveClosedAssistantReturn("en", "?return=assistants&assistant=shimpz-cloudflare"),
     "/en/assistants?assistant=shimpz-cloudflare",
   );
-  assert.equal(
-    closedAssistantLoginHref("pt", "shimpz-assistant"),
-    "/pt/login?return=assistants&assistant=shimpz-assistant",
-  );
-  assert.equal(
-    closedAssistantTeamHref("en", "shimpz-assistant"),
-    "/en/team?return=assistants&assistant=shimpz-assistant",
-  );
-  assert.equal(
-    resolveClosedAssistantReturn("en", "?return=assistants&assistant=shimpz-assistant"),
-    "/en/assistants?assistant=shimpz-assistant",
-  );
   for (const search of [
-    "?return=https://evil.example&assistant=shimpz-assistant",
+    "?return=https://evil.example&assistant=shimpz-cloudflare",
     "?return=assistants&assistant=unknown",
-    "?return=assistants&assistant=shimpz-assistant&next=https://evil.example",
-    "?return=assistants&return=assistants&assistant=shimpz-assistant",
+    "?return=assistants&assistant=shimpz-cloudflare&next=https://evil.example",
+    "?return=assistants&return=assistants&assistant=shimpz-cloudflare",
   ]) {
     assert.equal(resolveClosedAssistantReturn("en", search), null);
   }
-  assert.equal(requestedAssistantFromSearch("?assistant=shimpz-assistant"), "shimpz-assistant");
   assert.equal(requestedAssistantFromSearch("?assistant=shimpz-cloudflare"), "shimpz-cloudflare");
-  assert.equal(requestedAssistantFromSearch("?assistant=shimpz-assistant&install=true"), "");
+  assert.equal(requestedAssistantFromSearch("?assistant=shimpz-cloudflare&install=true"), "");
   assert.equal(requestedAssistantFromSearch("?assistant=unknown"), "");
   assert.throws(() => closedAssistantStoreHref("en", "unknown"));
-  assert.throws(() => closedAssistantLoginHref("xx", "shimpz-assistant"));
+  assert.throws(() => closedAssistantLoginHref("xx", "shimpz-cloudflare"));
   assert.throws(() => closedAssistantTeamHref("en", "unknown"));
 });

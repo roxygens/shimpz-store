@@ -167,12 +167,12 @@ def test_chat_turn_requires_an_explicit_bounded_assistant_scope():
         {
             "message": "  hello  ",
             "files": ["a" * 32],
-            "assistant_ids": ["shimpz-assistant"],
+            "assistant_ids": ["shimpz-cloudflare"],
         }
     ) == {
         "message": "hello",
         "files": ["a" * 32],
-        "assistant_ids": ["shimpz-assistant"],
+        "assistant_ids": ["shimpz-cloudflare"],
     }
     assert main._chat_turn_payload({"message": "brain only", "files": [], "assistant_ids": []}) == {
         "message": "brain only",
@@ -900,7 +900,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
                     loop,
                     started,
                     (opaque_file,),
-                    ("shimpz-assistant",),
+                    ("shimpz-cloudflare",),
                 ),
             )
         assert started.is_set()
@@ -908,7 +908,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         assert json.loads(requests[0]) == {
             "message": prompt,
             "files": [opaque_file],
-            "assistant_ids": ["shimpz-assistant"],
+            "assistant_ids": ["shimpz-cloudflare"],
         }
         assert prompt.encode() in requests[0]
         assert b"\\u" not in requests[0]

@@ -23,10 +23,10 @@ const file = {
 const usage = { used_bytes: 5, limit_bytes: 100 * 1024 * 1024, remaining_bytes: 100 * 1024 * 1024 - 5 };
 
 test("creates a strict Team-scoped chat turn with an explicit Assistant scope", () => {
-  assert.deepEqual(createTeamChatTurn("  hello  ", [file.id], ["shimpz-assistant"]), {
+  assert.deepEqual(createTeamChatTurn("  hello  ", [file.id], ["shimpz-cloudflare"]), {
     message: "hello",
     files: [file.id],
-    assistant_ids: ["shimpz-assistant"],
+    assistant_ids: ["shimpz-cloudflare"],
   });
   assert.deepEqual(createTeamChatTurn("brain only"), {
     message: "brain only",
@@ -45,7 +45,7 @@ test("creates a strict Team-scoped chat turn with an explicit Assistant scope", 
   }
   for (const assistants of [
     ["../escape"],
-    ["shimpz-assistant", "shimpz-assistant"],
+    ["shimpz-cloudflare", "shimpz-cloudflare"],
     Array.from({ length: 17 }, (_, index) => `assistant-${index}`),
   ]) {
     assert.throws(() => createTeamChatTurn("hello", [], assistants));
@@ -54,16 +54,16 @@ test("creates a strict Team-scoped chat turn with an explicit Assistant scope", 
 
 test("accepts only an exact bounded default Assistant scope", () => {
   assert.deepEqual(
-    parseTeamChatAssistantScope({ assistant_ids: ["shimpz-assistant"] }),
-    ["shimpz-assistant"],
+    parseTeamChatAssistantScope({ assistant_ids: ["shimpz-cloudflare"] }),
+    ["shimpz-cloudflare"],
   );
   assert.deepEqual(parseTeamChatAssistantScope({ assistant_ids: [] }), []);
   for (const inventory of [
     null,
-    { installed: ["shimpz-assistant"] },
-    { assistant_ids: ["shimpz-assistant"], private: true },
+    { installed: ["shimpz-cloudflare"] },
+    { assistant_ids: ["shimpz-cloudflare"], private: true },
     { assistant_ids: ["bad_id"] },
-    { assistant_ids: ["shimpz-assistant", "shimpz-assistant"] },
+    { assistant_ids: ["shimpz-cloudflare", "shimpz-cloudflare"] },
   ]) {
     assert.throws(() => parseTeamChatAssistantScope(inventory));
   }
