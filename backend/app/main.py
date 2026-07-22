@@ -819,7 +819,7 @@ async def oauth_cloudflare_start(request: Request) -> Response:
         return _oauth_failure("start")
     fields = dict(pairs)
     callback_mode = fields.get("callback", "loopback")
-    if callback_mode not in {"loopback", "canary"}:
+    if callback_mode not in {"loopback", "hosted"}:
         return _oauth_failure("start")
     try:
         location = await _run_bounded(

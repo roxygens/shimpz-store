@@ -119,7 +119,7 @@ def test_browser_callback_requires_the_exact_cloudflare_scope_envelope() -> None
     assert broker.calls == []
 
 
-def test_browser_start_forwards_only_the_named_canary_callback() -> None:
+def test_browser_start_forwards_only_the_named_hosted_admin_callback() -> None:
     with _broker() as broker, TestClient(main.app) as client:
         start = client.get(
             "/api/oauth/cloudflare/start",
@@ -127,7 +127,7 @@ def test_browser_start_forwards_only_the_named_canary_callback() -> None:
                 "state": "s" * 43,
                 "code_challenge": "c" * 43,
                 "scope": " ".join(SCOPES),
-                "callback": "canary",
+                "callback": "hosted",
             },
             follow_redirects=False,
         )
@@ -139,7 +139,7 @@ def test_browser_start_forwards_only_the_named_canary_callback() -> None:
             {
                 "local_state": "s" * 43,
                 "local_code_challenge": "c" * 43,
-                "callback_mode": "canary",
+                "callback_mode": "hosted",
                 "scopes": list(SCOPES),
             },
         )

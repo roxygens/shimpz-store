@@ -171,7 +171,7 @@ test("accepts only exact bounded installed-Assistant state from the loopback par
   );
 });
 
-test("accepts bounded installed-Assistant state from the named canary Admin", () => {
+test("accepts bounded installed-Assistant state from the named hosted Admin", () => {
   const parentWindow = {};
   const parentOrigin = "https://local.shimpz.com";
   const ready = {

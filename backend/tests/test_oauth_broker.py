@@ -7,7 +7,7 @@ from urllib.parse import parse_qs, urlencode, urlsplit
 
 import pytest
 from app.oauth_broker import (
-    CANARY_CALLBACK,
+    HOSTED_ADMIN_CALLBACK,
     HOSTED_CALLBACK,
     LOCAL_CALLBACK,
     SCOPES,
@@ -144,20 +144,20 @@ def test_broker_keeps_tokens_out_of_browser_and_claims_once_with_local_pkce() ->
     ]
 
 
-def test_broker_returns_only_the_named_canary_callback() -> None:
+def test_broker_returns_only_the_named_hosted_admin_callback() -> None:
     neuron = _Neuron()
     broker = OAuthBroker(neuron, BrokerLeaseSigner(b"k" * 32), clock=lambda: 100.0)
     broker.start(
         local_state="s" * 43,
         local_code_challenge="c" * 43,
-        callback_mode="canary",
+        callback_mode="hosted",
         scopes=list(SCOPES),
     )
     state = neuron.calls[0][1][0]
 
     callback = broker.callback(state=state, code="authorization-code-private-123456")
 
-    assert callback.startswith(CANARY_CALLBACK + "?")
+    assert callback.startswith(HOSTED_ADMIN_CALLBACK + "?")
     with pytest.raises(OAuthBrokerError):
         broker.start(
             local_state="s" * 43,

@@ -21,8 +21,8 @@ from urllib.parse import parse_qsl, urlencode, urlsplit
 
 NEURON_ORIGIN = "https://neuron.shimpz.com"
 LOCAL_CALLBACK = "http://127.0.0.1:7777/api/oauth/cloudflare/callback"
-CANARY_CALLBACK = "https://local.shimpz.com/api/oauth/cloudflare/callback"
-CALLBACKS = {"loopback": LOCAL_CALLBACK, "canary": CANARY_CALLBACK}
+HOSTED_ADMIN_CALLBACK = "https://local.shimpz.com/api/oauth/cloudflare/callback"
+CALLBACKS = {"loopback": LOCAL_CALLBACK, "hosted": HOSTED_ADMIN_CALLBACK}
 HOSTED_CALLBACK = "https://shimpz.com/api/oauth/cloudflare/callback"
 SCOPES = ("dns.read", "offline_access", "zone.read")
 AUTHORIZATION_TTL_SECONDS = 300
