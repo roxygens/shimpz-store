@@ -3,7 +3,6 @@ name = "shimpz-store-backend"
 version = "0.1.0"
 requires-python = ">=3.11"
 dependencies = [
-    "aiokafka>=0.14",
     "fastapi",
     "python-multipart==0.0.32",
     "uvicorn[standard]",
@@ -14,14 +13,10 @@ dependencies = [
     "httpx",
     "alembic",
     "structlog",
-    "shimpzbus",
 ]
 
 [dependency-groups]
 dev = ["pytest", "ruff"]
-
-[tool.uv.sources]
-shimpzbus = { path = "vendor/shimpzbus" }
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

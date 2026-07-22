@@ -7,11 +7,8 @@ description: >-
 
 # Shimpz Store
 
-This app runs as the `shimpz-store-backend` service. **Orchestrate it by calling its HTTP API** (reuse over
-reimplementation) — the running app already guarantees the functionality and its business rules:
-
-    from shimpzbus import call
-    result = call("shimpz-store-backend", "/your/route", "POST", json_body={})
+This app does not expose a direct Assistant Power. Use the controller-owned Store and Admin flows;
+do not import an internal service bus or bypass account, Team, and installation boundaries.
 
 ## Operations
 

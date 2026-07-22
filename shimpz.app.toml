@@ -6,14 +6,12 @@ summary = ""
 
 [needs]
 # apps   = ["other-app"]       # other Shimpz apps this one needs — installed automatically so you REUSE them
-# calls  = ["other-backend"]   # service APIs to reuse (sync) — wired as declared reach (--calls)
 # egress = ["api.example.com"] # external hosts you may reach — apps have NO internet by default
 
 [provides]
 skill = "shimpz/SKILL.md"       # agent-facing skill this app ships (scaffolded)
 
 # [grants]  — scoped permissions (ONLY ones the platform actually enforces; see docs).
-# consume = ["other-app.topic"]   # READ another app's bus topic (a narrow, audited ACL)
 # publish = "own"                  # may be published ONLY at shimpz-store.grid.shimpz.com
 # dns     = "own"                  # may manage DNS ONLY under shimpz-store.grid.shimpz.com
 
