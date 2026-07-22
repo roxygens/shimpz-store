@@ -1378,7 +1378,7 @@ async def cloud_assistant_uninstall(request: Request, team_id: str, assistant: s
 
 
 # ── the Captain's chat (ADR-0004): forwarded to the team-driver's named exec ops ──────────────
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # well under Cloudflare's 100 MB proxied-body cap; big files → R2 later
+MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # Below Cloudflare's 100 MB proxied-body limit.
 
 
 @app.get("/api/teams/{team_id}/inference")

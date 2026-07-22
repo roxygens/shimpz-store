@@ -10,11 +10,7 @@
   const accent = $derived(
     brand ? `color-mix(in oklab, ${brand} 72%, white)` : "var(--color-cyan)",
   );
-  const secondary = $derived(
-    icon === "edge" || icon === "object-storage"
-      ? "var(--color-magenta)"
-      : "var(--color-cyan)",
-  );
+  const secondary = "var(--color-cyan)";
 </script>
 
 <span
@@ -27,26 +23,10 @@
     <path class="rail" d="M8 23v-7l8-8h8M56 41v7l-8 8h-8" />
     <path class="tick" d="M8 28v8M56 28v8" />
 
-    {#if icon === "edge"}
-      <path class="glyph" d="M15 39h33l5-6-5-8-8-1-5-7-10 2-4 7-6 2-4 6Z" />
-      <path class="accent" d="M23 44 41 28M31 44l10-9" />
-      <path class="node" d="M21 39h4v4h-4zM40 26h4v4h-4zM39 34h4v4h-4z" />
-    {:else if icon === "database"}
+    {#if icon === "database"}
       <path class="glyph" d="m18 19 6-4h16l6 4v26l-6 4H24l-6-4Z" />
       <path class="accent" d="m18 19 6 4h16l6-4M18 32l6 4h16l6-4M18 43l6 4h16l6-4" />
       <path class="node" d="M24 27h4v4h-4zM36 39h4v4h-4z" />
-    {:else if icon === "event-bus"}
-      <path class="glyph" d="M16 18h12v12H16zM36 34h12v12H36z" />
-      <path class="accent" d="M28 24h10l5 5M36 40H26l-5-5" />
-      <path class="node" d="m39 25 5 5-5 5zM25 30l-5 5 5 5z" />
-    {:else if icon === "object-storage"}
-      <path class="glyph" d="m32 14 17 9v19l-17 9-17-9V23Z" />
-      <path class="accent" d="m15 23 17 9 17-9M32 32v19M23 19l17 9" />
-      <path class="node" d="M29 29h6v6h-6z" />
-    {:else}
-      <path class="glyph" d="m32 14 14 8v18l-14 9-14-9V22Z" />
-      <path class="accent" d="m32 20-7 7 7 5 7-5-7-7Zm0 12v10M25 27l-3 10M39 27l3 10" />
-      <path class="node" d="M29 29h6v6h-6zM19 36h5v5h-5zM40 36h5v5h-5z" />
     {/if}
 
     <path class="status" d="M13 52h9" />

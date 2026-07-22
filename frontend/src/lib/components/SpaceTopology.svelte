@@ -27,8 +27,6 @@
     </div>
     <ul aria-label={tr("topology_drivers", lang)}>
       <li>PostgreSQL</li>
-      <li>R2</li>
-      <li>Event Bus</li>
     </ul>
   </section>
 
