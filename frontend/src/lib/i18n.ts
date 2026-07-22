@@ -245,7 +245,6 @@ const D: Dict = {
   assistants_install_local: { en: "Install in local Admin", pt: "Instalar no Admin local" },
   assistants_installed_local: { en: "Installed", pt: "Instalado" },
   assistants_uninstall_local: { en: "Uninstall", pt: "Desinstalar" },
-  assistants_view_details: { en: "View details", pt: "Ver detalhes" },
   assistants_back_store: { en: "All Assistants", pt: "Todos os Assistants" },
   assistants_detail_about: { en: "About this Assistant", pt: "Sobre este Assistant" },
   assistants_detail_powers: { en: "Declared Powers", pt: "Powers declarados" },

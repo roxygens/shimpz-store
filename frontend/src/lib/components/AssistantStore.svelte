@@ -591,7 +591,7 @@
           href={u.assistant(lang, assistant)}
           target={embedded ? "_blank" : undefined}
           rel={embedded ? "noopener noreferrer" : undefined}
-          aria-label={`${assistant.name} — ${tr("assistants_view_details", lang)}`}>
+          aria-label={assistant.name}>
           <div class="assistant-heading">
             <AssistantIcon size={64} />
             <div class="assistant-identity">
@@ -605,7 +605,6 @@
             {/if}
           </div>
           <p class="assistant-summary">{t(assistant.summary, lang)}</p>
-          <span class="details-label">{tr("assistants_view_details", lang)} <b aria-hidden="true">→</b></span>
         </a>
 
         <div class="assistant-action">
@@ -679,6 +678,7 @@
     margin-top: 1.25rem;
   }
   .assistant-card {
+    position: relative;
     display: flex;
     min-height: 17.5rem;
     overflow: hidden;
@@ -741,9 +741,26 @@
     -webkit-line-clamp: 2;
     line-clamp: 2;
   }
-  .details-label { margin-top: auto; padding-top: 1.1rem; color: var(--color-cyan); font-family: var(--font-mono); font-size: 0.62rem; font-weight: 600; text-transform: uppercase; }
-  .details-label b { color: var(--color-magenta); }
-  .assistant-action { border-top: 1px solid var(--color-border); padding: 0.75rem 1rem 1rem; }
+  .assistant-action {
+    position: absolute;
+    z-index: 1;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    border-top: 1px solid var(--color-border);
+    padding: 0.75rem 1rem 1rem;
+    background: linear-gradient(180deg, color-mix(in oklab, var(--color-card) 92%, transparent), var(--color-card));
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(0.4rem);
+    transition: opacity 0.16s ease, transform 0.16s var(--ease-shimpz);
+  }
+  .assistant-card:hover .assistant-action,
+  .assistant-card:focus-within .assistant-action {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translateY(0);
+  }
   .install-action { width: 100%; min-height: 2.5rem; border: 0; padding: 0.6rem 0.75rem; cursor: pointer; font-size: 0.62rem; }
   .install-status { margin: 0.55rem 0 0; color: var(--color-green); font-size: 0.68rem; line-height: 1.45; }
   .install-status.error { color: var(--color-danger); }
@@ -838,8 +855,17 @@
     .assistant-card { min-height: 16.5rem; }
     .context-error { align-items: stretch; flex-direction: column; }
   }
+  @media (hover: none) {
+    .assistant-action {
+      opacity: 1;
+      pointer-events: auto;
+      transform: translateY(0);
+    }
+    .assistant-details { padding-bottom: 4.75rem; }
+  }
   @media (prefers-reduced-motion: reduce) {
     .assistant-card { transition: none; }
     .assistant-card:hover, .assistant-card:focus-within { transform: none; }
+    .assistant-action { transition: none; }
   }
 </style>
