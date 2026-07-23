@@ -141,7 +141,7 @@ def test_public_http_chat_endpoint_is_absent():
 
 
 def test_team_files_are_opaque_typed_and_deletable_without_paths():
-    origin = next(iter(main.ASSISTANT_MUTATION_ALLOWED_ORIGINS))
+    origin = next(iter(config.ASSISTANT_MUTATION_ALLOWED_ORIGINS))
     with _control_plane() as calls, _authenticated_client() as client:
         listed = client.get("/api/teams/team_one/files")
         uploaded = client.post(
@@ -201,7 +201,7 @@ def test_team_file_mutations_reject_untrusted_origins_and_ids_before_the_driver(
         )
         deletion = client.delete(
             "/api/teams/team_one/files/not-an-opaque-id",
-            headers={"Origin": next(iter(main.ASSISTANT_MUTATION_ALLOWED_ORIGINS))},
+            headers={"Origin": next(iter(config.ASSISTANT_MUTATION_ALLOWED_ORIGINS))},
         )
 
     assert upload.status_code == 403

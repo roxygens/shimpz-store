@@ -25,6 +25,8 @@ from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from app import config, team_driver_contract
+from app.access import mutation_origin_allowed as _assistant_mutation_origin_allowed
+from app.access import private_json as _private_json
 from app.authn import (
     EXECUTOR as _AUTH_EXECUTOR,
 )
@@ -48,7 +50,6 @@ from app.concurrency import (
 )
 from app.config import (
     ACCOUNT_COOKIE,
-    ASSISTANT_MUTATION_ALLOWED_ORIGINS,
     CHAT_WS_SUBPROTOCOL,
     MAX_CHAT_ASSISTANTS,
     MAX_CHAT_ERROR_DETAIL_CHARS,
@@ -60,7 +61,6 @@ from app.config import (
     MAX_UPSTREAM_STREAM_BYTES,
     MAX_UPSTREAM_STREAM_LINE_BYTES,
     MAX_WS_FRAME_BYTES,
-    PRIVATE_NO_STORE_HEADERS,
     RELEASED_CLOUD_ASSISTANTS,
     STOP_QUEUE_MAX,
     STOP_WORKER_THREADS,
@@ -139,15 +139,6 @@ _HUMAN_REQUEST_TYPES = frozenset({"str", "int", "float", "bool", "choice", "choi
 def _ws_origin_allowed(origin: str | None) -> bool:
     canonical = _canonical_origin(origin)
     return canonical is not None and canonical in WS_ALLOWED_ORIGINS
-
-
-def _assistant_mutation_origin_allowed(origin: str | None) -> bool:
-    canonical = _canonical_origin(origin)
-    return canonical is not None and canonical in ASSISTANT_MUTATION_ALLOWED_ORIGINS
-
-
-def _private_json(content: dict, status_code: int = 200) -> JSONResponse:
-    return JSONResponse(content, status_code=status_code, headers=PRIVATE_NO_STORE_HEADERS)
 
 
 _canonical_team_id = team_driver_contract.canonical_team_id
