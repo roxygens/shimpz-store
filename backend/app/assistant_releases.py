@@ -36,8 +36,42 @@ _GIT_COMMIT_RE = re.compile(r"^[0-9a-f]{40}$")
 # notification copy was reviewed with the exact Assistant source while keeping
 # executable identity out of the public feed.
 _CANONICAL_RELEASE_SOURCE_COMMITS = {
-    "shimpz-cloudflare": "12ece9c6e6b445eca122ab2b3447d8992fc5c0db",
+    "shimpz-cloudflare": "d6f074aa44ac8752dc97f64982765b801f0e0af3",
 }
+
+_SHIMPZ_CLOUDFLARE_0_2_0_CHANGELOG = """# Changelog
+
+## 0.2.0 - 2026-07-23
+
+- Author both read-only Powers with `@power`, `field`, typed SDK output contracts, and `ctx.accounts`.
+- Replace the persistent Assistant server and proxy RPC with the one-shot Shimpz SDK runner.
+- Bind image builds to the reviewed SDK source tree carried by the umbrella repository.
+
+## 0.1.5 - 2026-07-21
+
+- Reassemble bounded chunked Cloudflare responses before strict JSON validation.
+
+## 0.1.4 - 2026-07-21
+
+- Request uncompressed Cloudflare API responses so the strict response contract can validate zone and DNS results.
+
+## 0.1.3 - 2026-07-21
+
+- Make the Python 3.14 Ruff format and security contract self-contained for isolated builds.
+
+## 0.1.2 - 2026-07-21
+
+- Synchronize frozen release metadata and enforce the canonical Ruff contract.
+
+## 0.1.1 - 2026-07-21
+
+- Align the immutable Genesis and Help package root with the controller's standard Assistant contract.
+
+## 0.1.0 - 2026-07-21
+
+- Add OAuth-backed, read-only Cloudflare zone listing.
+- Add bounded DNS record listing for an exact zone.
+"""
 
 _SHIMPZ_CLOUDFLARE_0_1_5_CHANGELOG = """# Changelog
 
@@ -135,6 +169,13 @@ _CANONICAL_RELEASES = (
         "headline": "Shimpz Cloudflare 0.1.5 supports bounded chunked responses",
         "changelog": _SHIMPZ_CLOUDFLARE_0_1_5_CHANGELOG,
         "published_at": "2026-07-22T01:35:00Z",
+    },
+    {
+        "assistant_id": "shimpz-cloudflare",
+        "sequence": 4,
+        "headline": "Shimpz Cloudflare 0.2.0 now runs on the Shimpz SDK",
+        "changelog": _SHIMPZ_CLOUDFLARE_0_2_0_CHANGELOG,
+        "published_at": "2026-07-23T09:40:00Z",
     },
 )
 

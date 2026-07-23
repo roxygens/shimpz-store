@@ -45,15 +45,17 @@ def test_release_feed_is_closed_bounded_notification_metadata():
 
 def test_release_feed_binds_only_the_cloudflare_source():
     assert releases._CANONICAL_RELEASE_SOURCE_COMMITS == {
-        "shimpz-cloudflare": "12ece9c6e6b445eca122ab2b3447d8992fc5c0db",
+        "shimpz-cloudflare": "d6f074aa44ac8752dc97f64982765b801f0e0af3",
     }
     assert {release["assistant_id"] for release in releases._CANONICAL_RELEASES} == {"shimpz-cloudflare"}
 
 
 def test_release_feed_publishes_the_read_only_cloudflare_assistant():
     latest = [release for release in releases._CANONICAL_RELEASES if release["assistant_id"] == "shimpz-cloudflare"][-1]
-    assert latest["sequence"] == 3
-    assert latest["headline"] == "Shimpz Cloudflare 0.1.5 supports bounded chunked responses"
+    assert latest["sequence"] == 4
+    assert latest["headline"] == "Shimpz Cloudflare 0.2.0 now runs on the Shimpz SDK"
+    assert "typed SDK output contracts" in latest["changelog"]
+    assert "one-shot Shimpz SDK runner" in latest["changelog"]
     assert "bounded chunked Cloudflare responses" in latest["changelog"]
     assert "uncompressed Cloudflare API responses" in latest["changelog"]
     assert "self-contained for isolated builds" in latest["changelog"]
