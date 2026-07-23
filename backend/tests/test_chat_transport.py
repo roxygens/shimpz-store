@@ -55,6 +55,48 @@ def _done(
     }
 
 
+def _input_challenge(
+    *, team_id: str = TEST_TEAM_ID, challenge_id: str = "a" * 32
+) -> dict:
+    return {
+        "type": "input-required",
+        "status": "input-required",
+        "team_id": team_id,
+        "turn_id": challenge_id,
+        "challenge_id": challenge_id,
+        "request": {
+            "type": "choice",
+            "title": "Choose zone",
+            "summary": "Choose the target zone.",
+            "docs": None,
+            "options": ["example.com", "example.net"],
+        },
+    }
+
+
+def _approval_challenge(
+    *, team_id: str = TEST_TEAM_ID, challenge_id: str = "b" * 32
+) -> dict:
+    return {
+        "type": "approval-required",
+        "status": "approval-required",
+        "team_id": team_id,
+        "turn_id": challenge_id,
+        "challenge_id": challenge_id,
+        "requirements": [
+            {
+                "assistant_id": "shimpz-cloudflare",
+                "assistant_name": "Shimpz Cloudflare",
+                "power_id": "list-zones",
+                "title": "Publish zones",
+                "summary": "Publish the current zones?",
+                "docs": None,
+                "approval": "once",
+            }
+        ],
+    }
+
+
 def _websocket_disconnect_code(
     client: TestClient,
     origin: str | None,
@@ -313,6 +355,76 @@ def test_websocket_rejects_retired_answer_frames():
         }
 
     asyncio.run(scenario())
+
+
+def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
+    monkeypatch,
+):
+    challenge_id = "a" * 32
+    calls: list[tuple] = []
+
+    def completed_call(base, method, path, payload, headers):
+        calls.append((base, method, path, payload, headers))
+        return 200, {
+            "team_id": TEST_TEAM_ID,
+            "team_name": "Marketing",
+            "reply": "Completed.",
+        }
+
+    monkeypatch.setattr(main, "_call", completed_call)
+
+    async def scenario() -> None:
+        websocket, sent = _websocket("{}")
+        await websocket.accept()
+        state = {
+            "turns": set(),
+            "starts": {},
+            "dispatches": {},
+            "leases": {},
+            "deliveries": {},
+            "stop_requested": False,
+            "pending_challenge_id": challenge_id,
+            "pending_challenge_type": "input",
+        }
+        await _ws_dispatch(
+            websocket,
+            TEST_TEAM_ID,
+            {"X-Shimpz-Account": "account-token"},
+            {
+                "type": "input-submit",
+                "challenge_id": challenge_id,
+                "answer": "example.com",
+            },
+            state,
+        )
+        await asyncio.gather(*tuple(state["turns"]))
+        await asyncio.sleep(0)
+        events = [
+            json.loads(message["text"])
+            for message in sent
+            if message["type"] == "websocket.send"
+        ]
+        assert events == [
+            {
+                "type": "done",
+                "team_id": TEST_TEAM_ID,
+                "team_name": "Marketing",
+                "reply": "Completed.",
+            }
+        ]
+        assert state["pending_challenge_id"] is None
+        assert state["pending_challenge_type"] is None
+
+    asyncio.run(scenario())
+    assert calls == [
+        (
+            main.TEAMDRIVER_URL,
+            "POST",
+            f"/v1/teams/{TEST_TEAM_ID}/chat/input",
+            {"challenge_id": challenge_id, "answer": "example.com"},
+            {"X-Shimpz-Account": "account-token"},
+        )
+    ]
 
 
 def test_websocket_returns_typed_429_when_global_turn_queue_is_full():
@@ -647,7 +759,8 @@ def test_public_auth_json_is_bounded_before_any_upstream_hop():
 def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
     forwarded = []
 
-    async def bounded_call(executor, base, method, path, payload, *, extra=None):
+    async def bounded_call(*args, extra=None):
+        executor, base, method, path, payload = args
         forwarded.append((executor, base, method, path, payload, extra))
         return 400, {"error": "rejected"}
 
@@ -705,7 +818,12 @@ def test_upstream_http_errors_and_unterminated_terminal_lines_are_redacted():
 @pytest.mark.parametrize(
     ("event", "expected"),
     [
-        (_done("complete", team_name="Marketing"), _done("complete", team_name="Marketing")),
+        (
+            _done("complete", team_name="Marketing"),
+            _done("complete", team_name="Marketing"),
+        ),
+        (_input_challenge(), _input_challenge()),
+        (_approval_challenge(), _approval_challenge()),
         (
             {"type": "error", "status": 504, "detail": "provider timed out"},
             {"type": "error", "status": 504, "detail": "chat service timed out"},
@@ -724,6 +842,21 @@ def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict,
         {"type": "tool", "label": "shell"},
         {"type": "ask", "text": "approve?"},
         {"type": "answered", "answered": True},
+        _input_challenge(team_id="another_team"),
+        {
+            **_input_challenge(),
+            "request": {**_input_challenge()["request"], "type": "unknown"},
+        },
+        {**_approval_challenge(), "requirements": []},
+        {
+            **_approval_challenge(),
+            "requirements": [
+                {
+                    **_approval_challenge()["requirements"][0],
+                    "summary": "private\x00value",
+                }
+            ],
+        },
         {**_done(), "extra": True},
         {"type": "done", "reply": "hello"},
         _done("hello", team_id="another_team"),

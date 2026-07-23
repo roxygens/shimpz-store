@@ -4,7 +4,10 @@ import test from "node:test";
 
 import {
   CHAT_WS_SUBPROTOCOL,
+  createApprovalSubmission,
+  createInputSubmission,
   createTeamChatTurn,
+  parseChatEvent,
   parseTeamChatAssistantScope,
   parseTeamStorage,
   parseTeamUpload,
@@ -100,10 +103,82 @@ test("accepts only exact bounded terminal events from the authoritative Team", (
 });
 
 test("uses the single versioned Team chat WebSocket contract", () => {
-  assert.equal(CHAT_WS_SUBPROTOCOL, "shimpz.chat.v2");
+  assert.equal(CHAT_WS_SUBPROTOCOL, "shimpz.chat.v3");
   assert.equal(teamChatWebSocketPath("team_one"), "/api/teams/team_one/chat/ws");
   for (const teamId of ["", "../escape", "team-one", "A"]) {
     assert.throws(() => teamChatWebSocketPath(teamId));
+  }
+});
+
+test("accepts strict human challenges and creates exact submit frames", () => {
+  const input = {
+    type: "input-required",
+    status: "input-required",
+    team_id: "marketing",
+    turn_id: "a".repeat(32),
+    challenge_id: "a".repeat(32),
+    request: {
+      type: "choice",
+      title: "Choose zone",
+      summary: "Choose the target zone.",
+      docs: null,
+      options: ["example.com", "example.net"],
+    },
+  };
+  const approval = {
+    type: "approval-required",
+    status: "approval-required",
+    team_id: "marketing",
+    turn_id: "b".repeat(32),
+    challenge_id: "b".repeat(32),
+    requirements: [{
+      assistant_id: "shimpz-cloudflare",
+      assistant_name: "Shimpz Cloudflare",
+      power_id: "list-zones",
+      title: "Publish zones",
+      summary: "Publish the current zones?",
+      docs: null,
+      approval: "once",
+    }],
+  };
+  assert.deepEqual(parseChatEvent(input, "marketing", "Marketing"), input);
+  assert.deepEqual(parseChatEvent(approval, "marketing", "Marketing"), approval);
+  assert.deepEqual(
+    parseChatEvent(
+      { type: "done", team_id: "marketing", team_name: "Marketing", reply: "complete" },
+      "marketing",
+      "Marketing",
+    ),
+    { type: "done", team_id: "marketing", team_name: "Marketing", reply: "complete" },
+  );
+  assert.deepEqual(createInputSubmission(input.challenge_id, "example.com"), {
+    type: "input-submit",
+    challenge_id: input.challenge_id,
+    answer: "example.com",
+  });
+  assert.deepEqual(createApprovalSubmission(approval.challenge_id), {
+    type: "approval-submit",
+    challenge_id: approval.challenge_id,
+    approved: true,
+  });
+  for (const forged of [
+    { ...input, team_id: "sales" },
+    { ...input, request: null },
+    { ...input, request: { ...input.request, type: "unknown" } },
+    { ...input, request: { ...input.request, options: ["same", "same"] } },
+    { ...input, request: { ...input.request, title: " invalid" } },
+    { ...approval, requirements: [] },
+    {
+      ...approval,
+      requirements: [{ ...approval.requirements[0], approval: "never" }],
+    },
+    { ...approval, trace: [] },
+  ]) {
+    assert.throws(() => parseChatEvent(forged, "marketing", "Marketing"));
+  }
+  for (const challengeId of [null, "not-a-challenge"]) {
+    assert.throws(() => createInputSubmission(challengeId, "answer"));
+    assert.throws(() => createApprovalSubmission(challengeId));
   }
 });
 

@@ -4,11 +4,13 @@
   import type { Locale } from "$lib/catalog";
   import {
     CHAT_WS_SUBPROTOCOL,
+    createApprovalSubmission,
+    createInputSubmission,
     createTeamChatTurn,
+    parseChatEvent,
     parseTeamChatAssistantScope,
     parseTeamStorage,
     parseTeamUpload,
-    parseChatTerminalEvent,
     teamChatReconnectDelay,
     teamChatWebSocketPath,
   } from "$lib/teamChat.js";
@@ -50,6 +52,9 @@
   let busy = $state(false);
   let stopping = $state(false);
   let status = $state("");
+  let humanChallenge = $state<any>(null);
+  let humanAnswer = $state("");
+  let humanChoices = $state<string[]>([]);
   let uploading = $state(false);
   let thread = $state<HTMLElement | null>(null);
   let fileInput = $state<HTMLInputElement | null>(null);
@@ -171,7 +176,7 @@
       if (ws !== sock || selected !== team_id) return;
       let m;
       try {
-        m = parseChatTerminalEvent(JSON.parse(ev.data), team_id, teamName);
+        m = parseChatEvent(JSON.parse(ev.data), team_id, teamName);
       } catch {
         busy = false;
         stopping = false;
@@ -184,11 +189,21 @@
         return;
       }
       stopping = false;
-      if (m.type === "done") {
+      if (m.type === "input-required" || m.type === "approval-required") {
+        humanChallenge = m;
+        humanAnswer = m.type === "input-required" && m.request.type === "choice"
+          ? (m.request.options[0] ?? "")
+          : "";
+        humanChoices = [];
+        busy = false;
+        status = "";
+      } else if (m.type === "done") {
+        humanChallenge = null;
         messages.push({ role: "assistant", team_name: m.team_name, text: m.reply });
         busy = false;
         status = "";
       } else if (m.type === "stopped") {
+        humanChallenge = null;
         busy = false;
         status = "";
       } else if (m.type === "error") {
@@ -211,6 +226,59 @@
     }
   }
 
+  function toggleHumanChoice(option: string) {
+    humanChoices = humanChoices.includes(option)
+      ? humanChoices.filter((item) => item !== option)
+      : [...humanChoices, option];
+  }
+
+  function inputSubmissionAnswer() {
+    const requestType = humanChallenge?.request?.type;
+    if (requestType === "int") {
+      const value = Number(humanAnswer);
+      if (!Number.isSafeInteger(value) || humanAnswer.trim() === "") throw new TypeError("invalid integer");
+      return value;
+    }
+    if (requestType === "float") {
+      const value = Number(humanAnswer);
+      if (!Number.isFinite(value) || humanAnswer.trim() === "") throw new TypeError("invalid number");
+      return value;
+    }
+    if (requestType === "bool") {
+      if (!["true", "false"].includes(humanAnswer)) throw new TypeError("invalid boolean");
+      return humanAnswer === "true";
+    }
+    if (requestType === "choices") return humanChoices;
+    return humanAnswer;
+  }
+
+  function humanSubmissionReady() {
+    if (!humanChallenge || busy || stopping) return false;
+    if (humanChallenge.type === "approval-required") return true;
+    if (humanChallenge.request.type === "choices") return humanChoices.length > 0;
+    return humanAnswer.trim() !== "";
+  }
+
+  function submitHumanChallenge() {
+    if (!wsReady || !ws || !humanSubmissionReady()) return;
+    try {
+      const frame = humanChallenge.type === "approval-required"
+        ? createApprovalSubmission(humanChallenge.challenge_id)
+        : createInputSubmission(humanChallenge.challenge_id, inputSubmissionAnswer());
+      busy = true;
+      status = lang === "pt" ? "Continuando…" : "Continuing…";
+      ws.send(JSON.stringify(frame));
+    } catch {
+      messages.push({
+        role: "system",
+        tone: "error",
+        text: lang === "pt" ? "Resposta inválida." : "Invalid answer.",
+      });
+      busy = false;
+      status = "";
+    }
+  }
+
   let providerChoice = $state("openai");
   let modelChoice = $state(defaultModelFor("openai"));
   let loadedProvider = $state("openai");
@@ -222,7 +290,7 @@
   const inferenceHasChanges = $derived(
     providerChoice !== loadedProvider || modelChoice.trim() !== loadedModel,
   );
-  const runtimeBusy = $derived(busy || inferenceBusy);
+  const runtimeBusy = $derived(busy || inferenceBusy || Boolean(humanChallenge));
 
   function chooseProvider(event: Event) {
     providerChoice = (event.currentTarget as HTMLSelectElement).value;
@@ -256,6 +324,9 @@
     storageUsed = 0;
     storageRemaining = storageLimit;
     storageError = "";
+    humanChallenge = null;
+    humanAnswer = "";
+    humanChoices = [];
     if (!team_id) return;
     localStorage.setItem(SEL_KEY, team_id);
     const teamName = teams.find((team) => team.team_id === team_id)?.team_name ?? team_id;
@@ -720,6 +791,69 @@
           {#if busy && status}<p class="turn-status"><span class="loading-pulse" aria-hidden="true"></span>{status}</p>{/if}
           {#if messages.length === 0 && !busy}<div class="conversation-empty"><HudIcon name="chat" size={30} /><p>{tr("chat_empty", lang)}</p></div>{/if}
         </div>
+        {#if humanChallenge}
+          <section class="human-challenge" aria-live="polite" aria-busy={busy}>
+            {#if humanChallenge.type === "approval-required"}
+              {@const requirement = humanChallenge.requirements[0]}
+              <p class="kicker">{requirement.assistant_name} · {requirement.power_id}</p>
+              <h3>{requirement.title}</h3>
+              <p>{requirement.summary}</p>
+              {#if requirement.docs}<small>{requirement.docs}</small>{/if}
+            {:else}
+              <p class="kicker">{lang === "pt" ? "Entrada necessária" : "Input required"}</p>
+              <h3>{humanChallenge.request.title}</h3>
+              <p>{humanChallenge.request.summary}</p>
+              {#if humanChallenge.request.type === "choice"}
+                <select class="field" bind:value={humanAnswer} disabled={busy}>
+                  {#each humanChallenge.request.options as option (option)}
+                    <option value={option}>{option}</option>
+                  {/each}
+                </select>
+              {:else if humanChallenge.request.type === "choices"}
+                <div class="challenge-options">
+                  {#each humanChallenge.request.options as option (option)}
+                    <label>
+                      <input
+                        type="checkbox"
+                        checked={humanChoices.includes(option)}
+                        disabled={busy}
+                        onchange={() => toggleHumanChoice(option)} />
+                      <span>{option}</span>
+                    </label>
+                  {/each}
+                </div>
+              {:else if humanChallenge.request.type === "bool"}
+                <select class="field" bind:value={humanAnswer} disabled={busy}>
+                  <option value="">{lang === "pt" ? "Selecione" : "Select"}</option>
+                  <option value="true">{lang === "pt" ? "Sim" : "Yes"}</option>
+                  <option value="false">{lang === "pt" ? "Não" : "No"}</option>
+                </select>
+              {:else}
+                <input
+                  class="field"
+                  type={humanChallenge.request.type === "str" ? "text" : "number"}
+                  step={humanChallenge.request.type === "int" ? "1" : "any"}
+                  bind:value={humanAnswer}
+                  disabled={busy} />
+              {/if}
+              {#if humanChallenge.request.docs}<small>{humanChallenge.request.docs}</small>{/if}
+            {/if}
+            <div class="challenge-actions">
+              <button class="btn-ghost" type="button" disabled={stopping} onclick={stopTurn}>
+                {tr("chat_stop", lang)}
+              </button>
+              <button
+                class="btn-primary"
+                type="button"
+                disabled={!humanSubmissionReady()}
+                onclick={submitHumanChallenge}>
+                {humanChallenge.type === "approval-required"
+                  ? (lang === "pt" ? "Aprovar" : "Approve")
+                  : (lang === "pt" ? "Continuar" : "Continue")}
+              </button>
+            </div>
+          </section>
+        {/if}
         <div class="composer">
           {#if attachedFiles.length}
             <div class="attachment-tray" aria-label={tr("chat_files_selected", lang)}>
@@ -1110,6 +1244,20 @@
   .attachment-tray button:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; }
 
   .composer-input { max-height: 12rem; min-height: 3rem; resize: vertical; line-height: 1.45; }
+
+  .human-challenge {
+    display: grid;
+    gap: .65rem;
+    padding: 1rem 1.1rem;
+    background: color-mix(in oklab, #f2cf69 7%, #050505);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, #f2cf69 42%, var(--color-border));
+  }
+  .human-challenge h3,
+  .human-challenge p { margin: 0; }
+  .human-challenge small { color: var(--color-muted); overflow-wrap: anywhere; }
+  .challenge-options { display: grid; gap: .45rem; }
+  .challenge-options label { display: flex; align-items: center; gap: .55rem; }
+  .challenge-actions { display: flex; justify-content: flex-end; gap: .6rem; }
   .composer-icon { width: 2.9rem; min-height: 3rem; padding: 0; }
   .composer-action { min-height: 3rem; padding-inline: 1rem; font-size: 0.7rem; }
 

@@ -22,6 +22,7 @@ import re
 import threading
 from collections import deque
 from dataclasses import dataclass, field
+from http import HTTPStatus
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -363,7 +364,9 @@ MAX_CHAT_ASSISTANTS = team_driver_contract.MAX_CHAT_ASSISTANTS
 MAX_CHAT_REPLY_CHARS = 60_000
 MAX_CHAT_ERROR_DETAIL_CHARS = 800
 TERMINAL_CONTRACT_ERROR = "team-driver stream violated the terminal event contract"
-CHAT_WS_SUBPROTOCOL = "shimpz.chat.v2"
+CHAT_WS_SUBPROTOCOL = "shimpz.chat.v3"
+_CHALLENGE_ID_RE = re.compile(r"[0-9a-f]{32}\Z")
+_HUMAN_REQUEST_TYPES = frozenset({"str", "int", "float", "bool", "choice", "choices"})
 
 
 def _ws_origin_allowed(origin: str | None) -> bool:
@@ -1576,17 +1579,170 @@ def _validated_error_event(value: dict) -> dict | None:
     return _public_chat_error_event(status)
 
 
+def _bounded_public_text(
+    value: object, maximum: int, *, optional: bool = False
+) -> str | None:
+    if optional and value is None:
+        return None
+    if (
+        not isinstance(value, str)
+        or not value
+        or value != value.strip()
+        or len(value) > maximum
+        or re.search(r"[\x00-\x1f\x7f]", value) is not None
+    ):
+        return None
+    return value
+
+
+def _validated_input_challenge(value: dict, expected_team_id: str) -> dict | None:
+    if set(value) != {
+        "type",
+        "status",
+        "team_id",
+        "turn_id",
+        "challenge_id",
+        "request",
+    }:
+        return None
+    challenge_id = value["challenge_id"]
+    request = value["request"]
+    team_id = _canonical_team_id(value["team_id"])
+    if (
+        value["type"] != "input-required"
+        or value["status"] != "input-required"
+        or team_id != expected_team_id
+        or not isinstance(challenge_id, str)
+        or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None
+        or value["turn_id"] != challenge_id
+        or not isinstance(request, dict)
+        or set(request) != {"type", "title", "summary", "docs", "options"}
+    ):
+        return None
+    request_type = request["type"]
+    title = _bounded_public_text(request["title"], 80)
+    summary = _bounded_public_text(request["summary"], 240)
+    docs = _bounded_public_text(request["docs"], 2048, optional=True)
+    options = request["options"]
+    if (
+        not isinstance(request_type, str)
+        or request_type not in _HUMAN_REQUEST_TYPES
+        or title is None
+        or summary is None
+        or (request["docs"] is not None and docs is None)
+        or not isinstance(options, list)
+        or len(options) > 64
+        or any(_bounded_public_text(option, 200) is None for option in options)
+        or len(options) != len(set(options))
+        or (request_type in {"choice", "choices"}) != bool(options)
+    ):
+        return None
+    return {
+        "type": "input-required",
+        "status": "input-required",
+        "team_id": team_id,
+        "turn_id": challenge_id,
+        "challenge_id": challenge_id,
+        "request": {
+            "type": request_type,
+            "title": title,
+            "summary": summary,
+            "docs": docs,
+            "options": list(options),
+        },
+    }
+
+
+def _validated_approval_challenge(value: dict, expected_team_id: str) -> dict | None:
+    if set(value) != {
+        "type",
+        "status",
+        "team_id",
+        "turn_id",
+        "challenge_id",
+        "requirements",
+    }:
+        return None
+    challenge_id = value["challenge_id"]
+    requirements = value["requirements"]
+    team_id = _canonical_team_id(value["team_id"])
+    if (
+        value["type"] != "approval-required"
+        or value["status"] != "approval-required"
+        or team_id != expected_team_id
+        or not isinstance(challenge_id, str)
+        or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None
+        or value["turn_id"] != challenge_id
+        or not isinstance(requirements, list)
+        or len(requirements) != 1
+        or not isinstance(requirements[0], dict)
+    ):
+        return None
+    requirement = requirements[0]
+    if set(requirement) != {
+        "assistant_id",
+        "assistant_name",
+        "power_id",
+        "title",
+        "summary",
+        "docs",
+        "approval",
+    }:
+        return None
+    assistant_id = _canonical_assistant_id(requirement["assistant_id"])
+    power_id = _canonical_assistant_id(requirement["power_id"])
+    assistant_name = _bounded_public_text(requirement["assistant_name"], 80)
+    title = _bounded_public_text(requirement["title"], 80)
+    summary = _bounded_public_text(requirement["summary"], 240)
+    docs = _bounded_public_text(requirement["docs"], 2048, optional=True)
+    if (
+        assistant_id is None
+        or power_id is None
+        or assistant_name is None
+        or title is None
+        or summary is None
+        or (requirement["docs"] is not None and docs is None)
+        or not isinstance(requirement["approval"], str)
+        or requirement["approval"] not in {"always", "once"}
+    ):
+        return None
+    return {
+        "type": "approval-required",
+        "status": "approval-required",
+        "team_id": team_id,
+        "turn_id": challenge_id,
+        "challenge_id": challenge_id,
+        "requirements": [
+            {
+                "assistant_id": assistant_id,
+                "assistant_name": assistant_name,
+                "power_id": power_id,
+                "title": title,
+                "summary": summary,
+                "docs": docs,
+                "approval": requirement["approval"],
+            }
+        ],
+    }
+
+
 def _validated_terminal_event(value: object, expected_team_id: str) -> dict | None:
     """Project an untrusted controller value onto the only browser-visible chat events."""
     if not isinstance(value, dict):
         return None
-    if value.get("type") == "done":
-        return _validated_done_event(value, expected_team_id)
-    if value.get("type") == "error":
-        return _validated_error_event(value)
-    if value.get("type") == "stopped" and set(value) == {"type"}:
-        return {"type": "stopped"}
-    return None
+    event_type = value.get("type")
+    terminal = None
+    if event_type == "done":
+        terminal = _validated_done_event(value, expected_team_id)
+    elif event_type == "error":
+        terminal = _validated_error_event(value)
+    elif event_type == "input-required":
+        terminal = _validated_input_challenge(value, expected_team_id)
+    elif event_type == "approval-required":
+        terminal = _validated_approval_challenge(value, expected_team_id)
+    elif event_type == "stopped" and set(value) == {"type"}:
+        terminal = {"type": "stopped"}
+    return terminal
 
 
 def _parsed_stream_event(line: bytes, expected_team_id: str) -> dict | None:
@@ -1689,6 +1845,17 @@ class _StreamRelay:
     assistant_ids: tuple[str, ...] = ()
 
 
+@dataclass(frozen=True)
+class _ChallengeRelay:
+    team_id: str
+    kind: str
+    body: dict
+    headers: dict
+    queue: asyncio.Queue
+    loop: asyncio.AbstractEventLoop
+    started: asyncio.Event
+
+
 @dataclass
 class _RelayDelivery:
     terminal_seen: bool = False
@@ -1723,6 +1890,17 @@ async def _send_relay_event(
         if not delivery.aborted:
             await _stop_delivery_once(turn.team_id, turn.headers, delivery)
         delivery.aborted = True
+    if turn.state is not None and terminal["type"] in {
+        "input-required",
+        "approval-required",
+    }:
+        turn.state["pending_challenge_id"] = terminal["challenge_id"]
+        turn.state["pending_challenge_type"] = terminal["type"].removesuffix(
+            "-required"
+        )
+    elif turn.state is not None and terminal["type"] in {"done", "stopped"}:
+        turn.state["pending_challenge_id"] = None
+        turn.state["pending_challenge_type"] = None
     delivery.terminal_seen = True
     await turn.ws.send_json(terminal)
 
@@ -1750,12 +1928,16 @@ def _stream_lines(relay: _StreamRelay) -> None:
             _stream_queue_put(
                 relay.queue,
                 relay.loop,
-                _upstream_error_event(resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)),
+                _upstream_error_event(
+                    resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)
+                ),
             )
             return
         _relay_upstream_events(resp, relay.queue, relay.loop, relay.team_id)
     except (OSError, http.client.HTTPException) as exc:
-        log.warning("chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__)
+        log.warning(
+            "chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__
+        )
         _stream_queue_put(
             relay.queue,
             relay.loop,
@@ -1769,6 +1951,49 @@ def _stream_lines(relay: _StreamRelay) -> None:
     finally:
         relay.loop.call_soon_threadsafe(relay.started.set)
         conn.close()
+        _stream_queue_put(relay.queue, relay.loop, None)
+
+
+def _challenge_response_event(status: int, data: object, team_id: str) -> dict:
+    projected = None
+    if isinstance(data, dict) and status in {
+        HTTPStatus.OK,
+        HTTPStatus.PRECONDITION_REQUIRED,
+    }:
+        challenge_status = data.get("status")
+        if challenge_status in {"input-required", "approval-required"}:
+            projected = {"type": challenge_status, **data}
+        elif status == HTTPStatus.OK:
+            projected = {"type": "done", **data}
+    terminal = _validated_terminal_event(projected, team_id)
+    if terminal is not None:
+        return terminal
+    if 400 <= status <= 599:
+        return _public_chat_error_event(status)
+    return {
+        "type": "error",
+        "status": 502,
+        "detail": TERMINAL_CONTRACT_ERROR,
+        "_relay_abort": True,
+    }
+
+
+def _relay_challenge(relay: _ChallengeRelay) -> None:
+    relay.loop.call_soon_threadsafe(relay.started.set)
+    try:
+        status, data = _call(
+            TEAMDRIVER_URL,
+            "POST",
+            f"/v1/teams/{relay.team_id}/chat/{relay.kind}",
+            relay.body,
+            relay.headers,
+        )
+        _stream_queue_put(
+            relay.queue,
+            relay.loop,
+            _challenge_response_event(status, data, relay.team_id),
+        )
+    finally:
         _stream_queue_put(relay.queue, relay.loop, None)
 
 
@@ -1799,6 +2024,15 @@ class _WsTurn:
     files: tuple[str, ...] = ()
     assistant_ids: tuple[str, ...] = ()
     delivery: _RelayDelivery = field(default_factory=_RelayDelivery)
+    state: dict | None = None
+
+
+@dataclass(frozen=True)
+class _WsContext:
+    ws: WebSocket
+    team_id: str
+    headers: dict
+    state: dict
 
 
 def _relay_capacity_event() -> dict:
@@ -1809,12 +2043,16 @@ def _relay_capacity_event() -> dict:
     }
 
 
-async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future) -> None:
+async def _deliver_turn(
+    turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future
+) -> None:
     delivery = turn.delivery
     try:
         while True:
             pending = asyncio.create_task(queue.get())
-            done, _pending = await asyncio.wait({pending, worker}, return_when=asyncio.FIRST_COMPLETED)
+            done, _pending = await asyncio.wait(
+                {pending, worker}, return_when=asyncio.FIRST_COMPLETED
+            )
             if pending not in done:
                 pending.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -1874,6 +2112,37 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
         await _deliver_turn(turn, queue, worker)
 
 
+async def _ws_run_admitted_challenge(
+    turn: _WsTurn,
+    lease: _TurnLease,
+    kind: str,
+    body: dict,
+) -> None:
+    async with lease:
+        queue: asyncio.Queue = asyncio.Queue(maxsize=STREAM_QUEUE_MAX_EVENTS)
+        loop = asyncio.get_running_loop()
+        try:
+            worker = loop.run_in_executor(
+                _STREAM_EXECUTOR,
+                _relay_challenge,
+                _ChallengeRelay(
+                    turn.team_id,
+                    kind,
+                    body,
+                    turn.headers,
+                    queue,
+                    loop,
+                    turn.started,
+                ),
+            )
+            turn.dispatched.set()
+        except _ExecutorSaturatedError:
+            turn.started.set()
+            await turn.ws.send_json(_relay_capacity_event())
+            return
+        await _deliver_turn(turn, queue, worker)
+
+
 async def _ws_run_turn(
     ws: WebSocket,
     team_id: str,
@@ -1904,9 +2173,7 @@ async def _ws_run_turn(
 
 
 def _start_ws_turn(
-    ws: WebSocket,
-    team_id: str,
-    hdr: dict,
+    context: _WsContext,
     msg: dict,
     lease: _TurnLease,
 ) -> tuple[asyncio.Task, asyncio.Event, asyncio.Event, _RelayDelivery]:
@@ -1916,17 +2183,47 @@ def _start_ws_turn(
     turn = asyncio.create_task(
         _ws_run_admitted_turn(
             _WsTurn(
-                ws=ws,
-                team_id=team_id,
-                headers=hdr,
+                ws=context.ws,
+                team_id=context.team_id,
+                headers=context.headers,
                 text=msg["message"],
                 started=started,
                 dispatched=dispatched,
                 files=tuple(msg["files"]),
                 assistant_ids=tuple(msg["assistant_ids"]),
                 delivery=delivery,
+                state=context.state,
             ),
             lease,
+        )
+    )
+    return turn, started, dispatched, delivery
+
+
+def _start_ws_challenge(
+    context: _WsContext,
+    kind: str,
+    body: dict,
+    lease: _TurnLease,
+) -> tuple[asyncio.Task, asyncio.Event, asyncio.Event, _RelayDelivery]:
+    started = asyncio.Event()
+    dispatched = asyncio.Event()
+    delivery = _RelayDelivery()
+    turn = asyncio.create_task(
+        _ws_run_admitted_challenge(
+            _WsTurn(
+                ws=context.ws,
+                team_id=context.team_id,
+                headers=context.headers,
+                text="",
+                started=started,
+                dispatched=dispatched,
+                delivery=delivery,
+                state=context.state,
+            ),
+            lease,
+            kind,
+            body,
         )
     )
     return turn, started, dispatched, delivery
@@ -1938,7 +2235,21 @@ async def _ws_stop_turn(ws: WebSocket, team_id: str, hdr: dict, state: dict) -> 
     turns = state["turns"]
     active = next((turn for turn in turns if not turn.done()), None)
     if active is None:
-        await ws.send_json({"type": "error", "status": 409, "detail": "no active chat turn"})
+        if state.get("pending_challenge_id") is not None:
+            state["stop_requested"] = True
+            status, data = await _driver_stop(team_id, hdr)
+            if status == 200 and data.get("requested"):
+                state["pending_challenge_id"] = None
+                state["pending_challenge_type"] = None
+                await ws.send_json({"type": "stopped"})
+            else:
+                await ws.send_json(
+                    _upstream_error_event(status if status != 200 else 409, b"")
+                )
+            return
+        await ws.send_json(
+            {"type": "error", "status": 409, "detail": "no active chat turn"}
+        )
         return
     state["stop_requested"] = True
     lease = state["leases"][active]
@@ -1970,12 +2281,101 @@ async def _ws_stop_turn(ws: WebSocket, team_id: str, hdr: dict, state: dict) -> 
         )
 
 
-async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict) -> None:
+def _track_ws_turn(
+    state: dict,
+    tracked: tuple[asyncio.Task, asyncio.Event, asyncio.Event, _RelayDelivery],
+    lease: _TurnLease,
+) -> None:
+    turn, started, dispatched, delivery = tracked
     turns = state["turns"]
     starts = state.setdefault("starts", {})
     dispatches = state.setdefault("dispatches", {})
     leases = state.setdefault("leases", {})
     deliveries = state.setdefault("deliveries", {})
+    state["stop_requested"] = False
+    turns.add(turn)
+    starts[turn] = started
+    dispatches[turn] = dispatched
+    leases[turn] = lease
+    deliveries[turn] = delivery
+
+    def turn_done(completed: asyncio.Task) -> None:
+        lease.release()
+        turns.discard(completed)
+        starts.pop(completed, None)
+        dispatches.pop(completed, None)
+        leases.pop(completed, None)
+        deliveries.pop(completed, None)
+
+    turn.add_done_callback(turn_done)
+
+
+async def _ws_dispatch_challenge(
+    ws: WebSocket,
+    team_id: str,
+    hdr: dict,
+    msg: dict,
+    state: dict,
+) -> None:
+    kind = "input" if msg.get("type") == "input-submit" else "approval"
+    expected_fields = (
+        {"type", "challenge_id", "answer"}
+        if kind == "input"
+        else {"type", "challenge_id", "approved"}
+    )
+    challenge_id = msg.get("challenge_id")
+    valid_answer = kind == "input" or msg.get("approved") is True
+    if (
+        set(msg) != expected_fields
+        or not isinstance(challenge_id, str)
+        or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None
+        or not valid_answer
+    ):
+        await ws.send_json(
+            {"type": "error", "status": 400, "detail": f"invalid {kind} submission"}
+        )
+        return
+    state["turns"].difference_update({turn for turn in state["turns"] if turn.done()})
+    if state["turns"]:
+        await ws.send_json(
+            {
+                "type": "error",
+                "status": 409,
+                "detail": "a chat operation is already active",
+            }
+        )
+        return
+    if (
+        state.get("pending_challenge_type") != kind
+        or state.get("pending_challenge_id") != challenge_id
+    ):
+        await ws.send_json(
+            {
+                "type": "error",
+                "status": 409,
+                "detail": f"no matching {kind} challenge is pending",
+            }
+        )
+        return
+    lease = _TURN_ADMISSION.reserve()
+    if lease is None:
+        await ws.send_json(_relay_capacity_event())
+        return
+    body = {key: value for key, value in msg.items() if key != "type"}
+    try:
+        tracked = _start_ws_challenge(
+            _WsContext(ws, team_id, hdr, state), kind, body, lease
+        )
+    except BaseException:
+        lease.release()
+        raise
+    _track_ws_turn(state, tracked, lease)
+
+
+async def _ws_dispatch(
+    ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict
+) -> None:
+    turns = state["turns"]
     if msg.get("type") == "chat":
         try:
             if set(msg) != {"type", "message", "files", "assistant_ids"}:
@@ -1983,9 +2383,13 @@ async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state:
                     400,
                     "chat frame must contain only type, message, files, and assistant_ids",
                 )
-            turn_payload = _chat_turn_payload({key: value for key, value in msg.items() if key != "type"})
+            turn_payload = _chat_turn_payload(
+                {key: value for key, value in msg.items() if key != "type"}
+            )
         except ClientPayloadError as exc:
-            await ws.send_json({"type": "error", "status": exc.status, "detail": exc.detail})
+            await ws.send_json(
+                {"type": "error", "status": exc.status, "detail": exc.detail}
+            )
             return
         msg = {"type": "chat", **turn_payload}
         turns.difference_update({turn for turn in turns if turn.done()})
@@ -2011,30 +2415,19 @@ async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state:
         # The background task keeps the socket responsive to Stop. The set is capped at one;
         # the controller independently enforces the same invariant across sockets.
         try:
-            turn, started, dispatched, delivery = _start_ws_turn(ws, team_id, hdr, msg, lease)
+            tracked = _start_ws_turn(_WsContext(ws, team_id, hdr, state), msg, lease)
         except BaseException:
             lease.release()
             raise
-        state["stop_requested"] = False
-        turns.add(turn)
-        starts[turn] = started
-        dispatches[turn] = dispatched
-        leases[turn] = lease
-        deliveries[turn] = delivery
-
-        def turn_done(completed: asyncio.Task) -> None:
-            lease.release()
-            turns.discard(completed)
-            starts.pop(completed, None)
-            dispatches.pop(completed, None)
-            leases.pop(completed, None)
-            deliveries.pop(completed, None)
-
-        turn.add_done_callback(turn_done)
+        _track_ws_turn(state, tracked, lease)
+    elif msg.get("type") in {"input-submit", "approval-submit"}:
+        await _ws_dispatch_challenge(ws, team_id, hdr, msg, state)
     elif msg.get("type") == "stop" and set(msg) == {"type"}:
         await _ws_stop_turn(ws, team_id, hdr, state)
     else:
-        await ws.send_json({"type": "error", "status": 400, "detail": "unsupported chat frame"})
+        await ws.send_json(
+            {"type": "error", "status": 400, "detail": "unsupported chat frame"}
+        )
 
 
 async def _ws_validate_opening(ws: WebSocket) -> bool:
@@ -2092,6 +2485,8 @@ async def team_chat_ws(ws: WebSocket, team_id: str) -> None:
             "leases": {},
             "deliveries": {},
             "stop_requested": False,
+            "pending_challenge_id": None,
+            "pending_challenge_type": None,
         }
         try:
             while True:

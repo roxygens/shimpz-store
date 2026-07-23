@@ -9,7 +9,9 @@ const MAX_ASSISTANTS_PER_TURN = 16;
 const MAX_MESSAGE_CHARS = 16_000;
 const MAX_REPLY_CHARS = 60_000;
 const MAX_ERROR_DETAIL_CHARS = 800;
-export const CHAT_WS_SUBPROTOCOL = "shimpz.chat.v2";
+const CHALLENGE_ID = /^[a-f0-9]{32}$/;
+const HUMAN_REQUEST_TYPES = new Set(["str", "int", "float", "bool", "choice", "choices"]);
+export const CHAT_WS_SUBPROTOCOL = "shimpz.chat.v3";
 
 /** Capped reconnect delay. Reconnection never implies replaying a chat frame. @param {any} attempt */
 export function teamChatReconnectDelay(attempt) {
@@ -67,6 +69,21 @@ function chatReply(value) {
     /[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f]/.test(value)
   ) {
     throw new TypeError("invalid chat reply");
+  }
+  return value;
+}
+
+/** @param {any} value @param {number} maximum @param {boolean} [optional] @returns {string | null} */
+function publicText(value, maximum, optional = false) {
+  if (optional && value === null) return null;
+  if (
+    typeof value !== "string" ||
+    !value ||
+    value.trim() !== value ||
+    value.length > maximum ||
+    /[\u0000-\u001f\u007f]/.test(value)
+  ) {
+    throw new TypeError("invalid public challenge text");
   }
   return value;
 }
@@ -220,6 +237,135 @@ export function parseChatTerminalEvent(value, expectedTeamId, expectedTeamName) 
     return { type: "stopped" };
   }
   throw new TypeError("invalid chat terminal event");
+}
+
+/** @param {any} value @param {any} expectedTeamId @returns {Record<string, any>} */
+function parseInputChallenge(value, expectedTeamId) {
+  const source = record(value);
+  if (
+    !source ||
+    !hasExactKeys(source, ["type", "status", "team_id", "turn_id", "challenge_id", "request"]) ||
+    source.type !== "input-required" ||
+    source.status !== source.type ||
+    canonicalTeamId(source.team_id) !== canonicalTeamId(expectedTeamId) ||
+    typeof source.challenge_id !== "string" ||
+    !CHALLENGE_ID.test(source.challenge_id) ||
+    source.turn_id !== source.challenge_id
+  ) {
+    throw new TypeError("invalid input challenge");
+  }
+  const request = record(source.request);
+  if (!request || !hasExactKeys(request, ["type", "title", "summary", "docs", "options"])) {
+    throw new TypeError("invalid input request");
+  }
+  if (
+    typeof request.type !== "string" ||
+    !HUMAN_REQUEST_TYPES.has(request.type) ||
+    !Array.isArray(request.options) ||
+    request.options.length > 64
+  ) {
+    throw new TypeError("invalid input request");
+  }
+  const options = request.options.map((option) => publicText(option, 200));
+  if (
+    options.length !== new Set(options).size ||
+    (["choice", "choices"].includes(request.type) !== Boolean(options.length))
+  ) {
+    throw new TypeError("invalid input options");
+  }
+  return {
+    type: source.type,
+    status: source.status,
+    team_id: source.team_id,
+    turn_id: source.challenge_id,
+    challenge_id: source.challenge_id,
+    request: {
+      type: request.type,
+      title: publicText(request.title, 80),
+      summary: publicText(request.summary, 240),
+      docs: publicText(request.docs, 2048, true),
+      options,
+    },
+  };
+}
+
+/** @param {any} value @param {any} expectedTeamId @returns {Record<string, any>} */
+function parseApprovalChallenge(value, expectedTeamId) {
+  const source = record(value);
+  if (
+    !source ||
+    !hasExactKeys(source, ["type", "status", "team_id", "turn_id", "challenge_id", "requirements"]) ||
+    source.type !== "approval-required" ||
+    source.status !== source.type ||
+    canonicalTeamId(source.team_id) !== canonicalTeamId(expectedTeamId) ||
+    typeof source.challenge_id !== "string" ||
+    !CHALLENGE_ID.test(source.challenge_id) ||
+    source.turn_id !== source.challenge_id ||
+    !Array.isArray(source.requirements) ||
+    source.requirements.length !== 1
+  ) {
+    throw new TypeError("invalid approval challenge");
+  }
+  const requirement = record(source.requirements[0]);
+  if (
+    !requirement ||
+    !hasExactKeys(requirement, [
+      "assistant_id",
+      "assistant_name",
+      "power_id",
+      "title",
+      "summary",
+      "docs",
+      "approval",
+    ]) ||
+    !["always", "once"].includes(requirement.approval)
+  ) {
+    throw new TypeError("invalid approval requirement");
+  }
+  return {
+    type: source.type,
+    status: source.status,
+    team_id: source.team_id,
+    turn_id: source.challenge_id,
+    challenge_id: source.challenge_id,
+    requirements: [{
+      assistant_id: assistantIds([requirement.assistant_id])[0],
+      assistant_name: publicText(requirement.assistant_name, 80),
+      power_id: assistantIds([requirement.power_id])[0],
+      title: publicText(requirement.title, 80),
+      summary: publicText(requirement.summary, 240),
+      docs: publicText(requirement.docs, 2048, true),
+      approval: requirement.approval,
+    }],
+  };
+}
+
+/**
+ * @param {any} value
+ * @param {any} expectedTeamId
+ * @param {any} expectedTeamName
+ * @returns {Record<string, any>}
+ */
+export function parseChatEvent(value, expectedTeamId, expectedTeamName) {
+  if (record(value)?.type === "input-required") return parseInputChallenge(value, expectedTeamId);
+  if (record(value)?.type === "approval-required") return parseApprovalChallenge(value, expectedTeamId);
+  return parseChatTerminalEvent(value, expectedTeamId, expectedTeamName);
+}
+
+/** @param {any} challengeId @param {any} answer @returns {Record<string, any>} */
+export function createInputSubmission(challengeId, answer) {
+  if (typeof challengeId !== "string" || !CHALLENGE_ID.test(challengeId)) {
+    throw new TypeError("invalid input challenge id");
+  }
+  return { type: "input-submit", challenge_id: challengeId, answer };
+}
+
+/** @param {any} challengeId @returns {Record<string, any>} */
+export function createApprovalSubmission(challengeId) {
+  if (typeof challengeId !== "string" || !CHALLENGE_ID.test(challengeId)) {
+    throw new TypeError("invalid approval challenge id");
+  }
+  return { type: "approval-submit", challenge_id: challengeId, approved: true };
 }
 
 /** @param {any} value @returns {{ files: StoredFile[] } & StorageUsage} */

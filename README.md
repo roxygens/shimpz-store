@@ -3,7 +3,7 @@
 Shimpz Store is the public, account-authenticated Shimpz web application. A SvelteKit frontend and
 FastAPI backend serve signup/login, OAuth model credentials, Team creation and teardown, Assistant
 release discovery and installation, hosted App inventory, provider/model selection, Team files, and
-the strict `shimpz.chat.v2` WebSocket surface.
+the strict `shimpz.chat.v3` WebSocket surface.
 
 The Store is an unprivileged gateway, not a controller. It has no Docker socket, provider admin key, or
 Team-driver bearer. It forwards the authenticated account token to the internal accounts and Team
