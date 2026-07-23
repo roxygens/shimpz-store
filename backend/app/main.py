@@ -32,9 +32,6 @@ from app.authn import (
 from app.authn import (
     authed_account_bounded as _authed_account_bounded,
 )
-from app.authn import (
-    client_ip as _client_ip,
-)
 from app.concurrency import (
     BoundedThreadPoolExecutor as _BoundedThreadPoolExecutor,
 )
@@ -50,12 +47,10 @@ from app.concurrency import (
 from app.concurrency import (
     WsConnectionAdmission as _WsConnectionAdmission,
 )
-from app.concurrency import run_bounded as _run_bounded
 from app.config import (
     ACCOUNT_COOKIE,
     ACCOUNTS_URL,
     ASSISTANT_MUTATION_ALLOWED_ORIGINS,
-    BRAIN_FINALIZE_TOKEN_FILE,
     CHAT_WS_SUBPROTOCOL,
     MAX_CHAT_ASSISTANTS,
     MAX_CHAT_ERROR_DETAIL_CHARS,
@@ -115,7 +110,7 @@ from app.projections import (
 from app.projections import (
     released_running_assistant_inventory as _released_running_assistant_inventory,
 )
-from app.routers import account, oauth, public, static
+from app.routers import account, brains, oauth, public, static
 from app.upstream import call as _call
 from app.upstream import call_bounded as _bounded_call
 
@@ -264,140 +259,6 @@ def _team_id_for(account_id: str, team_name: str) -> str:
         return ""
     digest = hashlib.sha256(f"{account_id}\0{normalized}".encode()).hexdigest()[:24]
     return f"{digest}_{normalized[:15]}".rstrip("_")
-
-
-# ── Account model credentials (one encrypted-at-rest API key per provider) ────
-MAX_BRAIN_CREDENTIAL_BODY_BYTES = 72 * 1024
-
-
-@app.get("/api/brains")
-async def brains_list(request: Request) -> JSONResponse:
-    token, _, _ = await _authed_account_bounded(request)
-    if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    status, data = await _bounded_call(
-        _AUTH_EXECUTOR,
-        ACCOUNTS_URL,
-        "POST",
-        "/v1/brains/list",
-        {"token": token},
-        extra={"X-Forwarded-For": _client_ip(request)},
-    )
-    return JSONResponse(data, status_code=status)
-
-
-@app.post("/api/brains/{provider}")
-async def brain_upsert(request: Request, provider: str) -> JSONResponse:
-    token, _, _ = await _authed_account_bounded(request)
-    if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    provider_value = _brain_provider(provider)
-    if provider_value is None:
-        return JSONResponse({"detail": "unsupported Brain provider"}, status_code=400)
-    try:
-        payload = await _read_bounded_json(
-            request,
-            MAX_BRAIN_CREDENTIAL_BODY_BYTES,
-        )
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
-    if set(payload) != {"auth_type", "secret"}:
-        return JSONResponse({"detail": "credential requires auth_type and secret"}, status_code=400)
-    auth_type = str(payload.get("auth_type") or "").strip().lower()
-    secret = payload.get("secret")
-    if auth_type != "api_key" or not isinstance(secret, str):
-        return JSONResponse({"detail": "invalid Brain credential"}, status_code=400)
-    status, data = await _bounded_call(
-        _AUTH_EXECUTOR,
-        ACCOUNTS_URL,
-        "POST",
-        "/v1/brains/upsert",
-        {
-            "token": token,
-            "provider": provider_value,
-            "auth_type": auth_type,
-            "secret": secret,
-        },
-        {"X-Forwarded-For": _client_ip(request)},
-    )
-    log.info("brain_upsert", provider=provider_value, status=status)
-    return JSONResponse(data, status_code=status)
-
-
-@app.delete("/api/brains/{provider}")
-async def brain_delete(request: Request, provider: str) -> JSONResponse:
-    token, _, _ = await _authed_account_bounded(request)
-    if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    provider_value = _brain_provider(provider)
-    if provider_value is None:
-        return JSONResponse({"detail": "unsupported Brain provider"}, status_code=400)
-    return await _run_bounded(
-        _CONTROL_EXECUTOR,
-        _delete_brain_for_token,
-        token,
-        provider_value,
-        _client_ip(request),
-    )
-
-
-def _revocation_state(begin_data: dict) -> tuple[bool, int | None]:
-    already_absent = begin_data.get("already_absent") is True
-    generation = begin_data.get("generation")
-    if not already_absent and (not isinstance(generation, int) or isinstance(generation, bool) or generation < 1):
-        raise ValueError("credential revocation returned invalid state")
-    return already_absent, generation
-
-
-def _delete_brain_for_token(token: str, provider: str, forwarded_for: str) -> JSONResponse:
-    begin_status, begin_data = _call(
-        ACCOUNTS_URL,
-        "POST",
-        "/v1/brains/revoke-begin",
-        {"token": token, "provider": provider},
-        extra={"X-Forwarded-For": forwarded_for},
-    )
-    if begin_status != 200 or not isinstance(begin_data, dict):
-        return JSONResponse(begin_data, status_code=begin_status)
-    try:
-        already_absent, generation = _revocation_state(begin_data)
-    except ValueError as exc:
-        return JSONResponse(
-            {"detail": str(exc)},
-            status_code=502,
-        )
-    if already_absent:
-        log.info("brain_delete", provider=provider, status=200, already_absent=True)
-        return JSONResponse(
-            {
-                "provider": provider,
-                "generation": generation,
-                "deleted": False,
-                "already_absent": True,
-            }
-        )
-    try:
-        finalize_token = BRAIN_FINALIZE_TOKEN_FILE.read_text().strip()
-    except OSError:
-        finalize_token = ""
-    if not finalize_token:
-        log.warning("brain_finalize_unavailable", provider=provider)
-        return JSONResponse(
-            {"detail": "Brain credential finalization is unavailable"},
-            status_code=502,
-        )
-    status, data = _call(
-        ACCOUNTS_URL,
-        "POST",
-        "/v1/internal/brains/revoke-finalize",
-        {"token": token, "provider": provider, "generation": generation},
-        extra={
-            "Authorization": f"Bearer {finalize_token}",
-            "X-Forwarded-For": forwarded_for,
-        },
-    )
-    log.info("brain_delete", provider=provider, status=status)
-    return JSONResponse(data, status_code=status)
 
 
 # ── Teams (forward the user's token; team-driver is the enforcer) ────────
@@ -1815,6 +1676,7 @@ async def team_chat_ws(ws: WebSocket, team_id: str) -> None:
 
 
 app.include_router(account.router)
+app.include_router(brains.router)
 app.include_router(oauth.router)
 app.include_router(public.router)
 app.include_router(static.router)

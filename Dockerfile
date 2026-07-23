@@ -40,7 +40,7 @@ COPY backend/app/__init__.py backend/app/authn.py backend/app/concurrency.py bac
 COPY backend/app/assistant_releases.py ./app/
 COPY backend/app/oauth_broker.py ./app/
 COPY backend/app/team_driver_contract.py ./app/
-COPY backend/app/routers/__init__.py backend/app/routers/account.py backend/app/routers/oauth.py backend/app/routers/public.py backend/app/routers/static.py ./app/routers/
+COPY backend/app/routers/__init__.py backend/app/routers/account.py backend/app/routers/brains.py backend/app/routers/oauth.py backend/app/routers/public.py backend/app/routers/static.py ./app/routers/
 COPY --from=web /w/build ./build
 ENV PATH="/opt/venv/bin:$PATH" \
     PYTHONDONTWRITEBYTECODE=1 \

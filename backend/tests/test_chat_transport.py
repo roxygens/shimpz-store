@@ -1460,21 +1460,21 @@ def _brain_control_plane(*, finalize_token_available: bool = True):
         worker.start()
         base = f"http://127.0.0.1:{server.server_port}"
         previous = (
-            main.ACCOUNTS_URL,
+            config.ACCOUNTS_URL,
             main.TEAMDRIVER_URL,
-            main.BRAIN_FINALIZE_TOKEN_FILE,
+            config.BRAIN_FINALIZE_TOKEN_FILE,
         )
-        authn.ACCOUNTS_URL = main.ACCOUNTS_URL = main.TEAMDRIVER_URL = base
-        main.BRAIN_FINALIZE_TOKEN_FILE = token_path
+        authn.ACCOUNTS_URL = config.ACCOUNTS_URL = main.TEAMDRIVER_URL = base
+        config.BRAIN_FINALIZE_TOKEN_FILE = token_path
         try:
             yield calls
         finally:
             (
-                main.ACCOUNTS_URL,
+                config.ACCOUNTS_URL,
                 main.TEAMDRIVER_URL,
-                main.BRAIN_FINALIZE_TOKEN_FILE,
+                config.BRAIN_FINALIZE_TOKEN_FILE,
             ) = previous
-            authn.ACCOUNTS_URL = main.ACCOUNTS_URL
+            authn.ACCOUNTS_URL = config.ACCOUNTS_URL
             server.shutdown()
             server.server_close()
             worker.join(timeout=5)
