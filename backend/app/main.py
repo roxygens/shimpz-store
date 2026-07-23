@@ -20,15 +20,12 @@ import json as jsonlib
 import re
 from dataclasses import dataclass, field
 from http import HTTPStatus
-from pathlib import Path
 from urllib.parse import urlparse
 
 import structlog
 from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import (
-    FileResponse,
     JSONResponse,
-    PlainTextResponse,
     RedirectResponse,
     Response,
 )
@@ -62,13 +59,10 @@ from app.config import (
     AUTH_QUEUE_MAX,
     AUTH_WORKER_THREADS,
     BRAIN_FINALIZE_TOKEN_FILE,
-    BUILD,
     CHAT_WS_SUBPROTOCOL,
     CONTROL_QUEUE_MAX,
     CONTROL_WORKER_THREADS,
     COOKIE_MAX_AGE,
-    HTML_CACHE_CONTROL,
-    IMMUTABLE_CACHE_CONTROL,
     MAX_AUTH_BODY_BYTES,
     MAX_CHAT_ASSISTANTS,
     MAX_CHAT_ERROR_DETAIL_CHARS,
@@ -107,6 +101,7 @@ from app.logconf import setup
 from app.middleware import TraceIdMiddleware
 from app.oauth_broker import SCOPES as OAUTH_SCOPES
 from app.oauth_broker import OAuthBroker, OAuthBrokerError
+from app.routers import static
 from app.team_driver_contract import project_storage_response
 from app.upstream import call as _call
 
@@ -2212,32 +2207,4 @@ async def team_chat_ws(ws: WebSocket, team_id: str) -> None:
         connection.release()
 
 
-# ── static: serve the prerendered SvelteKit build (adapter-static writes <route>.html + assets) ──
-def _resolve(rel: str) -> Path | None:
-    rel = rel.strip("/")
-    if ".." in rel.split("/"):  # no traversal out of BUILD
-        return None
-    for cand in (BUILD / rel, BUILD / f"{rel}.html", BUILD / rel / "index.html"):
-        if cand.is_file():
-            return cand
-    return None
-
-
-def _static_cache_control(path: str, hit: Path) -> str:
-    """Revalidate navigations while retaining SvelteKit's content-addressed asset cache."""
-    rel = path.strip("/")
-    if hit.suffix.lower() not in {".html", ".htm"} and rel.startswith("_app/immutable/"):
-        return IMMUTABLE_CACHE_CONTROL
-    return HTML_CACHE_CONTROL
-
-
-@app.get("/{path:path}")
-def static_files(path: str) -> Response:
-    hit = _resolve(path)
-    if hit:
-        return FileResponse(hit, headers={"Cache-Control": _static_cache_control(path, hit)})
-    return PlainTextResponse(
-        "not found",
-        status_code=404,
-        headers={"Cache-Control": HTML_CACHE_CONTROL},
-    )
+app.include_router(static.router)
