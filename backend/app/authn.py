@@ -2,12 +2,11 @@
 
 from __future__ import annotations
 
-import asyncio
-
 from fastapi import Request
 from fastapi.responses import JSONResponse
 
 from app.concurrency import BoundedThreadPoolExecutor
+from app.concurrency import run_bounded as run_with_executor
 from app.config import (
     ACCOUNT_COOKIE,
     ACCOUNTS_URL,
@@ -25,8 +24,7 @@ EXECUTOR = BoundedThreadPoolExecutor(
 
 
 async def run_bounded(fn, /, *args):
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(EXECUTOR, fn, *args)
+    return await run_with_executor(EXECUTOR, fn, *args)
 
 
 def set_cookie(response: JSONResponse, token: str) -> None:

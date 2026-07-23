@@ -13,6 +13,12 @@ class ExecutorSaturatedError(RuntimeError):
     """A bounded executor rejected work instead of growing its private queue."""
 
 
+async def run_bounded(executor: BoundedThreadPoolExecutor, fn, /, *args):
+    """Run one blocking operation only when its finite executor admits it."""
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(executor, fn, *args)
+
+
 class BoundedThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
     """ThreadPoolExecutor with a hard cap on running plus queued futures."""
 

@@ -2,11 +2,14 @@
 
 from __future__ import annotations
 
+import functools
 import http.client
 import json
 from urllib.parse import urlparse
 
 import structlog
+
+from app.concurrency import BoundedThreadPoolExecutor, run_bounded
 
 log = structlog.get_logger()
 
@@ -36,3 +39,12 @@ def call(
         return 502, {"detail": "the Space is unreachable"}
     finally:
         connection.close()
+
+
+async def call_bounded(
+    executor: BoundedThreadPoolExecutor,
+    *args,
+    **kwargs,
+) -> tuple[int, dict]:
+    """Run one internal JSON hop through the caller's bounded executor."""
+    return await run_bounded(executor, functools.partial(call, *args, **kwargs))

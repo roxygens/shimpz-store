@@ -13,7 +13,6 @@ import asyncio
 import base64
 import concurrent.futures
 import contextlib
-import functools
 import hashlib
 import http.client
 import json as jsonlib
@@ -51,6 +50,7 @@ from app.concurrency import (
 from app.concurrency import (
     WsConnectionAdmission as _WsConnectionAdmission,
 )
+from app.concurrency import run_bounded as _run_bounded
 from app.config import (
     ACCOUNT_COOKIE,
     ACCOUNTS_URL,
@@ -117,6 +117,7 @@ from app.projections import (
 )
 from app.routers import account, oauth, public, static
 from app.upstream import call as _call
+from app.upstream import call_bounded as _bounded_call
 
 setup("shimpz-store")
 log = structlog.get_logger()
@@ -232,20 +233,6 @@ _public_storage_usage = team_driver_contract.project_storage_usage
 
 app = FastAPI(title="shimpz-store", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TraceIdMiddleware)
-
-
-async def _run_bounded(executor: _BoundedThreadPoolExecutor, fn, /, *args):
-    """Run one blocking hop only when its finite worker/queue budget admits it."""
-    loop = asyncio.get_running_loop()
-    return await loop.run_in_executor(executor, fn, *args)
-
-
-async def _bounded_call(
-    executor: _BoundedThreadPoolExecutor,
-    *args,
-    **kwargs,
-) -> tuple[int, dict]:
-    return await _run_bounded(executor, functools.partial(_call, *args, **kwargs))
 
 
 @app.exception_handler(Exception)

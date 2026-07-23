@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import functools
-
 import structlog
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
@@ -11,14 +9,14 @@ from fastapi.responses import JSONResponse
 from app import authn
 from app.config import ACCOUNT_COOKIE, MAX_AUTH_BODY_BYTES
 from app.payloads import ClientPayloadError, read_bounded_json
-from app.upstream import call
+from app.upstream import call_bounded
 
 log = structlog.get_logger()
 router = APIRouter()
 
 
 async def _bounded_call(*args, **kwargs) -> tuple[int, dict]:
-    return await authn.run_bounded(functools.partial(call, *args, **kwargs))
+    return await call_bounded(authn.EXECUTOR, *args, **kwargs)
 
 
 async def _credential_route(request: Request, path: str) -> JSONResponse:
