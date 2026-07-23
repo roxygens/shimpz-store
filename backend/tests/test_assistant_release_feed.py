@@ -45,15 +45,17 @@ def test_release_feed_is_closed_bounded_notification_metadata():
 
 def test_release_feed_binds_only_the_cloudflare_source():
     assert releases._CANONICAL_RELEASE_SOURCE_COMMITS == {
-        "shimpz-cloudflare": "d6f074aa44ac8752dc97f64982765b801f0e0af3",
+        "shimpz-cloudflare": "2fd76d18ae421286444f3e005fa81edcacfc6055",
     }
     assert {release["assistant_id"] for release in releases._CANONICAL_RELEASES} == {"shimpz-cloudflare"}
 
 
 def test_release_feed_publishes_the_read_only_cloudflare_assistant():
     latest = [release for release in releases._CANONICAL_RELEASES if release["assistant_id"] == "shimpz-cloudflare"][-1]
-    assert latest["sequence"] == 4
-    assert latest["headline"] == "Shimpz Cloudflare 0.2.0 now runs on the Shimpz SDK"
+    assert latest["sequence"] == 5
+    assert latest["headline"] == "Shimpz Cloudflare 0.2.1 generates its reviewed contract"
+    assert "during the image build" in latest["changelog"]
+    assert "unverifiable SDK provenance metadata" in latest["changelog"]
     assert "typed SDK output contracts" in latest["changelog"]
     assert "one-shot Shimpz SDK runner" in latest["changelog"]
     assert "bounded chunked Cloudflare responses" in latest["changelog"]
