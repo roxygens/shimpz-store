@@ -70,7 +70,6 @@ from app.config import (
     MAX_UPSTREAM_STREAM_BYTES,
     MAX_UPSTREAM_STREAM_LINE_BYTES,
     MAX_WS_FRAME_BYTES,
-    MODEL_CATALOG,
     PRIVATE_NO_STORE_HEADERS,
     RELEASED_CLOUD_ASSISTANTS,
     STOP_QUEUE_MAX,
@@ -89,6 +88,8 @@ from app.config import (
 from app.config import (
     canonical_origin as _canonical_origin,
 )
+from app.inference import model as _brain_model
+from app.inference import provider as _brain_provider
 from app.logconf import setup
 from app.middleware import TraceIdMiddleware
 from app.payloads import (
@@ -285,18 +286,7 @@ def _team_id_for(account_id: str, team_name: str) -> str:
 
 
 # ── Account model credentials (one encrypted-at-rest API key per provider) ────
-BRAIN_PROVIDERS = frozenset(MODEL_CATALOG)
 MAX_BRAIN_CREDENTIAL_BODY_BYTES = 72 * 1024
-
-
-def _brain_provider(value: str) -> str | None:
-    provider = str(value or "").strip().lower()
-    return provider if provider in BRAIN_PROVIDERS else None
-
-
-def _brain_model(provider: str, value: object) -> str | None:
-    model = str(value or "").strip()
-    return model if model in MODEL_CATALOG[provider] else None
 
 
 @app.get("/api/brains")
