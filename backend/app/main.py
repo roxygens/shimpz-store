@@ -57,8 +57,6 @@ from app.config import (
     ASSISTANT_MUTATION_ALLOWED_ORIGINS,
     BRAIN_FINALIZE_TOKEN_FILE,
     CHAT_WS_SUBPROTOCOL,
-    CONTROL_QUEUE_MAX,
-    CONTROL_WORKER_THREADS,
     MAX_CHAT_ASSISTANTS,
     MAX_CHAT_ERROR_DETAIL_CHARS,
     MAX_CHAT_FILES,
@@ -88,6 +86,7 @@ from app.config import (
 from app.config import (
     canonical_origin as _canonical_origin,
 )
+from app.control import EXECUTOR as _CONTROL_EXECUTOR
 from app.inference import model as _brain_model
 from app.inference import provider as _brain_provider
 from app.logconf import setup
@@ -129,11 +128,6 @@ _STREAM_EXECUTOR = _BoundedThreadPoolExecutor(
     thread_name_prefix="shimpz-stream",
 )
 _TURN_ADMISSION = _TurnAdmission(STREAM_WORKER_THREADS, STREAM_TURN_QUEUE_MAX)
-_CONTROL_EXECUTOR = _BoundedThreadPoolExecutor(
-    max_workers=CONTROL_WORKER_THREADS,
-    max_outstanding=CONTROL_WORKER_THREADS + CONTROL_QUEUE_MAX,
-    thread_name_prefix="shimpz-control",
-)
 _STOP_EXECUTOR = _BoundedThreadPoolExecutor(
     max_workers=STOP_WORKER_THREADS,
     max_outstanding=STOP_WORKER_THREADS + STOP_QUEUE_MAX,
