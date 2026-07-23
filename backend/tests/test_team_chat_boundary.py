@@ -6,9 +6,8 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
-from fastapi.testclient import TestClient
-
 from app import main
+from fastapi.testclient import TestClient
 
 FILE_ID = "a" * 32
 FILE_SHA256 = hashlib.sha256(b"hello").hexdigest()
@@ -229,9 +228,4 @@ def test_storage_projection_requires_the_shared_file_metadata_contract():
     }
     assert main._public_file_metadata(metadata) == metadata
     assert main._public_file_metadata({key: value for key, value in metadata.items() if key != "created_at"}) is None
-    assert (
-        main._public_file_metadata(
-            {**metadata, "size": main.team_driver_contract.MAX_FILE_UPLOAD_BYTES + 1}
-        )
-        is None
-    )
+    assert main._public_file_metadata({**metadata, "size": main.team_driver_contract.MAX_FILE_UPLOAD_BYTES + 1}) is None
