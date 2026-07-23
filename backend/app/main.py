@@ -75,50 +75,24 @@ MAX_TEAM_INSTALL_BODY_BYTES = max(
     1024,
     int(os.environ.get("SHIMPZ_STORE_MAX_TEAM_INSTALL_BODY_BYTES", str(4 * 1024))),
 )
-MAX_AUTH_BODY_BYTES = max(
-    1024, int(os.environ.get("SHIMPZ_STORE_MAX_AUTH_BODY_BYTES", str(16 * 1024)))
-)
+MAX_AUTH_BODY_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_AUTH_BODY_BYTES", str(16 * 1024))))
 MAX_OAUTH_BODY_BYTES = 32 * 1024
-MAX_WS_FRAME_BYTES = max(
-    1024, int(os.environ.get("SHIMPZ_STORE_MAX_WS_FRAME_BYTES", str(128 * 1024)))
-)
-STREAM_QUEUE_MAX_EVENTS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_MAX_EVENTS", "32"))
-)
-STREAM_QUEUE_PUT_TIMEOUT = max(
-    1.0, float(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_PUT_TIMEOUT", "10"))
-)
-STREAM_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_STREAM_WORKER_THREADS", "32"))
-)
-STREAM_TURN_QUEUE_MAX = max(
-    0, int(os.environ.get("SHIMPZ_STORE_STREAM_TURN_QUEUE_MAX", "32"))
-)
-CONTROL_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_CONTROL_WORKER_THREADS", "8"))
-)
+MAX_WS_FRAME_BYTES = max(1024, int(os.environ.get("SHIMPZ_STORE_MAX_WS_FRAME_BYTES", str(128 * 1024))))
+STREAM_QUEUE_MAX_EVENTS = max(1, int(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_MAX_EVENTS", "32")))
+STREAM_QUEUE_PUT_TIMEOUT = max(1.0, float(os.environ.get("SHIMPZ_STORE_STREAM_QUEUE_PUT_TIMEOUT", "10")))
+STREAM_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_STREAM_WORKER_THREADS", "32")))
+STREAM_TURN_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_STREAM_TURN_QUEUE_MAX", "32")))
+CONTROL_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_CONTROL_WORKER_THREADS", "8")))
 CONTROL_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_CONTROL_QUEUE_MAX", "8")))
-AUTH_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_AUTH_WORKER_THREADS", "8"))
-)
+AUTH_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_AUTH_WORKER_THREADS", "8")))
 AUTH_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_AUTH_QUEUE_MAX", "8")))
-STOP_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_STOP_WORKER_THREADS", "4"))
-)
+STOP_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_STOP_WORKER_THREADS", "4")))
 STOP_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_STOP_QUEUE_MAX", "4")))
-OAUTH_WORKER_THREADS = max(
-    1, int(os.environ.get("SHIMPZ_STORE_OAUTH_WORKER_THREADS", "8"))
-)
+OAUTH_WORKER_THREADS = max(1, int(os.environ.get("SHIMPZ_STORE_OAUTH_WORKER_THREADS", "8")))
 OAUTH_QUEUE_MAX = max(0, int(os.environ.get("SHIMPZ_STORE_OAUTH_QUEUE_MAX", "8")))
-WS_GLOBAL_CONNECTION_LIMIT = max(
-    1, int(os.environ.get("SHIMPZ_STORE_WS_GLOBAL_CONNECTION_LIMIT", "64"))
-)
-WS_ACCOUNT_CONNECTION_LIMIT = max(
-    1, int(os.environ.get("SHIMPZ_STORE_WS_ACCOUNT_CONNECTION_LIMIT", "4"))
-)
-WS_TEAM_CONNECTION_LIMIT = max(
-    1, int(os.environ.get("SHIMPZ_STORE_WS_TEAM_CONNECTION_LIMIT", "2"))
-)
+WS_GLOBAL_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_GLOBAL_CONNECTION_LIMIT", "64")))
+WS_ACCOUNT_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_ACCOUNT_CONNECTION_LIMIT", "4")))
+WS_TEAM_CONNECTION_LIMIT = max(1, int(os.environ.get("SHIMPZ_STORE_WS_TEAM_CONNECTION_LIMIT", "2")))
 MAX_UPSTREAM_ERROR_BYTES = 64 * 1024
 MAX_UPSTREAM_STREAM_LINE_BYTES = 256 * 1024
 MAX_UPSTREAM_STREAM_BYTES = 2 * 1024 * 1024
@@ -133,9 +107,7 @@ class _ExecutorSaturatedError(RuntimeError):
 class _BoundedThreadPoolExecutor(concurrent.futures.ThreadPoolExecutor):
     """ThreadPoolExecutor with a hard cap on running plus queued futures."""
 
-    def __init__(
-        self, *, max_workers: int, max_outstanding: int, thread_name_prefix: str
-    ) -> None:
+    def __init__(self, *, max_workers: int, max_outstanding: int, thread_name_prefix: str) -> None:
         if max_outstanding < max_workers:
             raise ValueError("max_outstanding must cover every worker")
         self._permits = threading.BoundedSemaphore(max_outstanding)
@@ -376,18 +348,13 @@ def _canonical_origin(value: str | None) -> str | None:
 
 WS_ALLOWED_ORIGINS = frozenset(
     origin
-    for raw in os.environ.get("SHIMPZ_WS_ALLOWED_ORIGINS", "https://shimpz.com").split(
-        ","
-    )
+    for raw in os.environ.get("SHIMPZ_WS_ALLOWED_ORIGINS", "https://shimpz.com").split(",")
     if (origin := _canonical_origin(raw.strip())) is not None
 )
 ASSISTANT_MUTATION_ALLOWED_ORIGINS = WS_ALLOWED_ORIGINS
-_MODEL_CATALOG = jsonlib.loads(
-    Path(__file__).with_name("model_catalog.json").read_text(encoding="utf-8")
-)
+_MODEL_CATALOG = jsonlib.loads(Path(__file__).with_name("model_catalog.json").read_text(encoding="utf-8"))
 MODEL_CATALOG = {
-    provider["id"]: frozenset(model["id"] for model in provider["models"])
-    for provider in _MODEL_CATALOG["providers"]
+    provider["id"]: frozenset(model["id"] for model in provider["models"]) for provider in _MODEL_CATALOG["providers"]
 }
 RELEASED_CLOUD_ASSISTANTS = frozenset({"shimpz-cloudflare"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
@@ -413,9 +380,7 @@ def _assistant_mutation_origin_allowed(origin: str | None) -> bool:
 
 
 def _private_json(content: dict, status_code: int = 200) -> JSONResponse:
-    return JSONResponse(
-        content, status_code=status_code, headers=PRIVATE_NO_STORE_HEADERS
-    )
+    return JSONResponse(content, status_code=status_code, headers=PRIVATE_NO_STORE_HEADERS)
 
 
 def _canonical_team_id(value: object) -> str | None:
@@ -448,9 +413,7 @@ def _canonical_chat_reply(value: object) -> str | None:
 def _chat_turn_payload(payload: dict) -> dict[str, object]:
     """Project one browser turn onto the controller's closed Team chat contract."""
     if set(payload) != {"message", "files", "assistant_ids"}:
-        raise ClientPayloadError(
-            400, "body must contain only message, files, and assistant_ids"
-        )
+        raise ClientPayloadError(400, "body must contain only message, files, and assistant_ids")
     message = payload["message"]
     if not isinstance(message, str):
         raise ClientPayloadError(400, "message must be a string")
@@ -458,18 +421,12 @@ def _chat_turn_payload(payload: dict) -> dict[str, object]:
     if not message:
         raise ClientPayloadError(400, "message must be non-empty")
     if len(message) > MAX_CHAT_MESSAGE_CHARS:
-        raise ClientPayloadError(
-            400, f"message too long (> {MAX_CHAT_MESSAGE_CHARS} chars)"
-        )
+        raise ClientPayloadError(400, f"message too long (> {MAX_CHAT_MESSAGE_CHARS} chars)")
     files = payload["files"]
     if not isinstance(files, list) or len(files) > MAX_CHAT_FILES:
-        raise ClientPayloadError(
-            400, f"files must contain at most {MAX_CHAT_FILES} opaque ids"
-        )
+        raise ClientPayloadError(400, f"files must contain at most {MAX_CHAT_FILES} opaque ids")
     opaque_ids = [_canonical_team_file_id(file_id) for file_id in files]
-    if any(file_id is None for file_id in opaque_ids) or len(opaque_ids) != len(
-        set(opaque_ids)
-    ):
+    if any(file_id is None for file_id in opaque_ids) or len(opaque_ids) != len(set(opaque_ids)):
         raise ClientPayloadError(400, "files must contain unique opaque ids")
     assistant_ids = payload["assistant_ids"]
     if not isinstance(assistant_ids, list) or len(assistant_ids) > MAX_CHAT_ASSISTANTS:
@@ -477,15 +434,11 @@ def _chat_turn_payload(payload: dict) -> dict[str, object]:
             400,
             f"assistant_ids must contain at most {MAX_CHAT_ASSISTANTS} Assistant ids",
         )
-    canonical_assistant_ids = [
-        _canonical_assistant_id(assistant_id) for assistant_id in assistant_ids
-    ]
-    if any(assistant_id is None for assistant_id in canonical_assistant_ids) or len(
-        canonical_assistant_ids
-    ) != len(set(canonical_assistant_ids)):
-        raise ClientPayloadError(
-            400, "assistant_ids must contain unique canonical Assistant ids"
-        )
+    canonical_assistant_ids = [_canonical_assistant_id(assistant_id) for assistant_id in assistant_ids]
+    if any(assistant_id is None for assistant_id in canonical_assistant_ids) or len(canonical_assistant_ids) != len(
+        set(canonical_assistant_ids)
+    ):
+        raise ClientPayloadError(400, "assistant_ids must contain unique canonical Assistant ids")
     return {
         "message": message,
         "files": opaque_ids,
@@ -498,9 +451,7 @@ def _team_create_payload(payload: dict, account_id: str) -> tuple[str, dict[str,
         raise ClientPayloadError(400, "Team requires team_name, provider, and model")
     team_name = str(payload.get("team_name", "")).strip()
     provider = _brain_provider(payload.get("provider"))
-    model = (
-        _brain_model(provider, payload.get("model")) if provider is not None else None
-    )
+    model = _brain_model(provider, payload.get("model")) if provider is not None else None
     team_id = _team_id_for(account_id, team_name)
     if not team_name or not team_id.strip("_"):
         raise ClientPayloadError(400, "bad team name")
@@ -538,9 +489,7 @@ def _public_file_inventory(value: object, expected_team_id: str) -> dict | None:
     )
 
 
-def _public_file_deletion(
-    value: object, expected_team_id: str, expected_id: str
-) -> dict | None:
+def _public_file_deletion(value: object, expected_team_id: str, expected_id: str) -> dict | None:
     return project_storage_response(
         value,
         kind="delete",
@@ -627,15 +576,11 @@ async def _read_bounded_json(request: Request, max_bytes: int) -> dict:
         if length < 0:
             raise ClientPayloadError(400, "invalid Content-Length")
         if length > max_bytes:
-            raise ClientPayloadError(
-                413, f"request body too large (max {max_bytes} bytes)"
-            )
+            raise ClientPayloadError(413, f"request body too large (max {max_bytes} bytes)")
     body = bytearray()
     async for chunk in request.stream():
         if len(body) + len(chunk) > max_bytes:
-            raise ClientPayloadError(
-                413, f"request body too large (max {max_bytes} bytes)"
-            )
+            raise ClientPayloadError(413, f"request body too large (max {max_bytes} bytes)")
         body.extend(chunk)
     try:
         payload = jsonlib.loads(body or b"{}", object_pairs_hook=_unique_json_object)
@@ -654,9 +599,7 @@ async def unhandled(request: Request, exc: Exception) -> JSONResponse:
 
 
 @app.exception_handler(_ExecutorSaturatedError)
-async def executor_saturated(
-    request: Request, exc: _ExecutorSaturatedError
-) -> JSONResponse:
+async def executor_saturated(request: Request, exc: _ExecutorSaturatedError) -> JSONResponse:
     log.warning("store_capacity_rejected", path=request.url.path)
     return JSONResponse(
         status_code=429,
@@ -727,9 +670,7 @@ async def _authed_account_bounded(request: Request) -> tuple[str, str, str]:
 
 def _client_ip(request: Request) -> str:
     """The end user's IP as best we can know it — Cloudflare's header when fronted, else the socket peer."""
-    return request.headers.get("cf-connecting-ip", "") or (
-        request.client.host if request.client else ""
-    )
+    return request.headers.get("cf-connecting-ip", "") or (request.client.host if request.client else "")
 
 
 def _team_id_for(account_id: str, team_name: str) -> str:
@@ -758,9 +699,7 @@ def assistant_release_feed(request: Request) -> Response:
         "Cache-Control": ASSISTANT_RELEASE_CACHE_CONTROL,
         "ETag": ASSISTANT_RELEASE_FEED_ETAG,
     }
-    if if_none_match_matches(
-        request.headers.get("if-none-match"), ASSISTANT_RELEASE_FEED_ETAG
-    ):
+    if if_none_match_matches(request.headers.get("if-none-match"), ASSISTANT_RELEASE_FEED_ETAG):
         return Response(status_code=304, headers=headers)
     return Response(
         content=ASSISTANT_RELEASE_FEED_BODY,
@@ -781,10 +720,7 @@ def _oauth_redirect(location: str) -> RedirectResponse:
 
 
 async def _oauth_body(request: Request, fields: frozenset[str]) -> dict:
-    if (
-        request.headers.get("origin") is not None
-        or request.headers.get("content-type") != "application/json"
-    ):
+    if request.headers.get("origin") is not None or request.headers.get("content-type") != "application/json":
         raise ClientPayloadError(403, "OAuth broker request is forbidden")
     raw_length = request.headers.get("content-length")
     if raw_length is None:
@@ -809,10 +745,7 @@ async def oauth_cloudflare_start(request: Request) -> Response:
     pairs = list(request.query_params.multi_items())
     keys = {key for key, _value in pairs}
     required = {"state", "code_challenge", "scope"}
-    if len(pairs) not in {3, 4} or keys not in {
-        frozenset(required),
-        frozenset({*required, "callback"}),
-    }:
+    if len(pairs) not in {3, 4} or keys not in {frozenset(required), frozenset({*required, "callback"})}:
         return _oauth_failure("start")
     fields = dict(pairs)
     callback_mode = fields.get("callback", "loopback")
@@ -845,18 +778,14 @@ async def oauth_cloudflare_callback(request: Request) -> Response:
     try:
         location = await _run_bounded(
             _OAUTH_EXECUTOR,
-            functools.partial(
-                _OAUTH_BROKER.callback, state=fields["state"], code=fields["code"]
-            ),
+            functools.partial(_OAUTH_BROKER.callback, state=fields["state"], code=fields["code"]),
         )
     except OAuthBrokerError:
         return _oauth_failure("callback", 502)
     return _oauth_redirect(location)
 
 
-async def _oauth_post(
-    request: Request, operation: str, fields: frozenset[str]
-) -> JSONResponse:
+async def _oauth_post(request: Request, operation: str, fields: frozenset[str]) -> JSONResponse:
     try:
         payload = await _oauth_body(request, fields)
         if operation == "claim":
@@ -900,16 +829,12 @@ async def _oauth_post(
 
 @app.post("/api/oauth/cloudflare/claim")
 async def oauth_cloudflare_claim(request: Request) -> JSONResponse:
-    return await _oauth_post(
-        request, "claim", frozenset({"claim", "state", "code_verifier"})
-    )
+    return await _oauth_post(request, "claim", frozenset({"claim", "state", "code_verifier"}))
 
 
 @app.post("/api/oauth/cloudflare/refresh")
 async def oauth_cloudflare_refresh(request: Request) -> JSONResponse:
-    return await _oauth_post(
-        request, "refresh", frozenset({"refresh_token", "broker_lease", "scopes"})
-    )
+    return await _oauth_post(request, "refresh", frozenset({"refresh_token", "broker_lease", "scopes"}))
 
 
 @app.post("/api/oauth/cloudflare/revoke")
@@ -932,11 +857,7 @@ async def signup(request: Request) -> JSONResponse:
         {"username": payload.get("username"), "password": payload.get("password")},
         extra={"X-Forwarded-For": _client_ip(request)},
     )
-    body = (
-        {"account_id": data.get("account_id"), "username": data.get("username")}
-        if status == 200
-        else data
-    )
+    body = {"account_id": data.get("account_id"), "username": data.get("username")} if status == 200 else data
     resp = JSONResponse(body, status_code=status)
     if status == 200 and data.get("token"):
         _set_cookie(resp, data["token"])
@@ -958,11 +879,7 @@ async def login(request: Request) -> JSONResponse:
         {"username": payload.get("username"), "password": payload.get("password")},
         extra={"X-Forwarded-For": _client_ip(request)},
     )
-    body = (
-        {"account_id": data.get("account_id"), "username": data.get("username")}
-        if status == 200
-        else data
-    )
+    body = {"account_id": data.get("account_id"), "username": data.get("username")} if status == 200 else data
     resp = JSONResponse(body, status_code=status)
     if status == 200 and data.get("token"):
         _set_cookie(resp, data["token"])
@@ -1035,9 +952,7 @@ async def brain_upsert(request: Request, provider: str) -> JSONResponse:
     except ClientPayloadError as exc:
         return JSONResponse({"detail": exc.detail}, status_code=exc.status)
     if set(payload) != {"auth_type", "secret"}:
-        return JSONResponse(
-            {"detail": "credential requires auth_type and secret"}, status_code=400
-        )
+        return JSONResponse({"detail": "credential requires auth_type and secret"}, status_code=400)
     auth_type = str(payload.get("auth_type") or "").strip().lower()
     secret = payload.get("secret")
     if auth_type != "api_key" or not isinstance(secret, str):
@@ -1079,18 +994,12 @@ async def brain_delete(request: Request, provider: str) -> JSONResponse:
 def _revocation_state(begin_data: dict) -> tuple[bool, int | None]:
     already_absent = begin_data.get("already_absent") is True
     generation = begin_data.get("generation")
-    if not already_absent and (
-        not isinstance(generation, int)
-        or isinstance(generation, bool)
-        or generation < 1
-    ):
+    if not already_absent and (not isinstance(generation, int) or isinstance(generation, bool) or generation < 1):
         raise ValueError("credential revocation returned invalid state")
     return already_absent, generation
 
 
-def _delete_brain_for_token(
-    token: str, provider: str, forwarded_for: str
-) -> JSONResponse:
+def _delete_brain_for_token(token: str, provider: str, forwarded_for: str) -> JSONResponse:
     begin_status, begin_data = _call(
         ACCOUNTS_URL,
         "POST",
@@ -1207,10 +1116,7 @@ async def team_install(request: Request, team_id: str) -> JSONResponse:
     try:
         if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
             raise ClientPayloadError(403, "forbidden origin")
-        if (
-            request.headers.get("content-type", "").strip().lower()
-            != "application/json"
-        ):
+        if request.headers.get("content-type", "").strip().lower() != "application/json":
             raise ClientPayloadError(415, "Content-Type must be application/json")
         team_id = _canonical_team_id(team_id)
         if team_id is None:
@@ -1269,9 +1175,7 @@ async def team_uninstall(request: Request, team_id: str, app_id: str) -> JSONRes
         f"/v1/teams/{team_id}/apps/{app_id}",
         extra={"X-Shimpz-Account": token},
     )
-    log.info(
-        "app_uninstall", account=account_id, team_id=team_id, app=app_id, status=status
-    )
+    log.info("app_uninstall", account=account_id, team_id=team_id, app=app_id, status=status)
     return JSONResponse(data, status_code=status)
 
 
@@ -1333,10 +1237,7 @@ async def cloud_assistant_install(request: Request, team_id: str) -> JSONRespons
     try:
         if not _assistant_mutation_origin_allowed(request.headers.get("origin")):
             raise ClientPayloadError(403, "forbidden origin")
-        if (
-            request.headers.get("content-type", "").strip().lower()
-            != "application/json"
-        ):
+        if request.headers.get("content-type", "").strip().lower() != "application/json":
             raise ClientPayloadError(415, "Content-Type must be application/json")
         team_id = _canonical_team_id(team_id)
         if team_id is None:
@@ -1370,9 +1271,7 @@ async def cloud_assistant_install(request: Request, team_id: str) -> JSONRespons
 
 
 @app.delete("/api/teams/{team_id}/assistants/{assistant}")
-async def cloud_assistant_uninstall(
-    request: Request, team_id: str, assistant: str
-) -> JSONResponse:
+async def cloud_assistant_uninstall(request: Request, team_id: str, assistant: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     if not token:
         return _private_json({"detail": "not authenticated"}, 401)
@@ -1409,9 +1308,7 @@ async def cloud_assistant_uninstall(
 
 
 # ── the Captain's chat (ADR-0004): forwarded to the team-driver's named exec ops ──────────────
-MAX_UPLOAD_BYTES = (
-    team_driver_contract.MAX_FILE_UPLOAD_BYTES
-)  # Below Cloudflare's 100 MB proxied-body limit.
+MAX_UPLOAD_BYTES = team_driver_contract.MAX_FILE_UPLOAD_BYTES  # Below Cloudflare's 100 MB proxied-body limit.
 
 
 @app.get("/api/teams/{team_id}/inference")
@@ -1439,19 +1336,13 @@ async def team_inference_configure(request: Request, team_id: str) -> JSONRespon
     except ClientPayloadError as exc:
         return JSONResponse({"detail": exc.detail}, status_code=exc.status)
     if set(payload) != {"provider", "model"}:
-        return JSONResponse(
-            {"detail": "inference requires provider and model"}, status_code=400
-        )
+        return JSONResponse({"detail": "inference requires provider and model"}, status_code=400)
     provider = _brain_provider(payload.get("provider"))
-    model = (
-        _brain_model(provider, payload.get("model")) if provider is not None else None
-    )
+    model = _brain_model(provider, payload.get("model")) if provider is not None else None
     if provider is None:
         return JSONResponse({"detail": "unsupported model provider"}, status_code=400)
     if model is None:
-        return JSONResponse(
-            {"detail": "unsupported model for provider"}, status_code=400
-        )
+        return JSONResponse({"detail": "unsupported model for provider"}, status_code=400)
     status, data = await _bounded_call(
         _CONTROL_EXECUTOR,
         TEAMDRIVER_URL,
@@ -1489,9 +1380,7 @@ async def team_files(request: Request, team_id: str) -> JSONResponse:
 
 
 @app.post("/api/teams/{team_id}/files")
-async def team_file_upload(
-    request: Request, team_id: str, file: UploadFile
-) -> JSONResponse:
+async def team_file_upload(request: Request, team_id: str, file: UploadFile) -> JSONResponse:
     """Upload one opaque Team object without granting a Brain or Assistant filesystem access."""
     token, account_id, _ = await _authed_account_bounded(request)
     try:
@@ -1544,9 +1433,7 @@ async def team_file_upload(
 
 
 @app.delete("/api/teams/{team_id}/files/{file_id}")
-async def team_file_delete(
-    request: Request, team_id: str, file_id: str
-) -> JSONResponse:
+async def team_file_delete(request: Request, team_id: str, file_id: str) -> JSONResponse:
     token, account_id, _ = await _authed_account_bounded(request)
     try:
         if not token:
@@ -1607,9 +1494,7 @@ async def _ws_receive_bounded_json(ws: WebSocket) -> dict:
     try:
         payload = jsonlib.loads(raw, object_pairs_hook=_unique_json_object)
     except (jsonlib.JSONDecodeError, ValueError) as exc:
-        raise WebSocketPayloadError(
-            400, "WebSocket frame must be valid JSON", 1007
-        ) from exc
+        raise WebSocketPayloadError(400, "WebSocket frame must be valid JSON", 1007) from exc
     if not isinstance(payload, dict):
         raise WebSocketPayloadError(400, "WebSocket JSON must be an object", 1007)
     return payload
@@ -1619,16 +1504,12 @@ async def _ws_verify(ws: WebSocket) -> tuple[str, str]:
     token = ws.cookies.get(ACCOUNT_COOKIE, "")
     if not token:
         return "", ""
-    status, data = await _bounded_call(
-        _AUTH_EXECUTOR, ACCOUNTS_URL, "POST", "/v1/verify", {"token": token}
-    )
+    status, data = await _bounded_call(_AUTH_EXECUTOR, ACCOUNTS_URL, "POST", "/v1/verify", {"token": token})
     account_id = data.get("account_id") if status == 200 else None
     return (token, str(account_id)) if account_id else ("", "")
 
 
-def _stream_queue_put(
-    queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, item: dict | None
-) -> bool:
+def _stream_queue_put(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, item: dict | None) -> bool:
     """Thread→event-loop handoff with a hard queue bound and real producer backpressure."""
     pending = None
     try:
@@ -1656,12 +1537,7 @@ def _validated_done_event(value: dict, expected_team_id: str) -> dict | None:
     team_id = _canonical_team_id(value["team_id"])
     reply = _canonical_chat_reply(value["reply"])
     team_name = _canonical_team_name(value["team_name"])
-    if (
-        team_id is None
-        or team_id != expected_team_id
-        or reply is None
-        or team_name is None
-    ):
+    if team_id is None or team_id != expected_team_id or reply is None or team_name is None:
         return None
     return {
         "type": "done",
@@ -1672,13 +1548,7 @@ def _validated_done_event(value: dict, expected_team_id: str) -> dict | None:
 
 
 def _public_chat_error_event(status: int) -> dict:
-    safe_status = (
-        status
-        if isinstance(status, int)
-        and not isinstance(status, bool)
-        and 400 <= status <= 599
-        else 502
-    )
+    safe_status = status if isinstance(status, int) and not isinstance(status, bool) and 400 <= status <= 599 else 502
     if safe_status == 429:
         detail = "chat service is busy; try again shortly"
     elif safe_status == 504:
@@ -1709,9 +1579,7 @@ def _validated_error_event(value: dict) -> dict | None:
     return _public_chat_error_event(status)
 
 
-def _bounded_public_text(
-    value: object, maximum: int, *, optional: bool = False
-) -> str | None:
+def _bounded_public_text(value: object, maximum: int, *, optional: bool = False) -> str | None:
     if optional and value is None:
         return None
     if (
@@ -2027,9 +1895,7 @@ async def _send_relay_event(
         "approval-required",
     }:
         turn.state["pending_challenge_id"] = terminal["challenge_id"]
-        turn.state["pending_challenge_type"] = terminal["type"].removesuffix(
-            "-required"
-        )
+        turn.state["pending_challenge_type"] = terminal["type"].removesuffix("-required")
     elif turn.state is not None and terminal["type"] in {"done", "stopped"}:
         turn.state["pending_challenge_id"] = None
         turn.state["pending_challenge_type"] = None
@@ -2060,16 +1926,12 @@ def _stream_lines(relay: _StreamRelay) -> None:
             _stream_queue_put(
                 relay.queue,
                 relay.loop,
-                _upstream_error_event(
-                    resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)
-                ),
+                _upstream_error_event(resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)),
             )
             return
         _relay_upstream_events(resp, relay.queue, relay.loop, relay.team_id)
     except (OSError, http.client.HTTPException) as exc:
-        log.warning(
-            "chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__
-        )
+        log.warning("chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__)
         _stream_queue_put(
             relay.queue,
             relay.loop,
@@ -2175,16 +2037,12 @@ def _relay_capacity_event() -> dict:
     }
 
 
-async def _deliver_turn(
-    turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future
-) -> None:
+async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future) -> None:
     delivery = turn.delivery
     try:
         while True:
             pending = asyncio.create_task(queue.get())
-            done, _pending = await asyncio.wait(
-                {pending, worker}, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, _pending = await asyncio.wait({pending, worker}, return_when=asyncio.FIRST_COMPLETED)
             if pending not in done:
                 pending.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -2375,13 +2233,9 @@ async def _ws_stop_turn(ws: WebSocket, team_id: str, hdr: dict, state: dict) -> 
                 state["pending_challenge_type"] = None
                 await ws.send_json({"type": "stopped"})
             else:
-                await ws.send_json(
-                    _upstream_error_event(status if status != 200 else 409, b"")
-                )
+                await ws.send_json(_upstream_error_event(status if status != 200 else 409, b""))
             return
-        await ws.send_json(
-            {"type": "error", "status": 409, "detail": "no active chat turn"}
-        )
+        await ws.send_json({"type": "error", "status": 409, "detail": "no active chat turn"})
         return
     state["stop_requested"] = True
     lease = state["leases"][active]
@@ -2450,11 +2304,7 @@ async def _ws_dispatch_challenge(
     state: dict,
 ) -> None:
     kind = "input" if msg.get("type") == "input-submit" else "approval"
-    expected_fields = (
-        {"type", "challenge_id", "answer"}
-        if kind == "input"
-        else {"type", "challenge_id", "approved"}
-    )
+    expected_fields = {"type", "challenge_id", "answer"} if kind == "input" else {"type", "challenge_id", "approved"}
     challenge_id = msg.get("challenge_id")
     valid_answer = kind == "input" or msg.get("approved") is True
     if (
@@ -2463,9 +2313,7 @@ async def _ws_dispatch_challenge(
         or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None
         or not valid_answer
     ):
-        await ws.send_json(
-            {"type": "error", "status": 400, "detail": f"invalid {kind} submission"}
-        )
+        await ws.send_json({"type": "error", "status": 400, "detail": f"invalid {kind} submission"})
         return
     state["turns"].difference_update({turn for turn in state["turns"] if turn.done()})
     if state["turns"]:
@@ -2477,10 +2325,7 @@ async def _ws_dispatch_challenge(
             }
         )
         return
-    if (
-        state.get("pending_challenge_type") != kind
-        or state.get("pending_challenge_id") != challenge_id
-    ):
+    if state.get("pending_challenge_type") != kind or state.get("pending_challenge_id") != challenge_id:
         await ws.send_json(
             {
                 "type": "error",
@@ -2495,18 +2340,14 @@ async def _ws_dispatch_challenge(
         return
     body = {key: value for key, value in msg.items() if key != "type"}
     try:
-        tracked = _start_ws_challenge(
-            _WsContext(ws, team_id, hdr, state), kind, body, lease
-        )
+        tracked = _start_ws_challenge(_WsContext(ws, team_id, hdr, state), kind, body, lease)
     except BaseException:
         lease.release()
         raise
     _track_ws_turn(state, tracked, lease)
 
 
-async def _ws_dispatch(
-    ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict
-) -> None:
+async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict) -> None:
     turns = state["turns"]
     if msg.get("type") == "chat":
         try:
@@ -2515,13 +2356,9 @@ async def _ws_dispatch(
                     400,
                     "chat frame must contain only type, message, files, and assistant_ids",
                 )
-            turn_payload = _chat_turn_payload(
-                {key: value for key, value in msg.items() if key != "type"}
-            )
+            turn_payload = _chat_turn_payload({key: value for key, value in msg.items() if key != "type"})
         except ClientPayloadError as exc:
-            await ws.send_json(
-                {"type": "error", "status": exc.status, "detail": exc.detail}
-            )
+            await ws.send_json({"type": "error", "status": exc.status, "detail": exc.detail})
             return
         msg = {"type": "chat", **turn_payload}
         turns.difference_update({turn for turn in turns if turn.done()})
@@ -2557,9 +2394,7 @@ async def _ws_dispatch(
     elif msg.get("type") == "stop" and set(msg) == {"type"}:
         await _ws_stop_turn(ws, team_id, hdr, state)
     else:
-        await ws.send_json(
-            {"type": "error", "status": 400, "detail": "unsupported chat frame"}
-        )
+        await ws.send_json({"type": "error", "status": 400, "detail": "unsupported chat frame"})
 
 
 async def _ws_validate_opening(ws: WebSocket) -> bool:
@@ -2660,9 +2495,7 @@ def _resolve(rel: str) -> Path | None:
 def _static_cache_control(path: str, hit: Path) -> str:
     """Revalidate navigations while retaining SvelteKit's content-addressed asset cache."""
     rel = path.strip("/")
-    if hit.suffix.lower() not in {".html", ".htm"} and rel.startswith(
-        "_app/immutable/"
-    ):
+    if hit.suffix.lower() not in {".html", ".htm"} and rel.startswith("_app/immutable/"):
         return IMMUTABLE_CACHE_CONTROL
     return HTML_CACHE_CONTROL
 
@@ -2671,9 +2504,7 @@ def _static_cache_control(path: str, hit: Path) -> str:
 def static_files(path: str) -> Response:
     hit = _resolve(path)
     if hit:
-        return FileResponse(
-            hit, headers={"Cache-Control": _static_cache_control(path, hit)}
-        )
+        return FileResponse(hit, headers={"Cache-Control": _static_cache_control(path, hit)})
     return PlainTextResponse(
         "not found",
         status_code=404,

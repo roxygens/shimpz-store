@@ -55,9 +55,7 @@ def _done(
     }
 
 
-def _input_challenge(
-    *, team_id: str = TEST_TEAM_ID, challenge_id: str = "a" * 32
-) -> dict:
+def _input_challenge(*, team_id: str = TEST_TEAM_ID, challenge_id: str = "a" * 32) -> dict:
     return {
         "type": "input-required",
         "status": "input-required",
@@ -74,9 +72,7 @@ def _input_challenge(
     }
 
 
-def _approval_challenge(
-    *, team_id: str = TEST_TEAM_ID, challenge_id: str = "b" * 32
-) -> dict:
+def _approval_challenge(*, team_id: str = TEST_TEAM_ID, challenge_id: str = "b" * 32) -> dict:
     return {
         "type": "approval-required",
         "status": "approval-required",
@@ -217,9 +213,7 @@ def test_chat_turn_requires_an_explicit_bounded_assistant_scope():
         "files": ["a" * 32],
         "assistant_ids": ["shimpz-cloudflare"],
     }
-    assert main._chat_turn_payload(
-        {"message": "brain only", "files": [], "assistant_ids": []}
-    ) == {
+    assert main._chat_turn_payload({"message": "brain only", "files": [], "assistant_ids": []}) == {
         "message": "brain only",
         "files": [],
         "assistant_ids": [],
@@ -401,11 +395,7 @@ def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
         )
         await asyncio.gather(*tuple(state["turns"]))
         await asyncio.sleep(0)
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert events == [
             {
                 "type": "done",
@@ -555,11 +545,7 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
             await _ws_dispatch(websocket, "team-queued", {}, {"type": "stop"}, state)
             assert admission.snapshot() == (1, 0)
             assert not state["turns"]
-            events = [
-                json.loads(message["text"])
-                for message in sent
-                if message["type"] == "websocket.send"
-            ]
+            events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
             assert events == [{"type": "stopped"}]
 
             occupied.release()
@@ -671,9 +657,7 @@ def test_final_websocket_gate_converts_invalid_events(event: dict, monkeypatch):
 
 
 def test_websocket_connection_admission_bounds_global_account_and_team_counts():
-    admission = main._WsConnectionAdmission(
-        global_limit=3, account_limit=2, team_limit=1
-    )
+    admission = main._WsConnectionAdmission(global_limit=3, account_limit=2, team_limit=1)
     account_a_one = admission.reserve("account-a", "team-1")
     assert account_a_one is not None
     assert admission.reserve("account-a", "team-1") is None
@@ -758,9 +742,7 @@ def test_public_auth_json_is_bounded_before_any_upstream_hop():
     oversized = json.dumps({"padding": "x" * (main.MAX_AUTH_BODY_BYTES + 1)})
     with TestClient(app) as client:
         responses = [
-            client.post(
-                path, content=oversized, headers={"Content-Type": "application/json"}
-            )
+            client.post(path, content=oversized, headers={"Content-Type": "application/json"})
             for path in ("/api/signup", "/api/login")
         ]
     assert [response.status_code for response in responses] == [413, 413]
@@ -778,21 +760,14 @@ def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
     with TestClient(app) as client:
         response = client.post(
             "/api/signup",
-            json={
-                "username": "captain",
-                "password": "correct horse battery staple",
-                "github": "ignored",
-            },
+            json={"username": "captain", "password": "correct horse battery staple", "github": "ignored"},
         )
 
     assert response.status_code == 400
     assert len(forwarded) == 1
     _executor, base, method, path, payload, extra = forwarded[0]
     assert (base, method, path) == (main.ACCOUNTS_URL, "POST", "/v1/signup")
-    assert payload == {
-        "username": "captain",
-        "password": "correct horse battery staple",
-    }
+    assert payload == {"username": "captain", "password": "correct horse battery staple"}
     assert set(extra) == {"X-Forwarded-For"}
 
 
@@ -804,9 +779,7 @@ def test_retired_public_marketplace_routes_are_absent():
     with TestClient(app) as client:
         responses = (
             client.post("/api/accounts/v1/verify", json={"token": "unused"}),
-            client.post(
-                "/api/apps/dormant/reviews", json={"rating": 5, "body": "unused"}
-            ),
+            client.post("/api/apps/dormant/reviews", json={"rating": 5, "body": "unused"}),
         )
 
     # The GET-only static catch-all makes unknown POST paths method-not-allowed; neither path has an
@@ -850,9 +823,7 @@ def test_upstream_http_errors_and_unterminated_terminal_lines_are_redacted():
         ({"type": "stopped"}, {"type": "stopped"}),
     ],
 )
-def test_terminal_event_contract_accepts_only_exact_bounded_schemas(
-    event: dict, expected: dict
-):
+def test_terminal_event_contract_accepts_only_exact_bounded_schemas(event: dict, expected: dict):
     assert _validated_terminal_event(event, TEST_TEAM_ID) == expected
 
 
@@ -902,11 +873,7 @@ def test_terminal_event_contract_excludes_out_of_band_account_challenges():
         _done("x" * (main.MAX_CHAT_REPLY_CHARS + 1)),
         {"type": "error", "status": True, "detail": "failed"},
         {"type": "error", "status": 200, "detail": "not an error"},
-        {
-            "type": "error",
-            "status": 502,
-            "detail": "x" * (main.MAX_CHAT_ERROR_DETAIL_CHARS + 1),
-        },
+        {"type": "error", "status": 502, "detail": "x" * (main.MAX_CHAT_ERROR_DETAIL_CHARS + 1)},
         {"type": "stopped", "requested": True},
     ],
 )
@@ -915,9 +882,7 @@ def test_terminal_event_contract_rejects_legacy_extra_and_unbounded_values(event
 
 
 def test_terminal_event_parser_rejects_duplicate_fields():
-    assert (
-        _parsed_stream_event(b'{"type":"stopped","type":"done"}', TEST_TEAM_ID) is None
-    )
+    assert _parsed_stream_event(b'{"type":"stopped","type":"done"}', TEST_TEAM_ID) is None
 
 
 @contextlib.contextmanager
@@ -956,9 +921,7 @@ def _relay(body: bytes, team_id: str = TEST_TEAM_ID) -> list[dict]:
         queue: asyncio.Queue = asyncio.Queue()
         loop = asyncio.get_running_loop()
         with _real_upstream(body) as response:
-            await asyncio.to_thread(
-                _relay_upstream_events, response, queue, loop, team_id
-            )
+            await asyncio.to_thread(_relay_upstream_events, response, queue, loop, team_id)
         events = []
         while not queue.empty():
             events.append(queue.get_nowait())
@@ -1158,17 +1121,11 @@ def test_driver_terminal_failures_reach_websocket_as_errors(terminal: dict):
                 {"message": "hello", "files": [], "assistant_ids": []},
                 started,
             )
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert started.is_set()
         assert len(requests) == 1
         expected_detail = (
-            "chat service timed out"
-            if terminal["status"] == 504
-            else "chat service is temporarily unavailable"
+            "chat service timed out" if terminal["status"] == 504 else "chat service is temporarily unavailable"
         )
         assert events == [
             {
@@ -1204,22 +1161,14 @@ def test_real_upstream_non_2xx_reaches_websocket_redacted(status: int, payload: 
                 {"message": "hello", "files": [], "assistant_ids": []},
                 started,
             )
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert started.is_set()
         assert len(requests) == 1
         assert events == [
             {
                 "type": "error",
                 "status": status,
-                "detail": (
-                    "chat service is busy; try again shortly"
-                    if status == 429
-                    else "chat request was rejected"
-                ),
+                "detail": ("chat service is busy; try again shortly" if status == 429 else "chat request was rejected"),
             }
         ]
 
@@ -1236,9 +1185,7 @@ def test_upstream_relay_is_bounded_and_fails_closed_on_protocol_errors():
         "detail": "team-driver stream violated the terminal event contract",
         "_relay_abort": True,
     }
-    legacy_then_terminal = (
-        b'{"type":"text","text":"partial"}\n' + json.dumps(_done()).encode() + b"\n"
-    )
+    legacy_then_terminal = b'{"type":"text","text":"partial"}\n' + json.dumps(_done()).encode() + b"\n"
     assert _relay(legacy_then_terminal) == [protocol_error]
 
     malformed = b"not-json\n" + json.dumps(_done()).encode() + b"\n"
@@ -1357,11 +1304,7 @@ def test_local_relay_eof_stops_provider_before_browser_error():
                 {"message": "hello", "files": [], "assistant_ids": []},
                 started,
             )
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert events == [
             {
                 "type": "error",
@@ -1575,11 +1518,7 @@ def test_model_credentials_accept_only_generic_provider_api_keys():
         )
 
     assert valid.status_code == 200
-    assert valid.json() == {
-        "provider": "anthropic",
-        "auth_type": "api_key",
-        "status": "configured",
-    }
+    assert valid.json() == {"provider": "anthropic", "auth_type": "api_key", "status": "configured"}
     assert oauth.status_code == legacy.status_code == 400
     assert [call for call in calls if call[1] == "/v1/brains/upsert"] == [
         (
@@ -1614,11 +1553,7 @@ def test_team_create_forwards_the_account_scoped_model_to_the_real_control_plane
     assert response.status_code == 201
     assert legacy.status_code == 400
     creates = [
-        call
-        for call in calls
-        if call[0] == "POST"
-        and call[1].startswith("/v1/teams/")
-        and call[1].endswith("/create")
+        call for call in calls if call[0] == "POST" and call[1].startswith("/v1/teams/") and call[1].endswith("/create")
     ]
     assert creates == [
         (
@@ -1669,26 +1604,17 @@ def test_team_models_must_match_the_closed_provider_catalog_before_forwarding():
         )
 
     assert create.status_code == switch.status_code == 400
-    assert (
-        create.json() == switch.json() == {"detail": "unsupported model for provider"}
-    )
+    assert create.json() == switch.json() == {"detail": "unsupported model for provider"}
     assert not any(
-        path.endswith("/create") or (method == "PUT" and path.endswith("/inference"))
-        for method, path, _body in calls
+        path.endswith("/create") or (method == "PUT" and path.endswith("/inference")) for method, path, _body in calls
     )
 
 
 def test_team_ids_bind_the_complete_account_and_normalized_name():
-    first = main._team_id_for(
-        "account-prefix-one", "A very long shared team name alpha"
-    )
+    first = main._team_id_for("account-prefix-one", "A very long shared team name alpha")
     same = main._team_id_for("account-prefix-one", "A very long shared team name alpha")
-    other_account = main._team_id_for(
-        "account-prefix-two", "A very long shared team name alpha"
-    )
-    other_tail = main._team_id_for(
-        "account-prefix-one", "A very long shared team name omega"
-    )
+    other_account = main._team_id_for("account-prefix-two", "A very long shared team name alpha")
+    other_tail = main._team_id_for("account-prefix-one", "A very long shared team name omega")
 
     assert first == same
     assert first != other_account
@@ -1721,17 +1647,12 @@ def test_team_create_and_install_reject_bodies_before_control_plane_forwarding()
         install = client.post(
             "/api/teams/team_openai/install",
             content=install_body,
-            headers={
-                "Content-Type": "application/json",
-                "Origin": "https://shimpz.com",
-            },
+            headers={"Content-Type": "application/json", "Origin": "https://shimpz.com"},
         )
     assert create.status_code == 413
     assert install.status_code == 413
     forwarded_mutations = [
-        path
-        for method, path, _body in calls
-        if method == "POST" and path.endswith(("/create", "/apps"))
+        path for method, path, _body in calls if method == "POST" and path.endswith(("/create", "/apps"))
     ]
     assert forwarded_mutations == []
 
