@@ -1,33 +1,25 @@
 /**
  * @typedef {{id: string, title: string, inputUsdPerMillion: number, outputUsdPerMillion: number}} ModelDefinition
  */
+import MODEL_CATALOG from "./modelCatalog.json" with { type: "json" };
 
-/** @param {string} id @param {string} title @param {number} inputUsdPerMillion @param {number} outputUsdPerMillion */
-const freezeModel = (id, title, inputUsdPerMillion, outputUsdPerMillion) =>
-  Object.freeze({ id, title, inputUsdPerMillion, outputUsdPerMillion });
-
-// Base rates verified 2026-07-17: https://developers.openai.com/api/docs/models and https://platform.claude.com/docs/en/about-claude/pricing
-const OPENAI_MODELS = Object.freeze([
-  freezeModel("gpt-5.6-sol", "GPT-5.6 Sol", 5, 30),
-  freezeModel("gpt-5.6-terra", "GPT-5.6 Terra", 2.5, 15),
-  freezeModel("gpt-5.6-luna", "GPT-5.6 Luna", 1, 6),
-  freezeModel("gpt-5.5", "GPT-5.5", 5, 30),
-]);
-
-const ANTHROPIC_MODELS = Object.freeze([
-  freezeModel("claude-fable-5", "Claude Fable 5", 10, 50),
-  freezeModel("claude-opus-4-8", "Claude Opus 4.8", 5, 25),
-  freezeModel("claude-sonnet-5", "Claude Sonnet 5", 3, 15),
-  freezeModel("claude-haiku-4-5-20251001", "Claude Haiku 4.5", 1, 5),
-]);
+/** @param {Record<string, number|string>} model */
+const freezeModel = (model) => Object.freeze({
+  id: String(model.id),
+  title: String(model.title),
+  inputUsdPerMillion: Number(model.input_usd_per_million_cents) / 100,
+  outputUsdPerMillion: Number(model.output_usd_per_million_cents) / 100,
+});
 
 /** @type {readonly ModelDefinition[]} */
 const NO_MODELS = Object.freeze([]);
 
-export const MODEL_PROVIDERS = Object.freeze([
-  Object.freeze({ id: "openai", title: "OpenAI", defaultModel: "gpt-5.6-terra", models: OPENAI_MODELS }),
-  Object.freeze({ id: "anthropic", title: "Anthropic", defaultModel: "claude-sonnet-5", models: ANTHROPIC_MODELS }),
-]);
+export const MODEL_PROVIDERS = Object.freeze(MODEL_CATALOG.providers.map((provider) => Object.freeze({
+  id: provider.id,
+  title: provider.title,
+  defaultModel: provider.default_model,
+  models: Object.freeze(provider.models.map(freezeModel)),
+})));
 
 /** @param {unknown} value */
 export function modelProvider(value) {
