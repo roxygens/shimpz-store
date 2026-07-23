@@ -17,7 +17,7 @@ from fastapi import Request, WebSocket
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import main
+from app import authn, config, main
 from app.main import (
     ACCOUNT_COOKIE,
     CHAT_WS_SUBPROTOCOL,
@@ -739,7 +739,7 @@ def test_bounded_executor_counts_running_and_queued_work_then_recovers():
 
 
 def test_public_auth_json_is_bounded_before_any_upstream_hop():
-    oversized = json.dumps({"padding": "x" * (main.MAX_AUTH_BODY_BYTES + 1)})
+    oversized = json.dumps({"padding": "x" * (config.MAX_AUTH_BODY_BYTES + 1)})
     with TestClient(app) as client:
         responses = [
             client.post(path, content=oversized, headers={"Content-Type": "application/json"})
@@ -752,11 +752,10 @@ def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
     forwarded = []
 
     async def bounded_call(*args, extra=None):
-        executor, base, method, path, payload = args
-        forwarded.append((executor, base, method, path, payload, extra))
+        forwarded.append((*args, extra))
         return 400, {"error": "rejected"}
 
-    monkeypatch.setattr(main, "_bounded_call", bounded_call)
+    monkeypatch.setattr("app.routers.account._bounded_call", bounded_call)
     with TestClient(app) as client:
         response = client.post(
             "/api/signup",
@@ -765,8 +764,8 @@ def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
 
     assert response.status_code == 400
     assert len(forwarded) == 1
-    _executor, base, method, path, payload, extra = forwarded[0]
-    assert (base, method, path) == (main.ACCOUNTS_URL, "POST", "/v1/signup")
+    base, method, path, payload, extra = forwarded[0]
+    assert (base, method, path) == (authn.ACCOUNTS_URL, "POST", "/v1/signup")
     assert payload == {"username": "captain", "password": "correct horse battery staple"}
     assert set(extra) == {"X-Forwarded-For"}
 
@@ -1465,7 +1464,7 @@ def _brain_control_plane(*, finalize_token_available: bool = True):
             main.TEAMDRIVER_URL,
             main.BRAIN_FINALIZE_TOKEN_FILE,
         )
-        main.ACCOUNTS_URL = main.TEAMDRIVER_URL = base
+        authn.ACCOUNTS_URL = main.ACCOUNTS_URL = main.TEAMDRIVER_URL = base
         main.BRAIN_FINALIZE_TOKEN_FILE = token_path
         try:
             yield calls
@@ -1475,6 +1474,7 @@ def _brain_control_plane(*, finalize_token_available: bool = True):
                 main.TEAMDRIVER_URL,
                 main.BRAIN_FINALIZE_TOKEN_FILE,
             ) = previous
+            authn.ACCOUNTS_URL = main.ACCOUNTS_URL
             server.shutdown()
             server.server_close()
             worker.join(timeout=5)

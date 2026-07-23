@@ -6,7 +6,7 @@ import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
-from app import main
+from app import authn, main
 from app import projections
 from fastapi.testclient import TestClient
 
@@ -105,14 +105,14 @@ def _control_plane():
     )
     worker.start()
     base = f"http://127.0.0.1:{server.server_port}"
-    previous_accounts = main.ACCOUNTS_URL
+    previous_accounts = authn.ACCOUNTS_URL
     previous_driver = main.TEAMDRIVER_URL
-    main.ACCOUNTS_URL = base
+    authn.ACCOUNTS_URL = base
     main.TEAMDRIVER_URL = base
     try:
         yield calls
     finally:
-        main.ACCOUNTS_URL = previous_accounts
+        authn.ACCOUNTS_URL = previous_accounts
         main.TEAMDRIVER_URL = previous_driver
         server.shutdown()
         server.server_close()

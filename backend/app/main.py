@@ -27,6 +27,15 @@ from fastapi import FastAPI, Request, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 
 from app import team_driver_contract
+from app.authn import (
+    EXECUTOR as _AUTH_EXECUTOR,
+)
+from app.authn import (
+    authed_account_bounded as _authed_account_bounded,
+)
+from app.authn import (
+    client_ip as _client_ip,
+)
 from app.concurrency import (
     BoundedThreadPoolExecutor as _BoundedThreadPoolExecutor,
 )
@@ -46,14 +55,10 @@ from app.config import (
     ACCOUNT_COOKIE,
     ACCOUNTS_URL,
     ASSISTANT_MUTATION_ALLOWED_ORIGINS,
-    AUTH_QUEUE_MAX,
-    AUTH_WORKER_THREADS,
     BRAIN_FINALIZE_TOKEN_FILE,
     CHAT_WS_SUBPROTOCOL,
     CONTROL_QUEUE_MAX,
     CONTROL_WORKER_THREADS,
-    COOKIE_MAX_AGE,
-    MAX_AUTH_BODY_BYTES,
     MAX_CHAT_ASSISTANTS,
     MAX_CHAT_ERROR_DETAIL_CHARS,
     MAX_CHAT_FILES,
@@ -110,7 +115,7 @@ from app.projections import (
 from app.projections import (
     released_running_assistant_inventory as _released_running_assistant_inventory,
 )
-from app.routers import oauth, public, static
+from app.routers import account, oauth, public, static
 from app.upstream import call as _call
 
 setup("shimpz-store")
@@ -127,11 +132,6 @@ _CONTROL_EXECUTOR = _BoundedThreadPoolExecutor(
     max_workers=CONTROL_WORKER_THREADS,
     max_outstanding=CONTROL_WORKER_THREADS + CONTROL_QUEUE_MAX,
     thread_name_prefix="shimpz-control",
-)
-_AUTH_EXECUTOR = _BoundedThreadPoolExecutor(
-    max_workers=AUTH_WORKER_THREADS,
-    max_outstanding=AUTH_WORKER_THREADS + AUTH_QUEUE_MAX,
-    thread_name_prefix="shimpz-auth",
 )
 _STOP_EXECUTOR = _BoundedThreadPoolExecutor(
     max_workers=STOP_WORKER_THREADS,
@@ -270,38 +270,6 @@ async def executor_saturated(request: Request, exc: _ExecutorSaturatedError) -> 
     )
 
 
-def _set_cookie(resp: JSONResponse, token: str) -> None:
-    resp.set_cookie(
-        ACCOUNT_COOKIE,
-        token,
-        max_age=COOKIE_MAX_AGE,
-        httponly=True,
-        samesite="strict",
-        secure=True,
-        path="/",
-    )
-
-
-def _authed_account(request: Request) -> tuple[str, str, str]:
-    """(token, account_id, username) for a valid cookie, else ('', '', ''). Verified against accounts."""
-    token = request.cookies.get(ACCOUNT_COOKIE, "")
-    if not token:
-        return "", "", ""
-    status, data = _call(ACCOUNTS_URL, "POST", "/v1/verify", {"token": token})
-    if status == 200 and data.get("account_id"):
-        return token, data["account_id"], data.get("username", "")
-    return "", "", ""
-
-
-async def _authed_account_bounded(request: Request) -> tuple[str, str, str]:
-    return await _run_bounded(_AUTH_EXECUTOR, _authed_account, request)
-
-
-def _client_ip(request: Request) -> str:
-    """The end user's IP as best we can know it — Cloudflare's header when fronted, else the socket peer."""
-    return request.headers.get("cf-connecting-ip", "") or (request.client.host if request.client else "")
-
-
 def _team_id_for(account_id: str, team_name: str) -> str:
     """Derive a collision-resistant, Docker/PG-safe ID from the complete account/Team-name pair.
 
@@ -314,69 +282,6 @@ def _team_id_for(account_id: str, team_name: str) -> str:
         return ""
     digest = hashlib.sha256(f"{account_id}\0{normalized}".encode()).hexdigest()[:24]
     return f"{digest}_{normalized[:15]}".rstrip("_")
-
-
-# ── account auth (proxied to the `accounts` identity service) ──────────────────
-@app.post("/api/signup")
-async def signup(request: Request) -> JSONResponse:
-    try:
-        payload = await _read_bounded_json(request, MAX_AUTH_BODY_BYTES)
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
-    status, data = await _bounded_call(
-        _AUTH_EXECUTOR,
-        ACCOUNTS_URL,
-        "POST",
-        "/v1/signup",
-        {"username": payload.get("username"), "password": payload.get("password")},
-        extra={"X-Forwarded-For": _client_ip(request)},
-    )
-    body = {"account_id": data.get("account_id"), "username": data.get("username")} if status == 200 else data
-    resp = JSONResponse(body, status_code=status)
-    if status == 200 and data.get("token"):
-        _set_cookie(resp, data["token"])
-        log.info("signup", username=data.get("username"))
-    return resp
-
-
-@app.post("/api/login")
-async def login(request: Request) -> JSONResponse:
-    try:
-        payload = await _read_bounded_json(request, MAX_AUTH_BODY_BYTES)
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
-    status, data = await _bounded_call(
-        _AUTH_EXECUTOR,
-        ACCOUNTS_URL,
-        "POST",
-        "/v1/login",
-        {"username": payload.get("username"), "password": payload.get("password")},
-        extra={"X-Forwarded-For": _client_ip(request)},
-    )
-    body = {"account_id": data.get("account_id"), "username": data.get("username")} if status == 200 else data
-    resp = JSONResponse(body, status_code=status)
-    if status == 200 and data.get("token"):
-        _set_cookie(resp, data["token"])
-    return resp
-
-
-@app.post("/api/logout")
-def logout() -> JSONResponse:
-    resp = JSONResponse({"ok": True})
-    resp.delete_cookie(ACCOUNT_COOKIE, path="/")
-    return resp
-
-
-@app.get("/api/me")
-async def me(request: Request) -> JSONResponse:
-    _, account_id, username = await _authed_account_bounded(request)
-    return JSONResponse(
-        {
-            "authenticated": bool(account_id),
-            "account_id": account_id or None,
-            "username": username or None,
-        }
-    )
 
 
 # ── Account model credentials (one encrypted-at-rest API key per provider) ────
@@ -1938,6 +1843,7 @@ async def team_chat_ws(ws: WebSocket, team_id: str) -> None:
         connection.release()
 
 
+app.include_router(account.router)
 app.include_router(oauth.router)
 app.include_router(public.router)
 app.include_router(static.router)
