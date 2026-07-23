@@ -341,20 +341,10 @@ def _private_json(content: dict, status_code: int = 200) -> JSONResponse:
     return JSONResponse(content, status_code=status_code, headers=PRIVATE_NO_STORE_HEADERS)
 
 
-def _canonical_team_id(value: object) -> str | None:
-    return team_driver_contract.canonical_team_id(value)
-
-
-def _canonical_assistant_id(value: object) -> str | None:
-    return team_driver_contract.canonical_assistant_id(value)
-
-
-def _canonical_team_name(value: object) -> str | None:
-    return team_driver_contract.canonical_team_name(value)
-
-
-def _canonical_team_file_id(value: object) -> str | None:
-    return team_driver_contract.canonical_file_id(value)
+_canonical_team_id = team_driver_contract.canonical_team_id
+_canonical_assistant_id = team_driver_contract.canonical_assistant_id
+_canonical_team_name = team_driver_contract.canonical_team_name
+_canonical_team_file_id = team_driver_contract.canonical_file_id
 
 
 def _canonical_chat_reply(value: object) -> str | None:
@@ -425,8 +415,7 @@ def _public_file_metadata(value: object) -> dict | None:
     return team_driver_contract.project_file_metadata(value, include_usage=False)
 
 
-def _public_storage_usage(value: object) -> dict | None:
-    return team_driver_contract.project_storage_usage(value)
+_public_storage_usage = team_driver_contract.project_storage_usage
 
 
 def _public_file_upload(value: object, expected_team_id: str) -> dict | None:
