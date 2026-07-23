@@ -4,6 +4,7 @@ const TEAM_ID_RE = /^[a-z0-9_]{1,40}$/;
 const ASSISTANT_ID_RE = /^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$/;
 const MAX_FILES = 256;
 const MAX_FILES_PER_TURN = 8;
+const MAX_FILE_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_ASSISTANTS_PER_TURN = 16;
 const MAX_MESSAGE_CHARS = 16_000;
 const MAX_REPLY_CHARS = 60_000;
@@ -81,7 +82,10 @@ function usage(value) {
     if (!Number.isSafeInteger(amount) || amount < 0) throw new TypeError("invalid Team storage usage");
     result[key] = amount;
   }
-  if (result.used_bytes + result.remaining_bytes !== result.limit_bytes) {
+  const withinQuota = result.used_bytes <= result.limit_bytes &&
+    result.used_bytes + result.remaining_bytes === result.limit_bytes;
+  const overQuota = result.used_bytes >= result.limit_bytes && result.remaining_bytes === 0;
+  if (!withinQuota && !overQuota) {
     throw new TypeError("inconsistent Team storage usage");
   }
   return /** @type {StorageUsage} */ (result);
@@ -106,7 +110,8 @@ function fileMetadata(value, createdAtRequired) {
     !mediaType ||
     mediaType.length > 127 ||
     !Number.isSafeInteger(size) ||
-    size < 0 ||
+    size < 1 ||
+    size > MAX_FILE_UPLOAD_BYTES ||
     typeof sha256 !== "string" ||
     !SHA256.test(sha256)
   ) {
@@ -237,5 +242,5 @@ export function parseTeamStorage(value) {
 export function parseTeamUpload(value) {
   const source = record(value);
   if (!source) throw new TypeError("invalid Team upload response");
-  return { file: fileMetadata(source.file, false), ...usage(source) };
+  return { file: fileMetadata(source.file, true), ...usage(source) };
 }

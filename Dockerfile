@@ -36,7 +36,7 @@ FROM python:3.14-slim@sha256:b877e50bd90de10af8d82c57a022fc2e0dc731c5320d762a279
 ARG SOURCE_DATE_EPOCH=0
 WORKDIR /app
 COPY --from=dependencies /opt/venv /opt/venv
-COPY backend/app/__init__.py backend/app/assistant_releases.py backend/app/logconf.py backend/app/main.py \
+COPY backend/app/__init__.py backend/app/assistant_releases.py backend/app/logconf.py backend/app/main.py backend/app/team_driver_contract.py \
      backend/app/middleware.py backend/app/oauth_broker.py ./app/
 COPY --from=web /w/build ./build
 ENV PATH="/opt/venv/bin:$PATH" \

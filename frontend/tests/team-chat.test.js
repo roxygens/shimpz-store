@@ -123,12 +123,22 @@ test("keeps Team files opaque and drops every path-like upstream field", () => {
     ...usage,
     mount: "/private",
   });
-  const uploaded = parseTeamUpload({ file: { ...file, ...usage, path: "/private/blob" }, ...usage });
+  const uploaded = parseTeamUpload({
+    file: { ...file, created_at: 1_700_000_000, path: "/private/blob" },
+    ...usage,
+  });
 
   assert.deepEqual(inventory, { files: [{ ...file, created_at: 1_700_000_000 }], ...usage });
-  assert.deepEqual(uploaded, { file, ...usage });
+  assert.deepEqual(uploaded, { file: { ...file, created_at: 1_700_000_000 }, ...usage });
+  assert.deepEqual(
+    parseTeamStorage({ files: [], used_bytes: 8, limit_bytes: 4, remaining_bytes: 0 }),
+    { files: [], used_bytes: 8, limit_bytes: 4, remaining_bytes: 0 },
+  );
   assert.equal("path" in inventory.files[0], false);
   assert.equal("path" in uploaded.file, false);
+  assert.throws(() => parseTeamUpload({ file, ...usage }));
+  assert.throws(() => parseTeamUpload({ file: { ...file, size: 0, created_at: 1 }, ...usage }));
+  assert.throws(() => parseTeamUpload({ file: { ...file, size: 25 * 1024 * 1024 + 1, created_at: 1 }, ...usage }));
 });
 
 test("rejects forged, duplicate and inconsistent Team inventories", () => {

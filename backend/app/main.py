@@ -35,6 +35,8 @@ from fastapi.responses import (
     Response,
 )
 
+from app import team_driver_contract
+from app.team_driver_contract import project_storage_response
 from app.assistant_releases import (
     ASSISTANT_RELEASE_CACHE_CONTROL,
     ASSISTANT_RELEASE_FEED_BODY,
@@ -349,10 +351,6 @@ WS_ALLOWED_ORIGINS = frozenset(
     if (origin := _canonical_origin(raw.strip())) is not None
 )
 ASSISTANT_MUTATION_ALLOWED_ORIGINS = WS_ALLOWED_ORIGINS
-TEAM_ID_RE = re.compile(r"^[a-z0-9_]{1,40}$")
-ASSISTANT_ID_RE = re.compile(r"^[a-z][a-z0-9]*(?:-[a-z0-9]+)*$")
-TEAM_FILE_ID_RE = re.compile(r"^[a-f0-9]{32}$")
-TEAM_FILE_SHA256_RE = re.compile(r"^[a-f0-9]{64}$")
 MODEL_CATALOG = {
     "openai": frozenset({"gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna", "gpt-5.5"}),
     "anthropic": frozenset(
@@ -366,10 +364,9 @@ MODEL_CATALOG = {
 }
 RELEASED_CLOUD_ASSISTANTS = frozenset({"shimpz-cloudflare"})
 PRIVATE_NO_STORE_HEADERS = {"Cache-Control": "private, no-store"}
-MAX_CHAT_MESSAGE_CHARS = 16_000
-MAX_CHAT_FILES = 8
-MAX_CHAT_ASSISTANTS = 16
-MAX_TEAM_FILES = 256
+MAX_CHAT_MESSAGE_CHARS = team_driver_contract.MAX_CHAT_MESSAGE_CHARS
+MAX_CHAT_FILES = team_driver_contract.MAX_CHAT_FILES
+MAX_CHAT_ASSISTANTS = team_driver_contract.MAX_CHAT_ASSISTANTS
 MAX_CHAT_REPLY_CHARS = 60_000
 MAX_CHAT_ERROR_DETAIL_CHARS = 800
 TERMINAL_CONTRACT_ERROR = "team-driver stream violated the terminal event contract"
@@ -391,28 +388,19 @@ def _private_json(content: dict, status_code: int = 200) -> JSONResponse:
 
 
 def _canonical_team_id(value: object) -> str | None:
-    return value if isinstance(value, str) and TEAM_ID_RE.fullmatch(value) is not None else None
+    return team_driver_contract.canonical_team_id(value)
 
 
 def _canonical_assistant_id(value: object) -> str | None:
-    if not isinstance(value, str) or len(value) > 80 or ASSISTANT_ID_RE.fullmatch(value) is None:
-        return None
-    return value
+    return team_driver_contract.canonical_assistant_id(value)
 
 
 def _canonical_team_name(value: object) -> str | None:
-    if (
-        not isinstance(value, str)
-        or not 1 <= len(value) <= 80
-        or value.strip() != value
-        or any(ord(character) < 32 or ord(character) == 127 for character in value)
-    ):
-        return None
-    return value
+    return team_driver_contract.canonical_team_name(value)
 
 
 def _canonical_team_file_id(value: object) -> str | None:
-    return value if isinstance(value, str) and TEAM_FILE_ID_RE.fullmatch(value) is not None else None
+    return team_driver_contract.canonical_file_id(value)
 
 
 def _canonical_chat_reply(value: object) -> str | None:
@@ -480,93 +468,39 @@ def _team_create_payload(payload: dict, account_id: str) -> tuple[str, dict[str,
 
 def _public_file_metadata(value: object) -> dict | None:
     """Copy only opaque, non-path file metadata from the trusted controller response."""
-    if not isinstance(value, dict):
-        return None
-    file_id = _canonical_team_file_id(value.get("id"))
-    name = value.get("name")
-    media_type = value.get("media_type")
-    size = value.get("size")
-    sha256 = value.get("sha256")
-    if (
-        file_id is None
-        or not isinstance(name, str)
-        or not name
-        or name.strip() != name
-        or len(name.encode()) > 255
-        or name in {".", ".."}
-        or "/" in name
-        or "\\" in name
-        or any(ord(character) < 32 or ord(character) == 127 for character in name)
-        or not isinstance(media_type, str)
-        or not media_type
-        or len(media_type) > 127
-        or isinstance(size, bool)
-        or not isinstance(size, int)
-        or size < 0
-        or not isinstance(sha256, str)
-        or TEAM_FILE_SHA256_RE.fullmatch(sha256) is None
-    ):
-        return None
-    metadata = {
-        "id": file_id,
-        "name": name,
-        "media_type": media_type,
-        "size": size,
-        "sha256": sha256,
-    }
-    if "created_at" in value:
-        created_at = value["created_at"]
-        if isinstance(created_at, bool) or not isinstance(created_at, int) or created_at < 0:
-            return None
-        metadata["created_at"] = created_at
-    return metadata
+    return team_driver_contract.project_file_metadata(value, include_usage=False)
 
 
 def _public_storage_usage(value: object) -> dict | None:
-    if not isinstance(value, dict):
-        return None
-    usage = {}
-    for key in ("used_bytes", "limit_bytes", "remaining_bytes"):
-        amount = value.get(key)
-        if isinstance(amount, bool) or not isinstance(amount, int) or amount < 0:
-            return None
-        usage[key] = amount
-    over_quota = usage["used_bytes"] >= usage["limit_bytes"] and usage["remaining_bytes"] == 0
-    within_quota = usage["used_bytes"] + usage["remaining_bytes"] == usage["limit_bytes"]
-    if not (over_quota or within_quota):
-        return None
-    return usage
+    return team_driver_contract.project_storage_usage(value)
 
 
-def _public_file_upload(value: object) -> dict | None:
-    if not isinstance(value, dict):
-        return None
-    metadata = _public_file_metadata(value.get("file"))
-    usage = _public_storage_usage(value.get("file"))
-    return {"file": metadata, **usage} if metadata is not None and usage is not None else None
+def _public_file_upload(value: object, expected_team_id: str) -> dict | None:
+    return team_driver_contract.project_storage_response(
+        value,
+        kind="upload",
+        expected_team_id=expected_team_id,
+        include_team_id=False,
+    )
 
 
-def _public_file_inventory(value: object) -> dict | None:
-    if not isinstance(value, dict) or not isinstance(value.get("files"), list):
-        return None
-    values = value["files"]
-    if len(values) > MAX_TEAM_FILES:
-        return None
-    files = [_public_file_metadata(item) for item in values]
-    if any(item is None for item in files):
-        return None
-    opaque_ids = [item["id"] for item in files if item is not None]
-    usage = _public_storage_usage(value)
-    if usage is None or len(opaque_ids) != len(set(opaque_ids)):
-        return None
-    return {"files": files, **usage}
+def _public_file_inventory(value: object, expected_team_id: str) -> dict | None:
+    return team_driver_contract.project_storage_response(
+        value,
+        kind="list",
+        expected_team_id=expected_team_id,
+        include_team_id=False,
+    )
 
 
-def _public_file_deletion(value: object, expected_id: str) -> dict | None:
-    if not isinstance(value, dict) or value.get("id") != expected_id or value.get("deleted") is not True:
-        return None
-    usage = _public_storage_usage(value)
-    return {"id": expected_id, "deleted": True, **usage} if usage is not None else None
+def _public_file_deletion(value: object, expected_team_id: str, expected_id: str) -> dict | None:
+    return project_storage_response(
+        value,
+        kind="delete",
+        expected_team_id=expected_team_id,
+        expected_file_id=expected_id,
+        include_team_id=False,
+    )
 
 
 def _released_assistant_inventory(data: object) -> list[str] | None:
@@ -1378,7 +1312,7 @@ async def cloud_assistant_uninstall(request: Request, team_id: str, assistant: s
 
 
 # ── the Captain's chat (ADR-0004): forwarded to the team-driver's named exec ops ──────────────
-MAX_UPLOAD_BYTES = 25 * 1024 * 1024  # Below Cloudflare's 100 MB proxied-body limit.
+MAX_UPLOAD_BYTES = team_driver_contract.MAX_FILE_UPLOAD_BYTES  # Below Cloudflare's 100 MB proxied-body limit.
 
 
 @app.get("/api/teams/{team_id}/inference")
@@ -1442,7 +1376,7 @@ async def team_files(request: Request, team_id: str) -> JSONResponse:
     )
     if status != 200:
         return _private_json(body, status)
-    inventory = _public_file_inventory(body)
+    inventory = _public_file_inventory(body, team_id)
     if inventory is None:
         log.warning("team_file_inventory_invalid", team_id=team_id)
         return _private_json({"detail": "invalid Team storage inventory"}, 502)
@@ -1469,9 +1403,13 @@ async def team_file_upload(request: Request, team_id: str, file: UploadFile) -> 
             {"detail": f"file too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)} MB)"},
             413,
         )
+    filename = team_driver_contract.canonical_filename(file.filename or "upload.bin")
+    media_type = team_driver_contract.canonical_media_type(file.content_type)
+    if filename is None or media_type is None:
+        return _private_json({"detail": "invalid file metadata"}, 400)
     payload = {
-        "filename": file.filename or "upload.bin",
-        "media_type": file.content_type or "application/octet-stream",
+        "filename": filename,
+        "media_type": media_type,
         "content_b64": base64.b64encode(data).decode(),
     }
     status, body = await _bounded_call(
@@ -1491,7 +1429,7 @@ async def team_file_upload(request: Request, team_id: str, file: UploadFile) -> 
     )
     if status != 200:
         return _private_json(body, status)
-    uploaded = _public_file_upload(body)
+    uploaded = _public_file_upload(body, team_id)
     if uploaded is None:
         log.warning("team_file_upload_invalid", team_id=team_id)
         return _private_json({"detail": "invalid Team storage response"}, 502)
@@ -1530,7 +1468,7 @@ async def team_file_delete(request: Request, team_id: str, file_id: str) -> JSON
     )
     if status != 200:
         return _private_json(body, status)
-    deleted = _public_file_deletion(body, opaque_id)
+    deleted = _public_file_deletion(body, team_id, opaque_id)
     if deleted is None:
         log.warning("team_file_delete_invalid", team_id=team_id, file_id=opaque_id)
         return _private_json({"detail": "invalid Team storage response"}, 502)
