@@ -17,8 +17,10 @@ revoked by accounts.
 - Team IDs bind the complete account ID and normalized Team name with a collision-resistant digest.
 - OAuth uses PKCE and an audited broker; provider credentials never enter URLs, browser-readable state,
   logs, or controller chat frames.
-- Chat accepts only bounded message, opaque file IDs, and selected installed Assistant IDs. Hosted v2
-  exposes terminal reply/error/stop events and no local secret, account, or approval challenge flow.
+- Chat v3 accepts only bounded messages, opaque file IDs, and selected installed Assistant IDs, and
+  relays typed input and approval challenges. Assistant accounts must be connected out of band through
+  the OAuth routes before chat, so `accounts-required` is intentionally never browser-visible; static
+  Assistant secrets are absent from Spec v3.
 - Static files resolve beneath the built application root; unknown API paths do not fall through to the
   SPA, and private JSON responses are non-cacheable.
 
