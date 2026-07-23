@@ -55,9 +55,7 @@ def _done(
     }
 
 
-def _input_challenge(
-    *, team_id: str = TEST_TEAM_ID, challenge_id: str = "a" * 32
-) -> dict:
+def _input_challenge(*, team_id: str = TEST_TEAM_ID, challenge_id: str = "a" * 32) -> dict:
     return {
         "type": "input-required",
         "status": "input-required",
@@ -74,9 +72,7 @@ def _input_challenge(
     }
 
 
-def _approval_challenge(
-    *, team_id: str = TEST_TEAM_ID, challenge_id: str = "b" * 32
-) -> dict:
+def _approval_challenge(*, team_id: str = TEST_TEAM_ID, challenge_id: str = "b" * 32) -> dict:
     return {
         "type": "approval-required",
         "status": "approval-required",
@@ -399,11 +395,7 @@ def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
         )
         await asyncio.gather(*tuple(state["turns"]))
         await asyncio.sleep(0)
-        events = [
-            json.loads(message["text"])
-            for message in sent
-            if message["type"] == "websocket.send"
-        ]
+        events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert events == [
             {
                 "type": "done",

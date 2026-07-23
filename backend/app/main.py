@@ -1579,9 +1579,7 @@ def _validated_error_event(value: dict) -> dict | None:
     return _public_chat_error_event(status)
 
 
-def _bounded_public_text(
-    value: object, maximum: int, *, optional: bool = False
-) -> str | None:
+def _bounded_public_text(value: object, maximum: int, *, optional: bool = False) -> str | None:
     if optional and value is None:
         return None
     if (
@@ -1895,9 +1893,7 @@ async def _send_relay_event(
         "approval-required",
     }:
         turn.state["pending_challenge_id"] = terminal["challenge_id"]
-        turn.state["pending_challenge_type"] = terminal["type"].removesuffix(
-            "-required"
-        )
+        turn.state["pending_challenge_type"] = terminal["type"].removesuffix("-required")
     elif turn.state is not None and terminal["type"] in {"done", "stopped"}:
         turn.state["pending_challenge_id"] = None
         turn.state["pending_challenge_type"] = None
@@ -1928,16 +1924,12 @@ def _stream_lines(relay: _StreamRelay) -> None:
             _stream_queue_put(
                 relay.queue,
                 relay.loop,
-                _upstream_error_event(
-                    resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)
-                ),
+                _upstream_error_event(resp.status, resp.read(MAX_UPSTREAM_ERROR_BYTES + 1)),
             )
             return
         _relay_upstream_events(resp, relay.queue, relay.loop, relay.team_id)
     except (OSError, http.client.HTTPException) as exc:
-        log.warning(
-            "chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__
-        )
+        log.warning("chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__)
         _stream_queue_put(
             relay.queue,
             relay.loop,
@@ -2043,16 +2035,12 @@ def _relay_capacity_event() -> dict:
     }
 
 
-async def _deliver_turn(
-    turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future
-) -> None:
+async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future) -> None:
     delivery = turn.delivery
     try:
         while True:
             pending = asyncio.create_task(queue.get())
-            done, _pending = await asyncio.wait(
-                {pending, worker}, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, _pending = await asyncio.wait({pending, worker}, return_when=asyncio.FIRST_COMPLETED)
             if pending not in done:
                 pending.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
@@ -2243,13 +2231,9 @@ async def _ws_stop_turn(ws: WebSocket, team_id: str, hdr: dict, state: dict) -> 
                 state["pending_challenge_type"] = None
                 await ws.send_json({"type": "stopped"})
             else:
-                await ws.send_json(
-                    _upstream_error_event(status if status != 200 else 409, b"")
-                )
+                await ws.send_json(_upstream_error_event(status if status != 200 else 409, b""))
             return
-        await ws.send_json(
-            {"type": "error", "status": 409, "detail": "no active chat turn"}
-        )
+        await ws.send_json({"type": "error", "status": 409, "detail": "no active chat turn"})
         return
     state["stop_requested"] = True
     lease = state["leases"][active]
@@ -2318,11 +2302,7 @@ async def _ws_dispatch_challenge(
     state: dict,
 ) -> None:
     kind = "input" if msg.get("type") == "input-submit" else "approval"
-    expected_fields = (
-        {"type", "challenge_id", "answer"}
-        if kind == "input"
-        else {"type", "challenge_id", "approved"}
-    )
+    expected_fields = {"type", "challenge_id", "answer"} if kind == "input" else {"type", "challenge_id", "approved"}
     challenge_id = msg.get("challenge_id")
     valid_answer = kind == "input" or msg.get("approved") is True
     if (
@@ -2331,9 +2311,7 @@ async def _ws_dispatch_challenge(
         or _CHALLENGE_ID_RE.fullmatch(challenge_id) is None
         or not valid_answer
     ):
-        await ws.send_json(
-            {"type": "error", "status": 400, "detail": f"invalid {kind} submission"}
-        )
+        await ws.send_json({"type": "error", "status": 400, "detail": f"invalid {kind} submission"})
         return
     state["turns"].difference_update({turn for turn in state["turns"] if turn.done()})
     if state["turns"]:
@@ -2345,10 +2323,7 @@ async def _ws_dispatch_challenge(
             }
         )
         return
-    if (
-        state.get("pending_challenge_type") != kind
-        or state.get("pending_challenge_id") != challenge_id
-    ):
+    if state.get("pending_challenge_type") != kind or state.get("pending_challenge_id") != challenge_id:
         await ws.send_json(
             {
                 "type": "error",
@@ -2363,18 +2338,14 @@ async def _ws_dispatch_challenge(
         return
     body = {key: value for key, value in msg.items() if key != "type"}
     try:
-        tracked = _start_ws_challenge(
-            _WsContext(ws, team_id, hdr, state), kind, body, lease
-        )
+        tracked = _start_ws_challenge(_WsContext(ws, team_id, hdr, state), kind, body, lease)
     except BaseException:
         lease.release()
         raise
     _track_ws_turn(state, tracked, lease)
 
 
-async def _ws_dispatch(
-    ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict
-) -> None:
+async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict) -> None:
     turns = state["turns"]
     if msg.get("type") == "chat":
         try:
@@ -2383,13 +2354,9 @@ async def _ws_dispatch(
                     400,
                     "chat frame must contain only type, message, files, and assistant_ids",
                 )
-            turn_payload = _chat_turn_payload(
-                {key: value for key, value in msg.items() if key != "type"}
-            )
+            turn_payload = _chat_turn_payload({key: value for key, value in msg.items() if key != "type"})
         except ClientPayloadError as exc:
-            await ws.send_json(
-                {"type": "error", "status": exc.status, "detail": exc.detail}
-            )
+            await ws.send_json({"type": "error", "status": exc.status, "detail": exc.detail})
             return
         msg = {"type": "chat", **turn_payload}
         turns.difference_update({turn for turn in turns if turn.done()})
@@ -2425,9 +2392,7 @@ async def _ws_dispatch(
     elif msg.get("type") == "stop" and set(msg) == {"type"}:
         await _ws_stop_turn(ws, team_id, hdr, state)
     else:
-        await ws.send_json(
-            {"type": "error", "status": 400, "detail": "unsupported chat frame"}
-        )
+        await ws.send_json({"type": "error", "status": 400, "detail": "unsupported chat frame"})
 
 
 async def _ws_validate_opening(ws: WebSocket) -> bool:
