@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
 from app import main
+from app import projections
 from fastapi.testclient import TestClient
 
 FILE_ID = "a" * 32
@@ -226,6 +227,11 @@ def test_storage_projection_requires_the_shared_file_metadata_contract():
         "sha256": FILE_SHA256,
         "created_at": 1_700_000_000,
     }
-    assert main._public_file_metadata(metadata) == metadata
-    assert main._public_file_metadata({key: value for key, value in metadata.items() if key != "created_at"}) is None
-    assert main._public_file_metadata({**metadata, "size": main.team_driver_contract.MAX_FILE_UPLOAD_BYTES + 1}) is None
+    assert projections.public_file_metadata(metadata) == metadata
+    assert (
+        projections.public_file_metadata({key: value for key, value in metadata.items() if key != "created_at"}) is None
+    )
+    assert (
+        projections.public_file_metadata({**metadata, "size": main.team_driver_contract.MAX_FILE_UPLOAD_BYTES + 1})
+        is None
+    )

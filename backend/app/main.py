@@ -95,8 +95,22 @@ from app.payloads import (
 from app.payloads import (
     unique_json_object as _unique_json_object,
 )
+from app.projections import (
+    public_file_deletion as _public_file_deletion,
+)
+from app.projections import (
+    public_file_inventory as _public_file_inventory,
+)
+from app.projections import (
+    public_file_upload as _public_file_upload,
+)
+from app.projections import (
+    released_assistant_inventory as _released_assistant_inventory,
+)
+from app.projections import (
+    released_running_assistant_inventory as _released_running_assistant_inventory,
+)
 from app.routers import oauth, public, static
-from app.team_driver_contract import project_storage_response
 from app.upstream import call as _call
 
 setup("shimpz-store")
@@ -218,81 +232,7 @@ def _team_create_payload(payload: dict, account_id: str) -> tuple[str, dict[str,
     return team_id, {"team_name": team_name, "provider": provider, "model": model}
 
 
-def _public_file_metadata(value: object) -> dict | None:
-    """Copy only opaque, non-path file metadata from the trusted controller response."""
-    return team_driver_contract.project_file_metadata(value, include_usage=False)
-
-
 _public_storage_usage = team_driver_contract.project_storage_usage
-
-
-def _public_file_upload(value: object, expected_team_id: str) -> dict | None:
-    return team_driver_contract.project_storage_response(
-        value,
-        kind="upload",
-        expected_team_id=expected_team_id,
-        include_team_id=False,
-    )
-
-
-def _public_file_inventory(value: object, expected_team_id: str) -> dict | None:
-    return team_driver_contract.project_storage_response(
-        value,
-        kind="list",
-        expected_team_id=expected_team_id,
-        include_team_id=False,
-    )
-
-
-def _public_file_deletion(value: object, expected_team_id: str, expected_id: str) -> dict | None:
-    return project_storage_response(
-        value,
-        kind="delete",
-        expected_team_id=expected_team_id,
-        expected_file_id=expected_id,
-        include_team_id=False,
-    )
-
-
-def _released_assistant_inventory(data: object) -> list[str] | None:
-    if not isinstance(data, dict) or not isinstance(data.get("apps"), list):
-        return None
-    installed: list[str] = []
-    for item in data["apps"]:
-        if not isinstance(item, dict):
-            return None
-        assistant = item.get("app")
-        if assistant in RELEASED_CLOUD_ASSISTANTS:
-            if assistant in installed:
-                return None
-            installed.append(assistant)
-    return installed
-
-
-def _released_running_assistant_inventory(data: object) -> list[str] | None:
-    """Project only verified, runnable Assistants onto the browser chat scope."""
-    if not isinstance(data, dict) or not isinstance(data.get("apps"), list):
-        return None
-    running: list[str] = []
-    seen: set[str] = set()
-    for item in data["apps"]:
-        if not isinstance(item, dict):
-            return None
-        assistant = item.get("app")
-        if assistant not in RELEASED_CLOUD_ASSISTANTS:
-            continue
-        if assistant in seen:
-            return None
-        seen.add(assistant)
-        status = item.get("status")
-        if not isinstance(status, str):
-            return None
-        if status != "running":
-            continue
-        if len(running) >= MAX_CHAT_ASSISTANTS:
-            return None
-        running.append(assistant)
-    return running
 
 
 app = FastAPI(title="shimpz-store", docs_url=None, redoc_url=None, openapi_url=None)
