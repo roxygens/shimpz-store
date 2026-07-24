@@ -749,6 +749,7 @@ def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
         )
 
     assert response.status_code == 400
+    assert response.headers["cache-control"] == "private, no-store"
     assert len(forwarded) == 1
     base, method, path, payload, extra = forwarded[0]
     assert (base, method, path) == (authn.ACCOUNTS_URL, "POST", "/v1/signup")

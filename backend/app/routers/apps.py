@@ -59,7 +59,7 @@ async def team_install(request: Request, team_id: str) -> JSONResponse:
 async def team_apps(request: Request, team_id: str) -> JSONResponse:
     token, _, _ = await authn.authed_account_bounded(request)
     if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+        return private_json({"detail": "not authenticated"}, 401)
     status, data = await call_bounded(
         CONTROL_EXECUTOR,
         config.TEAMDRIVER_URL,
@@ -67,14 +67,14 @@ async def team_apps(request: Request, team_id: str) -> JSONResponse:
         f"/v1/teams/{team_id}/apps",
         extra={"X-Shimpz-Account": token},
     )
-    return JSONResponse(data, status_code=status)
+    return private_json(data, status)
 
 
 @router.delete("/api/teams/{team_id}/apps/{app_id}")
 async def team_uninstall(request: Request, team_id: str, app_id: str) -> JSONResponse:
     token, account_id, _ = await authn.authed_account_bounded(request)
     if not token:
-        return JSONResponse({"detail": "not authenticated"}, status_code=401)
+        return private_json({"detail": "not authenticated"}, 401)
     status, data = await call_bounded(
         CONTROL_EXECUTOR,
         config.TEAMDRIVER_URL,
@@ -83,4 +83,4 @@ async def team_uninstall(request: Request, team_id: str, app_id: str) -> JSONRes
         extra={"X-Shimpz-Account": token},
     )
     log.info("app_uninstall", account=account_id, team_id=team_id, app=app_id, status=status)
-    return JSONResponse(data, status_code=status)
+    return private_json(data, status)
