@@ -37,7 +37,6 @@ from app.config import (
     WS_GLOBAL_CONNECTION_LIMIT,
     WS_TEAM_CONNECTION_LIMIT,
 )
-from app.config import canonical_origin as _canonical_origin
 from app.payloads import ClientPayloadError
 from app.upstream import call as _call
 from app.upstream import call_bounded as _bounded_call
@@ -60,11 +59,6 @@ _WS_CONNECTION_ADMISSION = _WsConnectionAdmission(
     WS_ACCOUNT_CONNECTION_LIMIT,
     WS_TEAM_CONNECTION_LIMIT,
 )
-
-
-def _ws_origin_allowed(origin: str | None) -> bool:
-    canonical = _canonical_origin(origin)
-    return canonical is not None and canonical in WS_ALLOWED_ORIGINS
 
 
 async def _ws_verify(ws: WebSocket) -> tuple[str, str]:
@@ -529,7 +523,7 @@ async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state:
 
 async def _ws_validate_opening(ws: WebSocket) -> bool:
     origin = ws.headers.get("origin")
-    if not _ws_origin_allowed(origin):
+    if not config.origin_allowed(origin, WS_ALLOWED_ORIGINS):
         log.warning("ws_origin_denied", origin=origin or "<missing>")
         await ws.close(code=4403)
         return False

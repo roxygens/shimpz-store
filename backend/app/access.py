@@ -5,13 +5,12 @@ from fastapi.responses import JSONResponse
 from app.config import (
     ASSISTANT_MUTATION_ALLOWED_ORIGINS,
     PRIVATE_NO_STORE_HEADERS,
-    canonical_origin,
+    origin_allowed,
 )
 
 
 def mutation_origin_allowed(origin: str | None) -> bool:
-    canonical = canonical_origin(origin)
-    return canonical is not None and canonical in ASSISTANT_MUTATION_ALLOWED_ORIGINS
+    return origin_allowed(origin, ASSISTANT_MUTATION_ALLOWED_ORIGINS)
 
 
 def private_json(content: dict, status_code: int = 200) -> JSONResponse:

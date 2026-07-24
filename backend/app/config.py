@@ -79,6 +79,11 @@ def canonical_origin(value: str | None) -> str | None:
     return f"{parsed.scheme.lower()}://{parsed.netloc.lower()}"
 
 
+def origin_allowed(value: str | None, allowed_origins: frozenset[str]) -> bool:
+    canonical = canonical_origin(value)
+    return canonical is not None and canonical in allowed_origins
+
+
 WS_ALLOWED_ORIGINS = frozenset(
     origin
     for raw in os.environ.get("SHIMPZ_WS_ALLOWED_ORIGINS", "https://shimpz.com").split(",")
