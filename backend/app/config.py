@@ -68,6 +68,7 @@ WS_ALLOWED_ORIGINS = frozenset(
     for raw in os.environ.get("SHIMPZ_WS_ALLOWED_ORIGINS", "https://shimpz.com").split(",")
     if (origin := canonical_origin(raw.strip())) is not None
 )
+# Browser Assistant mutations and WebSocket chat deliberately share this allowlist; never repoint either alone.
 ASSISTANT_MUTATION_ALLOWED_ORIGINS = WS_ALLOWED_ORIGINS
 MODEL_CATALOG = {
     provider["id"]: frozenset(model["id"] for model in provider["models"])
