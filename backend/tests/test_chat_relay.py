@@ -80,16 +80,10 @@ def _real_upstream(body: bytes):
         worker.join(timeout=5)
 
 
-def _relay(body: bytes, team_id: str = TEST_TEAM_ID) -> list[dict]:
-    async def scenario() -> list[dict]:
-        queue: asyncio.Queue = asyncio.Queue()
-        loop = asyncio.get_running_loop()
+def _relay(body: bytes, team_id: str = TEST_TEAM_ID) -> dict:
+    async def scenario() -> dict:
         with _real_upstream(body) as response:
-            await asyncio.to_thread(_relay_upstream_events, response, queue, loop, team_id)
-        events = []
-        while not queue.empty():
-            events.append(queue.get_nowait())
-        return events
+            return await asyncio.to_thread(_relay_upstream_events, response, team_id)
 
     return asyncio.run(scenario())
 
@@ -137,8 +131,6 @@ def _real_delayed_upstream(first: bytes, rest: bytes):
 
 def test_upstream_relay_releases_nothing_before_one_complete_terminal_event():
     async def scenario() -> None:
-        queue: asyncio.Queue = asyncio.Queue(maxsize=4)
-        loop = asyncio.get_running_loop()
         first = b'{"type":"done","team_id":"test_team",'
         rest = b'"team_name":"Marketing","reply":"first"}\n'
         with _real_delayed_upstream(first, rest) as (
@@ -150,18 +142,13 @@ def test_upstream_relay_releases_nothing_before_one_complete_terminal_event():
                 asyncio.to_thread(
                     _relay_upstream_events,
                     response,
-                    queue,
-                    loop,
                     TEST_TEAM_ID,
                 )
             )
             assert await asyncio.to_thread(first_flushed.wait, 1)
-            with pytest.raises(TimeoutError):
-                await asyncio.wait_for(queue.get(), timeout=0.05)
             assert not relay.done()
             release_rest.set()
-            await asyncio.wait_for(relay, timeout=2)
-            assert await asyncio.wait_for(queue.get(), timeout=1) == _done("first")
+            assert await asyncio.wait_for(relay, timeout=2) == _done("first")
 
     asyncio.run(scenario())
 
@@ -177,19 +164,17 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
             ).encode()
             + b"\n"
         )
-        queue: asyncio.Queue = asyncio.Queue(maxsize=4)
         loop = asyncio.get_running_loop()
         started = asyncio.Event()
         prompt = "ação e camarão 🦐"
         opaque_file = "a" * 32
         with _real_stream_driver(encoded_reply) as requests:
-            await asyncio.to_thread(
+            event = await asyncio.to_thread(
                 main._stream_lines,
                 main._StreamRelay(
                     "team_utf8",
                     prompt,
                     {},
-                    queue,
                     loop,
                     started,
                     (opaque_file,),
@@ -205,8 +190,7 @@ def test_stream_transport_preserves_utf8_prompt_and_reply_bytes():
         }
         assert prompt.encode() in requests[0]
         assert b"\\u" not in requests[0]
-        assert await queue.get() == _done(reply, team_id="team_utf8")
-        assert await queue.get() is None
+        assert event == _done(reply, team_id="team_utf8")
 
     asyncio.run(scenario())
 
@@ -306,7 +290,7 @@ def test_real_upstream_non_2xx_reaches_websocket_redacted(status: int, payload: 
 
 def test_upstream_relay_is_bounded_and_fails_closed_on_protocol_errors():
     success = json.dumps(_done(), separators=(",", ":")).encode()
-    assert _relay(success) == [_done()]
+    assert _relay(success) == _done()
 
     protocol_error = {
         "type": "error",
@@ -315,18 +299,18 @@ def test_upstream_relay_is_bounded_and_fails_closed_on_protocol_errors():
         "_relay_abort": True,
     }
     legacy_then_terminal = b'{"type":"text","text":"partial"}\n' + json.dumps(_done()).encode() + b"\n"
-    assert _relay(legacy_then_terminal) == [protocol_error]
+    assert _relay(legacy_then_terminal) == protocol_error
 
     malformed = b"not-json\n" + json.dumps(_done()).encode() + b"\n"
-    assert _relay(malformed) == [protocol_error]
+    assert _relay(malformed) == protocol_error
 
     extra_after_terminal = json.dumps(_done()).encode() + b'\n{"type":"stopped"}\n'
-    assert _relay(extra_after_terminal) == [protocol_error]
+    assert _relay(extra_after_terminal) == protocol_error
 
     mismatched_team = json.dumps(_done(team_id="another_team")).encode() + b"\n"
-    assert _relay(mismatched_team) == [protocol_error]
+    assert _relay(mismatched_team) == protocol_error
 
-    assert _relay(b"") == [protocol_error]
+    assert _relay(b"") == protocol_error
 
     oversized = b"x" * (config.MAX_UPSTREAM_STREAM_LINE_BYTES + 1)
-    assert _relay(oversized) == [protocol_error]
+    assert _relay(oversized) == protocol_error

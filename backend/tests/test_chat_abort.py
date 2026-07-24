@@ -72,19 +72,17 @@ def test_stream_workers_cannot_starve_the_default_control_pool():
             ).encode()
             + b"\n"
         )
-        queue: asyncio.Queue = asyncio.Queue(maxsize=4)
         started = asyncio.Event()
         try:
             with _real_stream_driver(reply):
                 worker = loop.run_in_executor(
                     main._STREAM_EXECUTOR,
                     main._stream_lines,
-                    main._StreamRelay("team_pool", "hello", {}, queue, loop, started),
+                    main._StreamRelay("team_pool", "hello", {}, loop, started),
                 )
                 await asyncio.wait_for(started.wait(), timeout=1)
-                await asyncio.wait_for(worker, timeout=2)
-            assert await queue.get() == _done("reserved", team_id="team_pool")
-            assert await queue.get() is None
+                event = await asyncio.wait_for(worker, timeout=2)
+            assert event == _done("reserved", team_id="team_pool")
             assert not occupied.done()
         finally:
             release_default.set()
@@ -180,12 +178,11 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
 
         websocket = WebSocket({"type": "websocket", "path": "/"}, receive, send)
         await websocket.accept()
-        queue: asyncio.Queue = asyncio.Queue()
-        queue.put_nowait(_done("complete", team_id="team_disconnect"))
         stopped = threading.Event()
 
         with _real_relay_abort_driver(stopped.set) as calls:
-            worker = asyncio.create_task(asyncio.to_thread(stopped.wait))
+            worker = asyncio.get_running_loop().create_future()
+            worker.set_result(_done("complete", team_id="team_disconnect"))
             try:
                 turn = main._WsTurn(
                     websocket,
@@ -196,10 +193,9 @@ def test_browser_disconnect_requests_provider_stop_exactly_once():
                     asyncio.Event(),
                 )
                 with pytest.raises(WebSocketDisconnect):
-                    await main._deliver_turn(turn, queue, worker)
+                    await main._deliver_turn(turn, worker)
             finally:
                 stopped.set()
-                await worker
 
         assert calls == ["/v1/teams/team_disconnect/chat/stop"]
 

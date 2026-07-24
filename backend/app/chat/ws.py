@@ -29,7 +29,6 @@ from app.config import (
     CHAT_WS_SUBPROTOCOL,
     STOP_QUEUE_MAX,
     STOP_WORKER_THREADS,
-    STREAM_QUEUE_MAX_EVENTS,
     STREAM_TURN_QUEUE_MAX,
     STREAM_WORKER_THREADS,
     TERMINAL_CONTRACT_ERROR,
@@ -175,47 +174,21 @@ def _relay_capacity_event() -> dict:
     }
 
 
-async def _deliver_turn(turn: _WsTurn, queue: asyncio.Queue, worker: asyncio.Future) -> None:
+async def _deliver_turn(turn: _WsTurn, worker: asyncio.Future) -> None:
     delivery = turn.delivery
     try:
-        while True:
-            pending = asyncio.create_task(queue.get())
-            done, _pending = await asyncio.wait({pending, worker}, return_when=asyncio.FIRST_COMPLETED)
-            if pending not in done:
-                pending.cancel()
-                with contextlib.suppress(asyncio.CancelledError):
-                    await pending
-                while not queue.empty():
-                    evt = queue.get_nowait()
-                    if evt is not None:
-                        await _send_relay_event(turn, evt, delivery)
-                break
-            evt = pending.result()
-            if evt is None:
-                break
-            await _send_relay_event(turn, evt, delivery)
-        if not delivery.terminal_seen:
-            await _stop_delivery_once(turn.team_id, turn.headers, delivery)
-            await turn.ws.send_json(
-                {
-                    "type": "error",
-                    "status": 502,
-                    "detail": "team-driver relay ended before a terminal event",
-                }
-            )
+        event = await asyncio.shield(worker)
+        await _send_relay_event(turn, event, delivery)
     except WebSocketDisconnect, OSError, RuntimeError, asyncio.CancelledError:
         await _stop_delivery_once(turn.team_id, turn.headers, delivery)
         raise
     finally:
-        if not delivery.terminal_seen and not worker.done():
-            await _stop_delivery_once(turn.team_id, turn.headers, delivery)
         with contextlib.suppress(asyncio.CancelledError, TimeoutError):
             await asyncio.wait_for(asyncio.shield(worker), timeout=15)
 
 
 async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
     async with lease:
-        queue: asyncio.Queue = asyncio.Queue(maxsize=STREAM_QUEUE_MAX_EVENTS)
         loop = asyncio.get_running_loop()
         try:
             worker = loop.run_in_executor(
@@ -225,7 +198,6 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
                     turn.team_id,
                     turn.text,
                     turn.headers,
-                    queue,
                     loop,
                     turn.started,
                     turn.files,
@@ -237,7 +209,7 @@ async def _ws_run_admitted_turn(turn: _WsTurn, lease: _TurnLease) -> None:
             turn.started.set()
             await turn.ws.send_json(_relay_capacity_event())
             return
-        await _deliver_turn(turn, queue, worker)
+        await _deliver_turn(turn, worker)
 
 
 async def _ws_run_admitted_challenge(
@@ -247,7 +219,6 @@ async def _ws_run_admitted_challenge(
     body: dict,
 ) -> None:
     async with lease:
-        queue: asyncio.Queue = asyncio.Queue(maxsize=STREAM_QUEUE_MAX_EVENTS)
         loop = asyncio.get_running_loop()
         try:
             worker = loop.run_in_executor(
@@ -258,7 +229,6 @@ async def _ws_run_admitted_challenge(
                     kind,
                     body,
                     turn.headers,
-                    queue,
                     loop,
                     turn.started,
                 ),
@@ -268,7 +238,7 @@ async def _ws_run_admitted_challenge(
             turn.started.set()
             await turn.ws.send_json(_relay_capacity_event())
             return
-        await _deliver_turn(turn, queue, worker)
+        await _deliver_turn(turn, worker)
 
 
 async def _ws_run_turn(

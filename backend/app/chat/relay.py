@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
 import http.client
 import json as jsonlib
 from dataclasses import dataclass
@@ -20,26 +19,12 @@ from app.chat.events import validated_terminal_event as _validated_terminal_even
 from app.config import (
     MAX_UPSTREAM_STREAM_BYTES,
     MAX_UPSTREAM_STREAM_LINE_BYTES,
-    STREAM_QUEUE_PUT_TIMEOUT,
     TERMINAL_CONTRACT_ERROR,
 )
 from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS
 from app.upstream import call as _call
 
 log = structlog.get_logger()
-
-
-def _stream_queue_put(queue: asyncio.Queue, loop: asyncio.AbstractEventLoop, item: dict | None) -> bool:
-    """Thread→event-loop handoff with a hard queue bound and real producer backpressure."""
-    pending = None
-    try:
-        pending = asyncio.run_coroutine_threadsafe(queue.put(item), loop)
-        pending.result(timeout=STREAM_QUEUE_PUT_TIMEOUT)
-    except TimeoutError, concurrent.futures.CancelledError, RuntimeError:
-        if pending is not None:
-            pending.cancel()
-        return False
-    return True
 
 
 class _StreamLimitError(ValueError):
@@ -73,10 +58,8 @@ def _bounded_upstream_lines(resp: http.client.HTTPResponse):
 
 def _relay_upstream_events(
     resp: http.client.HTTPResponse,
-    queue: asyncio.Queue,
-    loop: asyncio.AbstractEventLoop,
     expected_team_id: str,
-) -> None:
+) -> dict:
     """Release exactly one validated terminal event after the controller closes its response."""
     terminal_event = None
     try:
@@ -90,30 +73,20 @@ def _relay_upstream_events(
                 raise _StreamProtocolError
             terminal_event = event
     except _StreamLimitError, _StreamProtocolError:
-        _stream_queue_put(
-            queue,
-            loop,
-            {
-                "type": "error",
-                "status": 502,
-                "detail": TERMINAL_CONTRACT_ERROR,
-                "_relay_abort": True,
-            },
-        )
-        return
+        return {
+            "type": "error",
+            "status": 502,
+            "detail": TERMINAL_CONTRACT_ERROR,
+            "_relay_abort": True,
+        }
     if terminal_event is None:
-        _stream_queue_put(
-            queue,
-            loop,
-            {
-                "type": "error",
-                "status": 502,
-                "detail": TERMINAL_CONTRACT_ERROR,
-                "_relay_abort": True,
-            },
-        )
-    else:
-        _stream_queue_put(queue, loop, terminal_event)
+        return {
+            "type": "error",
+            "status": 502,
+            "detail": TERMINAL_CONTRACT_ERROR,
+            "_relay_abort": True,
+        }
+    return terminal_event
 
 
 @dataclass(frozen=True)
@@ -121,7 +94,6 @@ class _StreamRelay:
     team_id: str
     text: str
     headers: dict
-    queue: asyncio.Queue
     loop: asyncio.AbstractEventLoop
     started: asyncio.Event
     files: tuple[str, ...] = ()
@@ -134,13 +106,12 @@ class _ChallengeRelay:
     kind: str
     body: dict
     headers: dict
-    queue: asyncio.Queue
     loop: asyncio.AbstractEventLoop
     started: asyncio.Event
 
 
-def _stream_lines(relay: _StreamRelay) -> None:
-    """BLOCKING (run in a thread): relay the driver's NDJSON into a bounded asyncio queue."""
+def _stream_lines(relay: _StreamRelay) -> dict:
+    """BLOCKING (run in a thread): return the driver's single terminal event."""
     parsed = urlparse(config.TEAMDRIVER_URL)
     conn = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=200)
     try:
@@ -159,29 +130,19 @@ def _stream_lines(relay: _StreamRelay) -> None:
         resp = conn.getresponse()
         relay.loop.call_soon_threadsafe(relay.started.set)
         if not 200 <= resp.status < 300:
-            _stream_queue_put(
-                relay.queue,
-                relay.loop,
-                _upstream_error_event(resp.status),
-            )
-            return
-        _relay_upstream_events(resp, relay.queue, relay.loop, relay.team_id)
+            return _upstream_error_event(resp.status)
+        return _relay_upstream_events(resp, relay.team_id)
     except (OSError, http.client.HTTPException) as exc:
         log.warning("chat_stream_failed", team_id=relay.team_id, error=type(exc).__name__)
-        _stream_queue_put(
-            relay.queue,
-            relay.loop,
-            {
-                "type": "error",
-                "status": 502,
-                "detail": "team-driver stream failed",
-                "_relay_abort": True,
-            },
-        )
+        return {
+            "type": "error",
+            "status": 502,
+            "detail": "team-driver stream failed",
+            "_relay_abort": True,
+        }
     finally:
         relay.loop.call_soon_threadsafe(relay.started.set)
         conn.close()
-        _stream_queue_put(relay.queue, relay.loop, None)
 
 
 def _challenge_response_event(status: int, data: object, team_id: str) -> dict:
@@ -208,21 +169,14 @@ def _challenge_response_event(status: int, data: object, team_id: str) -> dict:
     }
 
 
-def _relay_challenge(relay: _ChallengeRelay) -> None:
+def _relay_challenge(relay: _ChallengeRelay) -> dict:
     relay.loop.call_soon_threadsafe(relay.started.set)
-    try:
-        status, data = _call(
-            config.TEAMDRIVER_URL,
-            "POST",
-            f"/v1/teams/{relay.team_id}/chat/{relay.kind}",
-            relay.body,
-            relay.headers,
-            timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
-        )
-        _stream_queue_put(
-            relay.queue,
-            relay.loop,
-            _challenge_response_event(status, data, relay.team_id),
-        )
-    finally:
-        _stream_queue_put(relay.queue, relay.loop, None)
+    status, data = _call(
+        config.TEAMDRIVER_URL,
+        "POST",
+        f"/v1/teams/{relay.team_id}/chat/{relay.kind}",
+        relay.body,
+        relay.headers,
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
+    )
+    return _challenge_response_event(status, data, relay.team_id)

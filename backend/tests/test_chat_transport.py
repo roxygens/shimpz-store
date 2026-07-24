@@ -17,7 +17,6 @@ from app.chat.events import parsed_stream_event as _parsed_stream_event
 from app.chat.events import upstream_error_event as _upstream_error_event
 from app.chat.events import validated_terminal_event as _validated_terminal_event
 from app.chat.events import ws_receive_bounded_json as _ws_receive_bounded_json
-from app.chat.relay import _stream_queue_put
 from app.chat.ws import _ws_dispatch
 from app.config import CHAT_WS_SUBPROTOCOL, WS_ALLOWED_ORIGINS
 from app.config import canonical_origin as _canonical_origin
@@ -441,29 +440,6 @@ def test_websocket_returns_typed_429_when_global_turn_queue_is_full():
     asyncio.run(scenario())
 
 
-def test_stream_queue_applies_backpressure_without_dropping_events():
-    async def scenario() -> None:
-        queue: asyncio.Queue = asyncio.Queue(maxsize=1)
-        first = {"type": "stopped"}
-        second = {"type": "error", "status": 502, "detail": "failed"}
-        await queue.put(first)
-        loop = asyncio.get_running_loop()
-        producer = asyncio.create_task(
-            asyncio.to_thread(
-                _stream_queue_put,
-                queue,
-                loop,
-                second,
-            )
-        )
-
-        assert await queue.get() == first
-        assert await asyncio.wait_for(producer, timeout=1) is True
-        assert await queue.get() == second
-
-    asyncio.run(scenario())
-
-
 def test_global_turn_admission_has_an_exact_fifo_queue_bound():
     async def scenario() -> None:
         admission = main._TurnAdmission(active_limit=1, queue_limit=1)
@@ -579,9 +555,8 @@ def test_duplicate_stop_then_disconnect_requests_provider_stop_once(monkeypatch)
             dispatched,
             delivery=delivery,
         )
-        queue: asyncio.Queue = asyncio.Queue()
         worker = asyncio.get_running_loop().create_future()
-        active = asyncio.create_task(main._deliver_turn(turn, queue, worker))
+        active = asyncio.create_task(main._deliver_turn(turn, worker))
         await asyncio.sleep(0)
         state = {
             "turns": {active},
