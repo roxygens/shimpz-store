@@ -10,7 +10,8 @@ import pytest
 from fastapi import WebSocket
 from starlette.websockets import WebSocketDisconnect
 
-from app import config, main
+from app import config
+from app.chat import ws as main
 from tests.chat_relay_fixture import real_stream_driver as _real_stream_driver
 
 TEST_TEAM_ID = "test_team"

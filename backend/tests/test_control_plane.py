@@ -10,7 +10,8 @@ from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app import authn, config, main
-from app.main import ACCOUNT_COOKIE, app
+from app.config import ACCOUNT_COOKIE
+from app.main import app
 
 
 class _BrainControlHandler(BaseHTTPRequestHandler):

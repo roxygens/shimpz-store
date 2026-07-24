@@ -7,6 +7,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from typing import ClassVar
 
 from app import authn, config, main, projections, team_driver_contract
+from app.chat import ws as chat_ws
 from fastapi.testclient import TestClient
 
 FILE_ID = "a" * 32
@@ -132,10 +133,11 @@ def test_public_http_chat_endpoint_is_absent():
         )
 
     assert response.status_code == 405
-    routes = {getattr(route, "path", None) for route in main.app.routes}
+    routes = {getattr(route, "path", None) for route in chat_ws.router.routes}
     assert "/api/teams/{team_id}/chat" not in routes
     assert "/api/teams/{team_id}/ws" not in routes
     assert "/api/teams/{team_id}/chat/ws" in routes
+    assert main.app.routes[-2].original_router is chat_ws.router
     assert not any(path.endswith("/chat") for _method, path, _body in calls)
 
 

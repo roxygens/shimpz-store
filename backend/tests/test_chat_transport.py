@@ -8,21 +8,20 @@ from fastapi import Request, WebSocket
 from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
-from app import authn, config, main
-from app.main import (
-    CHAT_WS_SUBPROTOCOL,
-    WS_ALLOWED_ORIGINS,
-    ClientPayloadError,
-    WebSocketPayloadError,
-    _canonical_origin,
-    _parsed_stream_event,
-    _stream_queue_put,
-    _upstream_error_event,
-    _validated_terminal_event,
-    _ws_dispatch,
-    _ws_receive_bounded_json,
-    app,
-)
+from app import authn, config
+from app.chat import relay as chat_relay
+from app.chat import ws as main
+from app.chat.events import WebSocketPayloadError
+from app.chat.events import parsed_stream_event as _parsed_stream_event
+from app.chat.events import upstream_error_event as _upstream_error_event
+from app.chat.events import validated_terminal_event as _validated_terminal_event
+from app.chat.events import ws_receive_bounded_json as _ws_receive_bounded_json
+from app.chat.relay import _stream_queue_put
+from app.chat.ws import _ws_dispatch
+from app.config import CHAT_WS_SUBPROTOCOL, WS_ALLOWED_ORIGINS
+from app.config import canonical_origin as _canonical_origin
+from app.main import app
+from app.payloads import ClientPayloadError
 from app.payloads import read_bounded_json
 
 TEST_TEAM_ID = "test_team"
@@ -354,7 +353,7 @@ def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
             "reply": "Completed.",
         }
 
-    monkeypatch.setattr(main, "_call", completed_call)
+    monkeypatch.setattr(chat_relay, "_call", completed_call)
 
     async def scenario() -> None:
         websocket, sent = _websocket("{}")

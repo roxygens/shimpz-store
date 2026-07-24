@@ -10,33 +10,50 @@ UV_IMAGE = "ghcr.io/astral-sh/uv:0.11.25@sha256:1e3808aa9023d0980e7c15b1fa7c1ac1
 
 def _runtime_import_closure() -> set[str]:
     source = ROOT / "backend" / "app"
-    pending = ["main"]
-    modules = {"__init__"}
+    pending = [Path("main.py")]
+    modules = {Path("__init__.py")}
     while pending:
         module = pending.pop()
         if module in modules:
             continue
         modules.add(module)
-        tree = ast.parse((source / f"{module}.py").read_text(encoding="utf-8"))
+        tree = ast.parse((source / module).read_text(encoding="utf-8"))
         for node in ast.walk(tree):
-            if not isinstance(node, ast.ImportFrom) or not node.module or not node.module.startswith("app."):
+            if not isinstance(node, ast.ImportFrom) or not node.module:
                 continue
-            imported = node.module.removeprefix("app.").split(".", 1)[0]
-            if (source / f"{imported}.py").is_file():
-                pending.append(imported)
-    return {f"backend/app/{module}.py" for module in modules}
+            if node.module == "app":
+                for alias in node.names:
+                    child = Path(f"{alias.name}.py")
+                    if (source / child).is_file():
+                        pending.append(child)
+                continue
+            if not node.module.startswith("app."):
+                continue
+            imported = Path(*node.module.removeprefix("app.").split("."))
+            module_file = imported.with_suffix(".py")
+            if (source / module_file).is_file():
+                pending.append(module_file)
+            package_init = imported / "__init__.py"
+            if (source / package_init).is_file():
+                pending.append(package_init)
+                for alias in node.names:
+                    child = imported / f"{alias.name}.py"
+                    if (source / child).is_file():
+                        pending.append(child)
+    return {f"backend/app/{module}" for module in modules if len(module.parts) == 1}
 
 
 def test_static_runtime_packages_the_exact_application_import_closure():
     dockerfile = (ROOT / "Dockerfile").read_text(encoding="utf-8")
-    logical_lines = re.sub(r"\\\n\s*", " ", dockerfile).splitlines()
-    runtime_copy = next(
-        (line for line in logical_lines if line.startswith("COPY ") and "backend/app/main.py" in line),
-        "",
-    )
-    packaged = set(re.findall(r"\bbackend/app/(?:__init__|[a-z][a-z0-9_]*)[.]py\b", runtime_copy))
+    runtime = dockerfile.split(" AS serve\n", 1)[1]
+    logical_runtime = re.sub(r"\\\n\s*", " ", runtime)
+    packaged = set(re.findall(r"\bbackend/app/(?:__init__|[a-z][a-z0-9_]*)[.]py\b", logical_runtime))
 
     assert packaged == _runtime_import_closure()
+    assert (
+        "COPY backend/app/chat/__init__.py backend/app/chat/events.py "
+        "backend/app/chat/relay.py backend/app/chat/ws.py ./app/chat/"
+    ) in dockerfile
 
 
 def test_static_runtime_has_a_bounded_health_probe():

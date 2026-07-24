@@ -8,8 +8,9 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import pytest
 from fastapi import WebSocket
 
-from app import config, main
-from app.main import _relay_upstream_events
+from app import config
+from app.chat.relay import _relay_upstream_events
+from app.chat import ws as main
 from tests.chat_relay_fixture import real_stream_driver as _real_stream_driver
 
 TEST_TEAM_ID = "test_team"
