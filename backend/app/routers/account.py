@@ -8,7 +8,7 @@ from fastapi.responses import JSONResponse
 
 from app import authn
 from app.config import ACCOUNT_COOKIE, MAX_AUTH_BODY_BYTES
-from app.payloads import ClientPayloadError, read_bounded_json
+from app.payloads import read_bounded_json
 from app.upstream import call_bounded
 
 log = structlog.get_logger()
@@ -20,10 +20,7 @@ async def _bounded_call(*args, **kwargs) -> tuple[int, dict]:
 
 
 async def _credential_route(request: Request, path: str) -> JSONResponse:
-    try:
-        payload = await read_bounded_json(request, MAX_AUTH_BODY_BYTES)
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
+    payload = await read_bounded_json(request, MAX_AUTH_BODY_BYTES)
     status, data = await _bounded_call(
         authn.ACCOUNTS_URL,
         "POST",

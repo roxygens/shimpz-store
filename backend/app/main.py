@@ -6,11 +6,13 @@ import structlog
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
+from app.access import private_json
 from app.chat import ws as chat_ws
 from app.concurrency import ExecutorSaturatedError as _ExecutorSaturatedError
 from app.config import ACCOUNT_COOKIE as ACCOUNT_COOKIE
 from app.logconf import setup
 from app.middleware import TraceIdMiddleware
+from app.payloads import ClientPayloadError
 from app.routers import account, apps, assistants, brains, files, inference, oauth, public, static, teams
 
 setup("shimpz-store")
@@ -18,6 +20,11 @@ log = structlog.get_logger()
 
 app = FastAPI(title="shimpz-store", docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TraceIdMiddleware)
+
+
+@app.exception_handler(ClientPayloadError)
+async def client_payload_error(_request: Request, exc: ClientPayloadError) -> JSONResponse:
+    return private_json({"detail": exc.detail}, exc.status)
 
 
 @app.exception_handler(Exception)

@@ -64,11 +64,8 @@ async def teams_create(request: Request) -> JSONResponse:
     token, account_id, _ = await authn.authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    try:
-        payload = await read_bounded_json(request, MAX_TEAM_CREATE_BODY_BYTES)
-        team_id, create_payload = _create_payload(payload, account_id)
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
+    payload = await read_bounded_json(request, MAX_TEAM_CREATE_BODY_BYTES)
+    team_id, create_payload = _create_payload(payload, account_id)
     status, data = await call_bounded(
         CONTROL_EXECUTOR,
         config.TEAMDRIVER_URL,

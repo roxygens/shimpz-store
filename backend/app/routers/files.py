@@ -50,16 +50,13 @@ async def team_files(request: Request, team_id: str) -> JSONResponse:
 async def team_file_upload(request: Request, team_id: str, file: UploadFile) -> JSONResponse:
     """Upload one opaque Team object without granting a Brain or Assistant filesystem access."""
     token, account_id, _ = await authn.authed_account_bounded(request)
-    try:
-        if not token:
-            raise ClientPayloadError(401, "not authenticated")
-        if not mutation_origin_allowed(request.headers.get("origin")):
-            raise ClientPayloadError(403, "forbidden origin")
-        team_id = team_driver_contract.canonical_team_id(team_id)
-        if team_id is None:
-            raise ClientPayloadError(400, "bad team id")
-    except ClientPayloadError as exc:
-        return private_json({"detail": exc.detail}, exc.status)
+    if not token:
+        raise ClientPayloadError(401, "not authenticated")
+    if not mutation_origin_allowed(request.headers.get("origin")):
+        raise ClientPayloadError(403, "forbidden origin")
+    team_id = team_driver_contract.canonical_team_id(team_id)
+    if team_id is None:
+        raise ClientPayloadError(400, "bad team id")
     data = await file.read(MAX_UPLOAD_BYTES + 1)
     if len(data) > MAX_UPLOAD_BYTES:
         return private_json(
@@ -102,19 +99,16 @@ async def team_file_upload(request: Request, team_id: str, file: UploadFile) -> 
 @router.delete("/api/teams/{team_id}/files/{file_id}")
 async def team_file_delete(request: Request, team_id: str, file_id: str) -> JSONResponse:
     token, account_id, _ = await authn.authed_account_bounded(request)
-    try:
-        if not token:
-            raise ClientPayloadError(401, "not authenticated")
-        if not mutation_origin_allowed(request.headers.get("origin")):
-            raise ClientPayloadError(403, "forbidden origin")
-        team_id = team_driver_contract.canonical_team_id(team_id)
-        opaque_id = team_driver_contract.canonical_file_id(file_id)
-        if team_id is None:
-            raise ClientPayloadError(400, "bad team id")
-        if opaque_id is None:
-            raise ClientPayloadError(404, "file not found")
-    except ClientPayloadError as exc:
-        return private_json({"detail": exc.detail}, exc.status)
+    if not token:
+        raise ClientPayloadError(401, "not authenticated")
+    if not mutation_origin_allowed(request.headers.get("origin")):
+        raise ClientPayloadError(403, "forbidden origin")
+    team_id = team_driver_contract.canonical_team_id(team_id)
+    opaque_id = team_driver_contract.canonical_file_id(file_id)
+    if team_id is None:
+        raise ClientPayloadError(400, "bad team id")
+    if opaque_id is None:
+        raise ClientPayloadError(404, "file not found")
     status, body = await call_bounded(
         CONTROL_EXECUTOR,
         config.TEAMDRIVER_URL,

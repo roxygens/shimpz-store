@@ -23,22 +23,19 @@ async def team_install(request: Request, team_id: str) -> JSONResponse:
     token, account_id, _ = await authn.authed_account_bounded(request)
     if not token:
         return private_json({"detail": "not authenticated"}, 401)
-    try:
-        if not mutation_origin_allowed(request.headers.get("origin")):
-            raise ClientPayloadError(403, "forbidden origin")
-        if request.headers.get("content-type", "").strip().lower() != "application/json":
-            raise ClientPayloadError(415, "Content-Type must be application/json")
-        team_id = team_driver_contract.canonical_team_id(team_id)
-        if team_id is None:
-            raise ClientPayloadError(400, "bad team id")
-        payload = await read_bounded_json(request, MAX_TEAM_INSTALL_BODY_BYTES)
-        if set(payload) != {"app"}:
-            raise ClientPayloadError(400, "body must contain only app")
-        app_id = team_driver_contract.canonical_assistant_id(payload["app"])
-        if app_id is None:
-            raise ClientPayloadError(400, "bad app id")
-    except ClientPayloadError as exc:
-        return private_json({"detail": exc.detail}, exc.status)
+    if not mutation_origin_allowed(request.headers.get("origin")):
+        raise ClientPayloadError(403, "forbidden origin")
+    if request.headers.get("content-type", "").strip().lower() != "application/json":
+        raise ClientPayloadError(415, "Content-Type must be application/json")
+    team_id = team_driver_contract.canonical_team_id(team_id)
+    if team_id is None:
+        raise ClientPayloadError(400, "bad team id")
+    payload = await read_bounded_json(request, MAX_TEAM_INSTALL_BODY_BYTES)
+    if set(payload) != {"app"}:
+        raise ClientPayloadError(400, "body must contain only app")
+    app_id = team_driver_contract.canonical_assistant_id(payload["app"])
+    if app_id is None:
+        raise ClientPayloadError(400, "bad app id")
     status, data = await call_bounded(
         CONTROL_EXECUTOR,
         config.TEAMDRIVER_URL,
