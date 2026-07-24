@@ -23,6 +23,7 @@ from app.config import (
     STREAM_QUEUE_PUT_TIMEOUT,
     TERMINAL_CONTRACT_ERROR,
 )
+from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS
 from app.upstream import call as _call
 
 log = structlog.get_logger()
@@ -216,6 +217,7 @@ def _relay_challenge(relay: _ChallengeRelay) -> None:
             f"/v1/teams/{relay.team_id}/chat/{relay.kind}",
             relay.body,
             relay.headers,
+            timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
         )
         _stream_queue_put(
             relay.queue,

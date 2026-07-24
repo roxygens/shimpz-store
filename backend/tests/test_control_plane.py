@@ -9,9 +9,41 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app import authn, config, main
+from app import authn, config, main, upstream
 from app.config import ACCOUNT_COOKIE
 from app.main import app
+
+
+def test_verify_timeout_uses_fast_budget_and_surfaces_502(monkeypatch):
+    observed: dict[str, object] = {}
+
+    class TimedOutConnection:
+        def __init__(self, hostname, port, *, timeout):
+            observed.update(hostname=hostname, port=port, timeout=timeout)
+
+        def request(self, *_args) -> None:
+            raise TimeoutError
+
+        def close(self) -> None:
+            observed["closed"] = True
+
+    monkeypatch.setattr(upstream.http.client, "HTTPConnection", TimedOutConnection)
+
+    status, body = upstream.call(
+        "http://accounts:8080",
+        "POST",
+        "/v1/verify",
+        {"token": "opaque"},
+        timeout=upstream.VERIFY_TIMEOUT_SECONDS,
+    )
+
+    assert (status, body) == (502, {"detail": "the Space is unreachable"})
+    assert observed == {
+        "hostname": "accounts",
+        "port": 8080,
+        "timeout": 5,
+        "closed": True,
+    }
 
 
 class _BrainControlHandler(BaseHTTPRequestHandler):

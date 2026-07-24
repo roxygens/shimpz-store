@@ -13,6 +13,10 @@ from app.concurrency import BoundedThreadPoolExecutor, run_bounded
 
 log = structlog.get_logger()
 
+VERIFY_TIMEOUT_SECONDS = 5
+CONTROL_PLANE_TIMEOUT_SECONDS = 30
+CHAT_STOP_TIMEOUT_SECONDS = 10
+
 
 def call(
     base: str,
@@ -20,6 +24,8 @@ def call(
     path: str,
     payload: dict | None = None,
     extra: dict | None = None,
+    *,
+    timeout: float,
 ) -> tuple[int, dict]:
     """Proxy one trusted internal hop with a closed generic failure."""
     parsed = urlparse(base)
@@ -28,7 +34,7 @@ def call(
     if payload is not None:
         body = json.dumps(payload)
         headers["Content-Type"] = "application/json"
-    connection = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=180)
+    connection = http.client.HTTPConnection(parsed.hostname, parsed.port, timeout=timeout)
     try:
         connection.request(method, path, body, headers)
         response = connection.getresponse()

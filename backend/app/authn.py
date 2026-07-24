@@ -14,7 +14,7 @@ from app.config import (
     AUTH_WORKER_THREADS,
     COOKIE_MAX_AGE,
 )
-from app.upstream import call
+from app.upstream import VERIFY_TIMEOUT_SECONDS, call
 
 EXECUTOR = BoundedThreadPoolExecutor(
     max_workers=AUTH_WORKER_THREADS,
@@ -44,7 +44,13 @@ def authed_account(request: Request) -> tuple[str, str, str]:
     token = request.cookies.get(ACCOUNT_COOKIE, "")
     if not token:
         return "", "", ""
-    status, data = call(ACCOUNTS_URL, "POST", "/v1/verify", {"token": token})
+    status, data = call(
+        ACCOUNTS_URL,
+        "POST",
+        "/v1/verify",
+        {"token": token},
+        timeout=VERIFY_TIMEOUT_SECONDS,
+    )
     if status == 200 and data.get("account_id"):
         return token, data["account_id"], data.get("username", "")
     return "", "", ""

@@ -13,7 +13,7 @@ from app.access import mutation_origin_allowed, private_json
 from app.control import EXECUTOR as CONTROL_EXECUTOR
 from app.payloads import ClientPayloadError
 from app.projections import public_file_deletion, public_file_inventory, public_file_upload
-from app.upstream import call_bounded
+from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS, call_bounded
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -36,6 +36,7 @@ async def team_files(request: Request, team_id: str) -> JSONResponse:
         "GET",
         f"/v1/teams/{team_id}/files",
         extra={"X-Shimpz-Account": token},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     if status != 200:
         return private_json(body, status)
@@ -79,6 +80,7 @@ async def team_file_upload(request: Request, team_id: str, file: UploadFile) -> 
         f"/v1/teams/{team_id}/files",
         payload,
         extra={"X-Shimpz-Account": token},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     log.info(
         "team_file_upload",
@@ -115,6 +117,7 @@ async def team_file_delete(request: Request, team_id: str, file_id: str) -> JSON
         "DELETE",
         f"/v1/teams/{team_id}/files/{opaque_id}",
         extra={"X-Shimpz-Account": token},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     log.info(
         "team_file_delete",

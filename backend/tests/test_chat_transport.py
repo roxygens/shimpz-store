@@ -345,8 +345,8 @@ def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
     challenge_id = "a" * 32
     calls: list[tuple] = []
 
-    def completed_call(base, method, path, payload, headers):
-        calls.append((base, method, path, payload, headers))
+    def completed_call(base, method, path, payload, headers, *, timeout):
+        calls.append((base, method, path, payload, headers, timeout))
         return 200, {
             "team_id": TEST_TEAM_ID,
             "team_name": "Marketing",
@@ -401,6 +401,7 @@ def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
             f"/v1/teams/{TEST_TEAM_ID}/chat/input",
             {"challenge_id": challenge_id, "answer": "example.com"},
             {"X-Shimpz-Account": "account-token"},
+            30,
         )
     ]
 
@@ -737,8 +738,8 @@ def test_public_auth_json_is_bounded_before_any_upstream_hop():
 def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
     forwarded = []
 
-    async def bounded_call(*args, extra=None):
-        forwarded.append((*args, extra))
+    async def bounded_call(*args, extra=None, **kwargs):
+        forwarded.append((*args, extra, kwargs["timeout"]))
         return 400, {"error": "rejected"}
 
     monkeypatch.setattr("app.routers.account._bounded_call", bounded_call)
@@ -751,10 +752,11 @@ def test_signup_forwards_only_the_persisted_credentials(monkeypatch):
     assert response.status_code == 400
     assert response.headers["cache-control"] == "private, no-store"
     assert len(forwarded) == 1
-    base, method, path, payload, extra = forwarded[0]
+    base, method, path, payload, extra, timeout = forwarded[0]
     assert (base, method, path) == (authn.ACCOUNTS_URL, "POST", "/v1/signup")
     assert payload == {"username": "captain", "password": "correct horse battery staple"}
     assert set(extra) == {"X-Forwarded-For"}
+    assert timeout == 30
 
 
 def test_retired_public_marketplace_routes_are_absent():

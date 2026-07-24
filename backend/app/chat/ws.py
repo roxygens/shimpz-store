@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import functools
 from dataclasses import dataclass, field
 
 import structlog
@@ -38,6 +39,7 @@ from app.config import (
     WS_TEAM_CONNECTION_LIMIT,
 )
 from app.payloads import ClientPayloadError
+from app.upstream import CHAT_STOP_TIMEOUT_SECONDS, VERIFY_TIMEOUT_SECONDS
 from app.upstream import call as _call
 from app.upstream import call_bounded as _bounded_call
 
@@ -71,6 +73,7 @@ async def _ws_verify(ws: WebSocket) -> tuple[str, str]:
         "POST",
         "/v1/verify",
         {"token": token},
+        timeout=VERIFY_TIMEOUT_SECONDS,
     )
     account_id = data.get("account_id") if status == 200 else None
     return (token, str(account_id)) if account_id else ("", "")
@@ -128,12 +131,15 @@ async def _driver_stop(team_id: str, hdr: dict) -> tuple[int, dict]:
     try:
         return await loop.run_in_executor(
             _STOP_EXECUTOR,
-            _call,
-            config.TEAMDRIVER_URL,
-            "POST",
-            f"/v1/teams/{team_id}/chat/stop",
-            None,
-            hdr,
+            functools.partial(
+                _call,
+                config.TEAMDRIVER_URL,
+                "POST",
+                f"/v1/teams/{team_id}/chat/stop",
+                None,
+                hdr,
+                timeout=CHAT_STOP_TIMEOUT_SECONDS,
+            ),
         )
     except _ExecutorSaturatedError:
         return 429, {"detail": "chat stop capacity reached"}

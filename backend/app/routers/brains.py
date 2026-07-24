@@ -11,7 +11,7 @@ from app.concurrency import run_bounded
 from app.control import EXECUTOR as CONTROL_EXECUTOR
 from app.inference import provider as canonical_provider
 from app.payloads import read_bounded_json
-from app.upstream import call, call_bounded
+from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS, call, call_bounded
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -31,6 +31,7 @@ async def brains_list(request: Request) -> JSONResponse:
         "/v1/brains/list",
         {"token": token},
         extra={"X-Forwarded-For": authn.client_ip(request)},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     return JSONResponse(data, status_code=status)
 
@@ -62,6 +63,7 @@ async def brain_upsert(request: Request, provider: str) -> JSONResponse:
             "secret": secret,
         },
         {"X-Forwarded-For": authn.client_ip(request)},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     log.info("brain_upsert", provider=provider_value, status=status)
     return JSONResponse(data, status_code=status)
@@ -99,6 +101,7 @@ def _delete_brain_for_token(token: str, provider: str, forwarded_for: str) -> JS
         "/v1/brains/revoke-begin",
         {"token": token, "provider": provider},
         extra={"X-Forwarded-For": forwarded_for},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     if begin_status != 200 or not isinstance(begin_data, dict):
         return JSONResponse(begin_data, status_code=begin_status)
@@ -135,6 +138,7 @@ def _delete_brain_for_token(token: str, provider: str, forwarded_for: str) -> JS
             "Authorization": f"Bearer {finalize_token}",
             "X-Forwarded-For": forwarded_for,
         },
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     log.info("brain_delete", provider=provider, status=status)
     return JSONResponse(data, status_code=status)

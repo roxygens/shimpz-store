@@ -10,7 +10,7 @@ from app import authn
 from app.access import private_json
 from app.config import ACCOUNT_COOKIE, MAX_AUTH_BODY_BYTES
 from app.payloads import read_bounded_json
-from app.upstream import call_bounded
+from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS, call_bounded
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -28,6 +28,7 @@ async def _credential_route(request: Request, path: str) -> JSONResponse:
         path,
         {"username": payload.get("username"), "password": payload.get("password")},
         extra={"X-Forwarded-For": authn.client_ip(request)},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     body = {"account_id": data.get("account_id"), "username": data.get("username")} if status == 200 else data
     response = private_json(body, status)

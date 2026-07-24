@@ -10,7 +10,7 @@ from app import authn, config
 from app.access import private_json
 from app.control import EXECUTOR as CONTROL_EXECUTOR
 from app.routers import app_lifecycle
-from app.upstream import call_bounded
+from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS, call_bounded
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -42,6 +42,7 @@ async def team_apps(request: Request, team_id: str) -> JSONResponse:
         "GET",
         f"/v1/teams/{team_id}/apps",
         extra={"X-Shimpz-Account": token},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     return private_json(data, status)
 

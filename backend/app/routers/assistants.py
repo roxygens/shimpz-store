@@ -12,7 +12,7 @@ from app.config import RELEASED_CLOUD_ASSISTANTS
 from app.control import EXECUTOR as CONTROL_EXECUTOR
 from app.projections import released_assistant_inventory, released_running_assistant_inventory
 from app.routers import app_lifecycle
-from app.upstream import call_bounded
+from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS, call_bounded
 
 log = structlog.get_logger()
 router = APIRouter()
@@ -38,6 +38,7 @@ async def _assistant_inventory(
         "GET",
         f"/v1/teams/{team_id}/apps",
         extra={"X-Shimpz-Account": token},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     if status != 200:
         return private_json(data, status)

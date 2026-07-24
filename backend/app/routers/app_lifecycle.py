@@ -11,7 +11,7 @@ from app.access import mutation_origin_allowed
 from app.config import MAX_TEAM_INSTALL_BODY_BYTES
 from app.control import EXECUTOR as CONTROL_EXECUTOR
 from app.payloads import ClientPayloadError, read_bounded_json
-from app.upstream import call_bounded
+from app.upstream import CONTROL_PLANE_TIMEOUT_SECONDS, call_bounded
 
 
 @dataclass(frozen=True, slots=True)
@@ -60,6 +60,7 @@ async def install(
         f"/v1/teams/{canonical_team}/apps",
         {"app": app_id},
         {"X-Shimpz-Account": token},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     return AppMutation(account_id, canonical_team, app_id, status, data)
 
@@ -83,5 +84,6 @@ async def uninstall(
         "DELETE",
         f"/v1/teams/{canonical_team}/apps/{canonical_app}",
         extra={"X-Shimpz-Account": token},
+        timeout=CONTROL_PLANE_TIMEOUT_SECONDS,
     )
     return AppMutation(account_id, canonical_team, canonical_app, status, data)
