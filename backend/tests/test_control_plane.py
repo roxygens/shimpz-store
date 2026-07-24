@@ -258,10 +258,16 @@ def test_team_ids_bind_the_complete_account_and_normalized_name():
     assert main.teams.team_id_for("account-prefix-one", "!!!") == ""
 
 
-def test_team_create_and_install_reject_bodies_before_control_plane_forwarding():
+def test_control_mutations_reject_oversize_bodies_before_control_plane_forwarding():
     create_body = json.dumps({"team_name": "Astra", "padding": "x" * config.MAX_TEAM_CREATE_BODY_BYTES}).encode()
     install_body = json.dumps(
         {"app": "notification-center", "padding": "x" * config.MAX_TEAM_INSTALL_BODY_BYTES}
+    ).encode()
+    inference_body = json.dumps(
+        {"provider": "openai", "model": "gpt-5.5", "padding": "x" * config.MAX_INFERENCE_BODY_BYTES}
+    ).encode()
+    credential_body = json.dumps(
+        {"auth_type": "api_key", "secret": "x" * main.brains.MAX_CREDENTIAL_BODY_BYTES}
     ).encode()
     with _brain_control_plane() as calls, TestClient(app) as client:
         client.cookies.set(ACCOUNT_COOKIE, "valid-token")
@@ -271,8 +277,24 @@ def test_team_create_and_install_reject_bodies_before_control_plane_forwarding()
             content=install_body,
             headers={"Content-Type": "application/json", "Origin": "https://shimpz.com"},
         )
-    assert create.status_code == install.status_code == 413
+        inference = client.put(
+            "/api/teams/team_openai/inference",
+            content=inference_body,
+            headers={"Content-Type": "application/json"},
+        )
+        credential = client.post(
+            "/api/brains/openai",
+            content=credential_body,
+            headers={"Content-Type": "application/json"},
+        )
+    assert create.status_code == install.status_code == inference.status_code == credential.status_code == 413
+    for private_response in (inference, credential):
+        assert private_response.headers["cache-control"] == "private, no-store"
     assert [path for method, path, _body in calls if method == "POST" and path.endswith(("/create", "/apps"))] == []
+    assert not any(
+        path == "/v1/brains/upsert" or (method == "PUT" and path.endswith("/inference"))
+        for method, path, _body in calls
+    )
 
 
 def test_provider_key_delete_fails_closed_without_the_finalizer_bearer():

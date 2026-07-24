@@ -8,7 +8,7 @@ from app.config import MAX_INFERENCE_BODY_BYTES
 from app.control import EXECUTOR as CONTROL_EXECUTOR
 from app.inference import model as canonical_model
 from app.inference import provider as canonical_provider
-from app.payloads import ClientPayloadError, read_bounded_json
+from app.payloads import read_bounded_json
 from app.upstream import call_bounded
 
 router = APIRouter()
@@ -34,10 +34,7 @@ async def team_inference_configure(request: Request, team_id: str) -> JSONRespon
     token, _, _ = await authn.authed_account_bounded(request)
     if not token:
         return JSONResponse({"detail": "not authenticated"}, status_code=401)
-    try:
-        payload = await read_bounded_json(request, MAX_INFERENCE_BODY_BYTES)
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
+    payload = await read_bounded_json(request, MAX_INFERENCE_BODY_BYTES)
     if set(payload) != {"provider", "model"}:
         return JSONResponse({"detail": "inference requires provider and model"}, status_code=400)
     provider = canonical_provider(payload.get("provider"))

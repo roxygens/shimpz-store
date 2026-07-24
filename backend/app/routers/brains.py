@@ -10,7 +10,7 @@ from app import authn, config
 from app.concurrency import run_bounded
 from app.control import EXECUTOR as CONTROL_EXECUTOR
 from app.inference import provider as canonical_provider
-from app.payloads import ClientPayloadError, read_bounded_json
+from app.payloads import read_bounded_json
 from app.upstream import call, call_bounded
 
 log = structlog.get_logger()
@@ -43,10 +43,7 @@ async def brain_upsert(request: Request, provider: str) -> JSONResponse:
     provider_value = canonical_provider(provider)
     if provider_value is None:
         return JSONResponse({"detail": "unsupported Brain provider"}, status_code=400)
-    try:
-        payload = await read_bounded_json(request, MAX_CREDENTIAL_BODY_BYTES)
-    except ClientPayloadError as exc:
-        return JSONResponse({"detail": exc.detail}, status_code=exc.status)
+    payload = await read_bounded_json(request, MAX_CREDENTIAL_BODY_BYTES)
     if set(payload) != {"auth_type", "secret"}:
         return JSONResponse({"detail": "credential requires auth_type and secret"}, status_code=400)
     auth_type = str(payload.get("auth_type") or "").strip().lower()
