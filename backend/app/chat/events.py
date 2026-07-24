@@ -93,7 +93,7 @@ def _validated_done_event(value: dict, expected_team_id: str) -> dict | None:
 
 
 def public_chat_error_event(status: int) -> dict:
-    safe_status = status if isinstance(status, int) and not isinstance(status, bool) and 400 <= status <= 599 else 502
+    safe_status = chat_ws_common.safe_status(status)
     if safe_status == 429:
         detail = "chat service is busy; try again shortly"
     elif safe_status == 504:

@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from starlette.websockets import WebSocketDisconnect
 
 from app import authn, config
+from app.chat import events as chat_events
 from app.chat import relay as chat_relay
 from app.chat import ws as main
 from app.chat.events import WebSocketPayloadError
@@ -21,8 +22,7 @@ from app.chat.ws import _ws_dispatch
 from app.config import CHAT_WS_SUBPROTOCOL, WS_ALLOWED_ORIGINS
 from app.config import canonical_origin as _canonical_origin
 from app.main import app
-from app.payloads import ClientPayloadError
-from app.payloads import read_bounded_json
+from app.payloads import ClientPayloadError, read_bounded_json
 
 TEST_TEAM_ID = "test_team"
 
@@ -791,6 +791,22 @@ def test_upstream_http_errors_and_unterminated_terminal_lines_are_redacted():
         "detail": "chat service is temporarily unavailable",
     }
     assert leak_marker not in json.dumps([http_error, stream_error])
+
+
+def test_public_chat_errors_delegate_status_clamping_to_the_shared_contract(monkeypatch):
+    clamped: list[object] = []
+    monkeypatch.setattr(
+        chat_events.chat_ws_common,
+        "safe_status",
+        lambda value: clamped.append(value) or 504,
+    )
+
+    assert chat_events.public_chat_error_event(True) == {
+        "type": "error",
+        "status": 504,
+        "detail": "chat service timed out",
+    }
+    assert clamped == [True]
 
 
 @pytest.mark.parametrize(
