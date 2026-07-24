@@ -166,6 +166,15 @@ class _WsContext:
     state: dict
 
 
+@dataclass(frozen=True)
+class _ActiveTurn:
+    task: asyncio.Task
+    started: asyncio.Event
+    dispatched: asyncio.Event
+    lease: _TurnLease
+    delivery: _RelayDelivery
+
+
 def _relay_capacity_event() -> dict:
     return {
         "type": "error",
@@ -330,9 +339,8 @@ def _start_ws_challenge(
 async def _ws_stop_turn(ws: WebSocket, team_id: str, hdr: dict, state: dict) -> None:
     if state.get("stop_requested", False):
         return
-    turns = state["turns"]
-    active = next((turn for turn in turns if not turn.done()), None)
-    if active is None:
+    active = state.get("active")
+    if active is None or active.task.done():
         if state.get("pending_challenge_id") is not None:
             state["stop_requested"] = True
             status, data = await _driver_stop(team_id, hdr)
@@ -346,19 +354,15 @@ async def _ws_stop_turn(ws: WebSocket, team_id: str, hdr: dict, state: dict) -> 
         await ws.send_json({"type": "error", "status": 409, "detail": "no active chat turn"})
         return
     state["stop_requested"] = True
-    lease = state["leases"][active]
-    delivery = state["deliveries"][active]
-    dispatched = state["dispatches"][active]
-    started = state["starts"][active]
-    queued = lease.cancel_if_queued()
-    if queued or not dispatched.is_set():
-        active.cancel()
-        await asyncio.gather(active, return_exceptions=True)
+    queued = active.lease.cancel_if_queued()
+    if queued or not active.dispatched.is_set():
+        active.task.cancel()
+        await asyncio.gather(active.task, return_exceptions=True)
         await ws.send_json({"type": "stopped"})
         return
     with contextlib.suppress(TimeoutError):
-        await asyncio.wait_for(started.wait(), timeout=10)
-    result = await _stop_delivery_once(team_id, hdr, delivery)
+        await asyncio.wait_for(active.started.wait(), timeout=10)
+    result = await _stop_delivery_once(team_id, hdr, active.delivery)
     if result is None:
         return
     status, data = result
@@ -373,25 +377,14 @@ def _track_ws_turn(
     lease: _TurnLease,
 ) -> None:
     turn, started, dispatched, delivery = tracked
-    turns = state["turns"]
-    starts = state.setdefault("starts", {})
-    dispatches = state.setdefault("dispatches", {})
-    leases = state.setdefault("leases", {})
-    deliveries = state.setdefault("deliveries", {})
+    active = _ActiveTurn(turn, started, dispatched, lease, delivery)
     state["stop_requested"] = False
-    turns.add(turn)
-    starts[turn] = started
-    dispatches[turn] = dispatched
-    leases[turn] = lease
-    deliveries[turn] = delivery
+    state["active"] = active
 
-    def turn_done(completed: asyncio.Task) -> None:
+    def turn_done(_completed: asyncio.Task) -> None:
         lease.release()
-        turns.discard(completed)
-        starts.pop(completed, None)
-        dispatches.pop(completed, None)
-        leases.pop(completed, None)
-        deliveries.pop(completed, None)
+        if state.get("active") is active:
+            state["active"] = None
 
     turn.add_done_callback(turn_done)
 
@@ -415,8 +408,8 @@ async def _ws_dispatch_challenge(
     ):
         await ws.send_json({"type": "error", "status": 400, "detail": f"invalid {kind} submission"})
         return
-    state["turns"].difference_update({turn for turn in state["turns"] if turn.done()})
-    if state["turns"]:
+    active = state.get("active")
+    if active is not None and not active.task.done():
         await ws.send_json(
             {
                 "type": "error",
@@ -448,7 +441,6 @@ async def _ws_dispatch_challenge(
 
 
 async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state: dict) -> None:
-    turns = state["turns"]
     if msg.get("type") == "chat":
         try:
             if set(msg) != {"type", "message", "files", "assistant_ids"}:
@@ -461,8 +453,8 @@ async def _ws_dispatch(ws: WebSocket, team_id: str, hdr: dict, msg: dict, state:
             await ws.send_json({"type": "error", "status": exc.status, "detail": exc.detail})
             return
         msg = {"type": "chat", **turn_payload}
-        turns.difference_update({turn for turn in turns if turn.done()})
-        if turns:
+        active = state.get("active")
+        if active is not None and not active.task.done():
             await ws.send_json(
                 {
                     "type": "error",
@@ -549,11 +541,7 @@ async def team_chat_ws(ws: WebSocket, team_id: str) -> None:
         await ws.accept(subprotocol=CHAT_WS_SUBPROTOCOL)
         hdr = {"X-Shimpz-Account": token}
         state: dict = {
-            "turns": set(),
-            "starts": {},
-            "dispatches": {},
-            "leases": {},
-            "deliveries": {},
+            "active": None,
             "stop_requested": False,
             "pending_challenge_id": None,
             "pending_challenge_type": None,
@@ -576,9 +564,9 @@ async def team_chat_ws(ws: WebSocket, team_id: str) -> None:
         except WebSocketDisconnect:
             return
         finally:
-            turns = list(state["turns"])
-            for turn in turns:
-                turn.cancel()
-            await asyncio.gather(*turns, return_exceptions=True)
+            active = state["active"]
+            if active is not None:
+                active.task.cancel()
+                await asyncio.gather(active.task, return_exceptions=True)
     finally:
         connection.release()

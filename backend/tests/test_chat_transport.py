@@ -295,7 +295,16 @@ def test_websocket_allows_only_one_local_turn_task():
         await websocket.accept()
         blocker = asyncio.Event()
         active_turn = asyncio.create_task(blocker.wait())
-        state = {"turns": {active_turn}}
+        lease = main._TurnAdmission(active_limit=1, queue_limit=0).reserve()
+        assert lease is not None
+        active = main._ActiveTurn(
+            active_turn,
+            asyncio.Event(),
+            asyncio.Event(),
+            lease,
+            main._RelayDelivery(),
+        )
+        state = {"active": active}
         try:
             await _ws_dispatch(
                 websocket,
@@ -307,13 +316,79 @@ def test_websocket_allows_only_one_local_turn_task():
         finally:
             active_turn.cancel()
             await asyncio.gather(active_turn, return_exceptions=True)
+            lease.release()
 
-        assert len(state["turns"]) == 1
+        assert state["active"] is active
         assert json.loads(sent[-1]["text"]) == {
             "type": "error",
             "status": 409,
             "detail": "team already has an active chat turn",
         }
+
+    asyncio.run(scenario())
+
+
+@pytest.mark.parametrize(
+    "message",
+    [
+        {
+            "type": "chat",
+            "message": "next turn",
+            "files": [],
+            "assistant_ids": [],
+        },
+        {
+            "type": "input-submit",
+            "challenge_id": "a" * 32,
+            "answer": "example.com",
+        },
+    ],
+)
+def test_completed_turn_is_free_before_its_done_callback_runs(message: dict):
+    async def scenario() -> None:
+        websocket, sent = _websocket("{}")
+        await websocket.accept()
+        completed = asyncio.create_task(asyncio.sleep(0))
+        await completed
+        record_admission = main._TurnAdmission(active_limit=1, queue_limit=0)
+        record_lease = record_admission.reserve()
+        assert record_lease is not None
+        active = main._ActiveTurn(
+            completed,
+            asyncio.Event(),
+            asyncio.Event(),
+            record_lease,
+            main._RelayDelivery(),
+        )
+        saturated = main._TurnAdmission(active_limit=1, queue_limit=0)
+        occupied = saturated.reserve()
+        assert occupied is not None
+        previous = main._TURN_ADMISSION
+        main._TURN_ADMISSION = saturated
+        state = {
+            "active": active,
+            "pending_challenge_id": "a" * 32,
+            "pending_challenge_type": "input",
+        }
+        try:
+            await _ws_dispatch(websocket, "test-team", {}, message, state)
+            assert json.loads(sent[-1]["text"]) == {
+                "type": "error",
+                "status": 429,
+                "detail": "chat relay capacity reached",
+            }
+            state["pending_challenge_id"] = None
+            state["pending_challenge_type"] = None
+            await _ws_dispatch(websocket, "test-team", {}, {"type": "stop"}, state)
+            assert json.loads(sent[-1]["text"]) == {
+                "type": "error",
+                "status": 409,
+                "detail": "no active chat turn",
+            }
+        finally:
+            main._TURN_ADMISSION = previous
+            occupied.release()
+            record_lease.release()
 
     asyncio.run(scenario())
 
@@ -327,7 +402,7 @@ def test_websocket_rejects_retired_answer_frames():
             "test-team",
             {},
             {"type": "answer", "rid": "legacy", "answer": "yes"},
-            {"turns": set()},
+            {"active": None},
         )
         assert json.loads(sent[-1]["text"]) == {
             "type": "error",
@@ -358,11 +433,7 @@ def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
         websocket, sent = _websocket("{}")
         await websocket.accept()
         state = {
-            "turns": set(),
-            "starts": {},
-            "dispatches": {},
-            "leases": {},
-            "deliveries": {},
+            "active": None,
             "stop_requested": False,
             "pending_challenge_id": challenge_id,
             "pending_challenge_type": "input",
@@ -378,7 +449,9 @@ def test_websocket_relays_a_bound_input_submission_to_the_hosted_controller(
             },
             state,
         )
-        await asyncio.gather(*tuple(state["turns"]))
+        active = state["active"]
+        assert active is not None
+        await active.task
         await asyncio.sleep(0)
         events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
         assert events == [
@@ -424,7 +497,7 @@ def test_websocket_returns_typed_429_when_global_turn_queue_is_full():
                     "files": [],
                     "assistant_ids": [],
                 },
-                {"turns": set()},
+                {"active": None},
             )
             assert json.loads(sent[-1]["text"]) == {
                 "type": "error",
@@ -487,7 +560,7 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
         main._TURN_ADMISSION = admission
         websocket, sent = _websocket("{}")
         await websocket.accept()
-        state = {"turns": set()}
+        state = {"active": None}
         try:
             await _ws_dispatch(
                 websocket,
@@ -507,19 +580,20 @@ def test_queued_turn_stop_removes_its_fifo_lease_before_it_can_run():
             await _ws_dispatch(websocket, "team-queued", {}, {"type": "stop"}, state)
             await _ws_dispatch(websocket, "team-queued", {}, {"type": "stop"}, state)
             assert admission.snapshot() == (1, 0)
-            assert not state["turns"]
+            assert state["active"] is None
             events = [json.loads(message["text"]) for message in sent if message["type"] == "websocket.send"]
             assert events == [{"type": "stopped"}]
 
             occupied.release()
             await asyncio.sleep(0)
             assert admission.snapshot() == (0, 0)
-            assert not state["turns"]
+            assert state["active"] is None
         finally:
             occupied.release()
-            for turn in list(state["turns"]):
-                turn.cancel()
-            await asyncio.gather(*state["turns"], return_exceptions=True)
+            active = state["active"]
+            if active is not None:
+                active.task.cancel()
+                await asyncio.gather(active.task, return_exceptions=True)
             main._TURN_ADMISSION = previous
 
     asyncio.run(scenario())
@@ -559,11 +633,13 @@ def test_duplicate_stop_then_disconnect_requests_provider_stop_once(monkeypatch)
         active = asyncio.create_task(main._deliver_turn(turn, worker))
         await asyncio.sleep(0)
         state = {
-            "turns": {active},
-            "starts": {active: started},
-            "dispatches": {active: dispatched},
-            "leases": {active: RunningLease()},
-            "deliveries": {active: delivery},
+            "active": main._ActiveTurn(
+                active,
+                started,
+                dispatched,
+                RunningLease(),
+                delivery,
+            ),
             "stop_requested": False,
         }
 
